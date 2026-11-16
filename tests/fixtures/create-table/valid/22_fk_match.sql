@@ -1,0 +1,1 @@
+CREATE TABLE child (parent_id INTEGER,FOREIGN KEY (parent_id) REFERENCES parent(id) MATCH SIMPLE)

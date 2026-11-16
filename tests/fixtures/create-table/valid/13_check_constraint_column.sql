@@ -1,0 +1,1 @@
+CREATE TABLE t (age INTEGER CHECK (age>=0 AND age<=130))

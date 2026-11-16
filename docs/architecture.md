@@ -112,11 +112,76 @@ Canonical output is intentional. Exact source-preserving editing would require
 a richer concrete syntax model and an explicit policy for modified subtrees.
 An AST alone does not retain comments or formatting.
 
+## SQLite expressions
+
+The SQLite files follow the previous project's separation into lexical helpers,
+operators and grammar codecs. Literals, column constraints and expression variants
+have individual modules; the public entry points from the initial foundation are
+retained as re-exports.
+
+The recursive expression grammar uses precedence climbing rather than a separate
+parser for every precedence level. `expression/operators.ts` defines the precedence
+and canonical spelling for both directions. A binary operator parses its right
+operand at one level above its own precedence, making operators left-associative.
+Printing uses the same rule to retain right-nested trees. `NOT` is below comparisons
+but above `AND`, while symbolic unary operators bind above concatenation.
+Postfix null tests bind below equality but above unary `NOT`; `NOT NULL` normalizes
+to `NOTNULL` while retaining this distinct precedence.
+
+Parentheses have source-map nodes but do not add semantic AST variants. The printer
+adds grouping where required; it never algebraically reassociates expressions.
+Unary printing separates nested signs so negation cannot become a line comment.
+No expression is evaluated by the codec.
+
+Numeric values retain unsigned SQL spelling in a string. Converting to a JS number
+would lose integers above 2^53 and distinctions such as INTEGER `1` versus REAL
+`1.0`. Hexadecimal literals are limited to SQLite's 64-bit range of significant
+digits. Blob values are hex byte pairs. Keyword literals retain TRUE/FALSE spellings
+instead of converting them to 1/0, because SQLite may resolve those words to columns
+and gives them special behavior on the right side of `IS`.
+
+The DEFAULT codec follows the restricted SQLite production: a literal, a signed
+numeric literal, or a parenthesized constant expression. It does not accept an
+unparenthesized `DEFAULT 1 + 2`. Column references are rejected when decoding or
+encoding defaults. The CHECK codec requires parentheses but permits column references.
+Function calls, parameters, subqueries and additional operator families are not yet
+part of the expression grammar.
+
+Tests compare original and encoded SQL against SQLite, including INTEGER/REAL
+results, every supported binary precedence pair, unary/binary interactions, default
+evaluation and CHECK enforcement. The expanded fixture set includes the earlier
+implementation's literal defaults, expression defaults and column checks.
+
+## Table constraints and references
+
+`CreateTable` now has a required `tableConstraints` array alongside `columns`.
+This is a small intentional change to constructed ASTs: callers without table
+constraints should supply `[]`. Both arrays preserve source order. The table-body
+codec requires a first column and rejects columns after table constraints.
+
+Column and table constraint codecs share `namedConstraint`, which adds an optional
+`name` field without changing the semantic tag. Table PRIMARY KEY and UNIQUE
+codecs share indexed-column syntax (identifier, optional collation, optional order)
+and conflict-clause syntax. They do not accept arbitrary expressions as key columns.
+CHECK uses the same expression codec at both levels.
+
+Column REFERENCES and table FOREIGN KEY share a `ForeignKeyClause` value: target
+table, optional target columns, ordered MATCH/ON options and optional deferrability.
+An omitted target column list is distinct from an empty list, which is rejected.
+ON options are an array rather than a dictionary, so repeated clauses and source
+ordering are not silently discarded. SQLite remains responsible for schema-aware
+checks and for its interpretation of MATCH clauses and constraint conflicts.
+
+Tests compare SQLite's column, index and foreign-key metadata before and after
+encoding. Behavioral tests cover CHECK/UNIQUE enforcement, composite cascading
+updates/deletes, SET DEFAULT and RESTRICT actions, and immediate versus deferred
+foreign-key enforcement within transactions.
+
 ## Next steps
 
-1. Extend literals and expressions with explicit precedence and round-trip tests.
-2. Extend `CREATE TABLE` using the existing fixture corpus: type names, table
-   constraints, foreign keys, generated columns and options.
+1. Extend expressions with function calls and the remaining SQLite operator families.
+2. Extend `CREATE TABLE` using the existing fixture corpus: type names, column
+   collation/conflict clauses, AUTOINCREMENT, generated columns and table options.
 3. Add statement lists and further DDL variants through tagged unions.
 4. Restore the pipeline `SQL → AST → virtual database → diff → migration AST → SQL`.
    Return schema warnings as structured diagnostics; logging can report them.
@@ -131,4 +196,6 @@ provide the observability boundary; no separate logging service is needed.
 References: [Effect transformations](https://effect.website/docs/v4/schema/transformations),
 [Effect logging](https://effect.website/docs/v4/observability/logging),
 [SQLite identifier quoting](https://www.sqlite.org/lang_keywords.html),
-[SQLite comments](https://www.sqlite.org/lang_comment.html).
+[SQLite comments](https://www.sqlite.org/lang_comment.html),
+[SQLite expression precedence](https://www.sqlite.org/lang_expr.html),
+[SQLite DEFAULT and CHECK clauses](https://www.sqlite.org/lang_createtable.html).
