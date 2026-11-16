@@ -1,0 +1,1 @@
+CREATE TABLE "t" ("select" INTEGER, [from] TEXT, `where` REAL)
