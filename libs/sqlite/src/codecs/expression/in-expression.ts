@@ -5,7 +5,7 @@ import { parenthesized } from "../../operators/parenthesized.ts";
 import { punctuation } from "../../operators/punctuation.ts";
 import type { Expression, ExpressionAt, InExpression } from "./types.ts";
 
-export const inPrecedence = 37;
+export const inPrecedence = 40;
 export const inOperator = keywordChoice(["NOT IN", "IN"]);
 const values = (at: ExpressionAt) =>
   parenthesized(repeat(at(0), { separator: punctuation(",", ", ") }));

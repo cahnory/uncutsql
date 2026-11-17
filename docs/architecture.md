@@ -126,8 +126,8 @@ and canonical spelling for both directions. A binary operator parses its right
 operand at one level above its own precedence, making operators left-associative.
 Printing uses the same rule to retain right-nested trees. `NOT` is below comparisons
 but above `AND`, while symbolic unary operators bind above concatenation.
-Postfix null tests bind below equality but above unary `NOT`; `NOT NULL` normalizes
-to `NOTNULL` while retaining this distinct precedence.
+Equality, IN, BETWEEN and postfix null tests share a left-associative precedence
+level above unary `NOT`; `NOT NULL` normalizes to `NOTNULL`.
 
 Parentheses have source-map nodes but do not add semantic AST variants. The printer
 adds grouping where required; it never algebraically reassociates expressions.

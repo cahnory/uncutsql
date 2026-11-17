@@ -332,3 +332,30 @@ test("malformed calls commit after the opening parenthesis", () => {
     assert.equal(error.committed, true, sql);
   }
 });
+
+test("equality, BETWEEN, IN and null tests share SQLite's left-associative precedence", () => {
+  const database = openDatabase();
+  try {
+    for (const source of [
+      "2 BETWEEN 1 AND 2 = 1",
+      "2 BETWEEN 1 AND 2 != 0",
+      "0 = 1 ISNULL",
+      "0 = 1 NOTNULL",
+      "0 ISNULL = 1",
+      "0 IN (0) = 1",
+      "0 = 1 IN (0)",
+      "2 BETWEEN 1 AND 2 IN (1)",
+      "2 BETWEEN 1 AND (2 = 1)",
+      "0 = (1 ISNULL)",
+    ]) {
+      const ast = decode(source);
+      const sql = encode(ast);
+      assert.deepEqual(decode(sql), ast, source);
+      assert.deepEqual(evaluate(database, sql), evaluate(database, source), source);
+    }
+    assert.equal(decode("2 BETWEEN 1 AND 2 = 1")._tag, "BinaryExpression");
+    assert.equal(decode("0 = 1 ISNULL")._tag, "NullTestExpression");
+  } finally {
+    database.close();
+  }
+});

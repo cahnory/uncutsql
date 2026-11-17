@@ -5,7 +5,7 @@ import { keywordChoice } from "../../operators/keyword-choice.ts";
 import { binaryPrecedence } from "./operators.ts";
 import type { BetweenExpression, Expression, ExpressionAt } from "./types.ts";
 
-export const betweenPrecedence = 37;
+export const betweenPrecedence = 40;
 export const betweenOperator = keywordChoice(["NOT BETWEEN", "BETWEEN"]);
 
 export const readBetween = (
