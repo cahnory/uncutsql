@@ -351,18 +351,18 @@ References retained in the desired schema to a removed table and cyclic/self
 referential drops fail with diagnostics. CREATE statements may retain forward
 references, which SQLite accepts; no data is inserted during creation.
 
-Only appended ordinary columns with literal/signed-numeric defaults, NOT NULL
-(with a non-NULL default), and COLLATE are admitted initially. Other constraint
-forms and changes requiring rebuilds produce MigrationPlanError; a successful
-partial plan is never returned. This avoids silently omitting a requested change.
+Appended ordinary columns with literal/signed-numeric defaults, NOT NULL
+(with a non-NULL default), and COLLATE use ADD COLUMN. Other changes use
+RebuildTable operations when a copy mapping is available; unsupported mappings
+produce MigrationPlanError. A successful partial plan is never returned.
 The planner does not claim that all parsed schemas are semantically valid or that
 existing data satisfies new declarations.
 
 `encodeMigration` uses the existing identifier, column and table encoders and
 wraps nonempty plans in BEGIN/COMMIT. It qualifies table targets, including main,
 to avoid temporary-table shadowing. New CREATE operations discard IF NOT EXISTS
-so a stale baseline cannot silently skip a table. The renderer changes no PRAGMAs
-and expects to run outside an existing transaction. It encodes the complete plan
+so a stale baseline cannot silently skip a table. The renderer expects to run outside an existing transaction. Simple migrations
+leave foreign-key enforcement unchanged; rebuilds use the protocol below. It encodes the complete plan
 before CLI stdout receives SQL. Native SQLite tests execute generated scripts
 with populated tables and foreign-key enforcement and compare resulting schema
 ASTs to the desired schema.
@@ -371,3 +371,31 @@ The old lock file stored a virtual database snapshot and lastMigrationId. A late
 versioned lock format can record the baseline for generation; applied migration
 history is a separate database concern. No lock format or persistence is added
 as part of this planner.
+
+## Table rebuilds
+
+The planner allocates replacement names and a temporary validation table without
+colliding with any names in either schema input. Rebuild operations retain old
+and new definitions. Copy mappings use matching column identities; generated
+target columns are omitted. Accessible hidden rowids are included for rowid-table
+to rowid-table copies. If every alias is shadowed, or no writable mapping exists,
+planning fails. New columns evaluate their defaults during insertion. Retained
+AUTOINCREMENT tables transfer the prior sqlite_sequence high-water mark before
+the original is dropped, including when the original is empty.
+
+The renderer follows SQLite's generalized ALTER TABLE procedure: disable foreign
+keys outside the transaction, create the revised table, copy, drop the original,
+rename, validate foreign keys and commit, then enable enforcement. Copy uses
+INSERT OR ROLLBACK so ON CONFLICT IGNORE/REPLACE cannot silently discard rows.
+A temporary CHECK-constrained guard turns nonzero foreign_key_check counts into
+rollback failures. Checks run for each affected schema. Runtime preflight checks
+reject unrepresented explicit indexes/triggers on rebuilt tables and views in
+affected schemas, plus temporary views/triggers that could refer across schemas.
+Such objects cannot yet be reconstructed from the supported schema inputs.
+
+These remain generated scripts, not an application runner: execution must stop
+on the first error, roll back if needed, and restore foreign_keys=ON after failure.
+On successful rebuild execution enforcement ends enabled. No generated SQL can
+provide try/finally cleanup for arbitrary callers or resolve live schema drift.
+Native tests cover constraint failures, foreign-key violations, preservation of
+rows and sequences, multiple schemas and refusal to lose unmodeled objects.

@@ -6,13 +6,20 @@ import {
   type ColumnDefinition,
   type CreateTable,
 } from "./create-table.ts";
-import { identifier } from "./codecs/identifier.ts";
+import {
+  encodeRebuild,
+  rebuildCopy,
+  qualifiedTable as qualified,
+  sqlString,
+  type RebuildTableOperation,
+} from "./rebuild.ts";
 import { diffSchemas, type SchemaDiffError, type TableIdentity } from "./diff.ts";
 import { foldIdentifier, tableIdentity, tableKey } from "./schema-identity.ts";
 import type { Statement } from "./schema.ts";
 import type { Expression } from "./codecs/expression.ts";
 
 export type MigrationOperation =
+  | RebuildTableOperation
   | { readonly _tag: "CreateTable"; readonly definition: CreateTable }
   | { readonly _tag: "DropTable"; readonly table: TableIdentity }
   | {
@@ -22,11 +29,7 @@ export type MigrationOperation =
     };
 
 export interface MigrationDiagnostic {
-  readonly code:
-    | "TableRebuildRequired"
-    | "UnsupportedAddColumn"
-    | "RetainedForeignKey"
-    | "ForeignKeyCycle";
+  readonly code: "UnsupportedRowCopy" | "RetainedForeignKey" | "ForeignKeyCycle";
   readonly table: TableIdentity;
   readonly column?: string;
   readonly message: string;
@@ -41,13 +44,14 @@ export class MigrationPlanError extends Data.TaggedError("MigrationPlanError")<{
 }
 
 export interface MigrationWarning {
-  readonly code: "TableDataLoss";
+  readonly code: "TableDataLoss" | "ColumnDataLoss";
   readonly table: TableIdentity;
   readonly message: string;
 }
 
 export interface MigrationPlan {
   readonly operations: readonly MigrationOperation[];
+  readonly guardTable?: TableIdentity;
   readonly warnings: readonly MigrationWarning[];
 }
 
@@ -127,6 +131,14 @@ export const planMigration = (
     }
     const operations: MigrationOperation[] = [];
     const warnings: MigrationWarning[] = [];
+    const reserved = new Set([...before, ...after].map((table) => tableKey(tableIdentity(table))));
+    const allocate = (schema: string, prefix: string) => {
+      let index = 0;
+      let name = prefix;
+      while (reserved.has(tableKey({ schema, name }))) name = `${prefix}_${++index}`;
+      reserved.add(tableKey({ schema, name }));
+      return name;
+    };
     // Drop children before parents. Cyclic and self-referential drops need a later strategy.
     const pending = [...drops];
     while (pending.length) {
@@ -175,46 +187,48 @@ export const planMigration = (
               foldIdentifier(column.name) !==
               foldIdentifier(change.after.columns[index]?.name ?? ""),
           );
-        if (rebuild) {
-          diagnostics.push({
-            code: "TableRebuildRequired",
+        const additions = change.changes.filter((item) => item._tag === "ColumnAdded");
+        if (rebuild || additions.some((item) => unsupportedColumn(item.column))) {
+          const copy = rebuildCopy(change.before, change.after);
+          if (typeof copy === "string") {
+            diagnostics.push({ code: "UnsupportedRowCopy", table: change.table, message: copy });
+            continue;
+          }
+          operations.push({
+            _tag: "RebuildTable",
             table: change.table,
-            message:
-              "This table change requires a rebuild; only appended columns are currently supported",
+            before: change.before,
+            after: change.after,
+            temporaryName: allocate(change.table.schema, "__uncutsql_rebuild"),
           });
-          continue;
-        }
-        for (const item of change.changes) {
-          if (item._tag !== "ColumnAdded") continue;
-          const reason = unsupportedColumn(item.column);
-          if (reason)
-            diagnostics.push({
-              code: "UnsupportedAddColumn",
+          const removed = change.changes.filter((item) => item._tag === "ColumnRemoved");
+          if (removed.length)
+            warnings.push({
+              code: "ColumnDataLoss",
               table: change.table,
-              column: item.column.name,
-              message: reason,
+              message: `Rebuilding ${tableKey(change.table)} removes column data: ${removed.map((item) => JSON.stringify(item.column.name)).join(", ")}.`,
             });
-          else operations.push({ _tag: "AddColumn", table: change.table, column: item.column });
+        } else {
+          for (const item of additions)
+            operations.push({ _tag: "AddColumn", table: change.table, column: item.column });
         }
       }
     }
     if (diagnostics.length) return yield* Effect.fail(new MigrationPlanError({ diagnostics }));
-    return { operations, warnings };
+    const guardTable = operations.some((operation) => operation._tag === "RebuildTable")
+      ? { schema: "temp", name: allocate("temp", "__uncutsql_migration_guard") }
+      : undefined;
+    return { operations, warnings, ...(guardTable ? { guardTable } : {}) };
   });
 
-const qualified = (table: TableIdentity) =>
-  Effect.gen(function* () {
-    const schema = yield* identifier.encode(table.schema);
-    const name = yield* identifier.encode(table.name);
-    return `${schema}.${name}`;
-  });
-
-/** Render a plan as a transaction. No execution or PRAGMA changes occur here. */
+/** Render a plan without executing it. Rebuilds temporarily disable foreign keys. */
 export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, EncodeError> =>
   Effect.gen(function* () {
     const statements = yield* Effect.forEach(plan.operations, (operation) =>
       Effect.gen(function* () {
         switch (operation._tag) {
+          case "RebuildTable":
+            return yield* encodeRebuild(operation);
           case "CreateTable":
             return yield* createTable.encode(operation.definition);
           case "DropTable":
@@ -235,5 +249,49 @@ export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, Enco
     const warnings = plan.warnings.map(
       (warning) => `-- WARNING: ${warning.message.replace(/[\r\n]/g, " ")}`,
     );
-    return [...warnings, "BEGIN;", ...statements, "COMMIT;"].join("\n");
+    const rebuilds = plan.operations.filter((operation) => operation._tag === "RebuildTable");
+    if (!rebuilds.length) return [...warnings, "BEGIN;", ...statements, "COMMIT;"].join("\n");
+    if (!plan.guardTable)
+      return yield* Effect.fail(
+        new EncodeError({ message: "A rebuild plan requires a guard table" }),
+      );
+    const guard = yield* qualified(plan.guardTable);
+    const preflight: string[] = [];
+    for (const operation of rebuilds) {
+      const catalog = yield* qualified({ ...operation.table, name: "sqlite_schema" });
+      const name = yield* sqlString(operation.before.name);
+      preflight.push(
+        `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM ${catalog} WHERE type = 'view' OR (tbl_name = ${name} COLLATE NOCASE AND (type = 'trigger' OR (type = 'index' AND sql IS NOT NULL)));`,
+      );
+      preflight.push(
+        `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM temp.sqlite_schema WHERE type = 'view' OR (type = 'trigger' AND tbl_name = ${name} COLLATE NOCASE);`,
+      );
+    }
+    const schemas = new Set(
+      plan.operations.map((operation) =>
+        operation._tag === "CreateTable"
+          ? tableIdentity(operation.definition).schema
+          : operation.table.schema,
+      ),
+    );
+    const checks = yield* Effect.forEach([...schemas], (schema) =>
+      Effect.map(
+        sqlString(schema),
+        (name) =>
+          `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM pragma_foreign_key_check(NULL, ${name});`,
+      ),
+    );
+    return [
+      ...warnings,
+      "-- Rebuild: run outside a transaction; stop on error, roll back and restore foreign_keys=ON.",
+      "PRAGMA foreign_keys=OFF;",
+      "BEGIN;",
+      `CREATE TABLE ${guard} (violations INTEGER CHECK (violations = 0));`,
+      ...preflight,
+      ...statements,
+      ...checks,
+      `DROP TABLE ${guard};`,
+      "COMMIT;",
+      "PRAGMA foreign_keys=ON;",
+    ].join("\n");
   });

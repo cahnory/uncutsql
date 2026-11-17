@@ -120,11 +120,11 @@ test("CLI migration emits complete scripts or errors without partial output", ()
     );
     const unsupported = run(
       ["migration", before, "-"],
-      "CREATE TABLE t (a TEXT); CREATE TABLE added (x)",
+      "CREATE TABLE t (rowid, _rowid_, oid, a TEXT); CREATE TABLE added (x)",
     );
     assert.equal(unsupported.status, 1);
     assert.equal(unsupported.stdout, "");
-    assert.match(unsupported.stderr, /requires a rebuild/);
+    assert.match(unsupported.stderr, /Cannot preserve rowids/);
     const drop = run(["migration", before, "-"], "");
     assert.equal(drop.status, 0, drop.stderr);
     assert.match(drop.stdout, /WARNING: Dropping table/);

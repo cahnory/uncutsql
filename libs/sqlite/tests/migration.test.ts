@@ -150,13 +150,12 @@ for (const [name, after] of [
   ["constraints", "CREATE TABLE t (a INTEGER, CHECK(a > 0))"],
   ["options", "CREATE TABLE t (a INTEGER) STRICT"],
 ]) {
-  test(`migration rejects rebuild-dependent ${name}`, () => {
+  test(`migration plans a rebuild for ${name}`, () => {
     const result = Effect.runSync(
       Effect.result(planMigration(parse("CREATE TABLE t (a INTEGER)"), parse(after!))),
     );
-    assert.ok(Result.isFailure(result));
-    assert.ok(result.failure instanceof MigrationPlanError);
-    assert.equal(result.failure.diagnostics[0]!.code, "TableRebuildRequired");
+    assert.ok(Result.isSuccess(result));
+    assert.equal(result.success.operations[0]!._tag, "RebuildTable");
   });
 }
 
@@ -173,15 +172,14 @@ for (const column of [
   "b CHECK (b > 0)",
   "b DEFAULT 1 DEFAULT 2",
 ]) {
-  test(`migration rejects unsupported appended column: ${column}`, () => {
+  test(`migration rebuilds for an appended column requiring it: ${column}`, () => {
     const result = Effect.runSync(
       Effect.result(
         planMigration(parse("CREATE TABLE t (a)"), parse(`CREATE TABLE t (a, ${column})`)),
       ),
     );
-    assert.ok(Result.isFailure(result));
-    assert.ok(result.failure instanceof MigrationPlanError);
-    assert.equal(result.failure.diagnostics[0]!.code, "UnsupportedAddColumn");
+    assert.ok(Result.isSuccess(result));
+    assert.equal(result.success.operations[0]!._tag, "RebuildTable");
   });
 }
 

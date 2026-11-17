@@ -112,7 +112,7 @@ the encoders; comparisons do not mutate inputs or access a database.
 ## Generate migration SQL
 
 ```sh
-pnpm cli migration examples/schema.sql examples/schema-expand.sql
+pnpm cli migration examples/schema.sql examples/schema-next.sql
 ```
 
 The command prints a transaction script to stdout. It never executes SQL, changes
@@ -121,20 +121,37 @@ baseline must describe the actual database, and attached schemas must already
 exist. Run the generated transaction outside an existing transaction. As with
 `diff`, one input may be stdin; unsupported changes fail before any SQL is emitted.
 
-The first planner supports:
+The planner supports:
 
 - Creating tables with explicit schema placement and without IF NOT EXISTS.
-- Dropping tables in child-before-parent foreign-key order. The plan includes
-  data-loss warnings, which the SQL renderer writes as comments.
-- Appending ordinary columns with optional COLLATE, literal/signed-numeric DEFAULT
-  and NOT NULL constraints. NOT NULL requires a non-NULL literal default.
+- Dropping tables in child-before-parent foreign-key order, with data-loss warnings.
+- Appending simple columns directly with ALTER TABLE ADD COLUMN.
+- Rebuilding tables for column changes, insertion/reordering/removal, constraints,
+  table options, and additions SQLite cannot perform with ADD COLUMN.
 
-Column edits, removals, insertion/reordering, table constraint/option changes,
-cyclic or self-referential table drops and other ADD COLUMN constraint forms
-produce MigrationPlanError diagnostics. Rebuilds, rename inference, data-copy
-mapping and migration application are not implemented. Database semantics and
-existing data can still cause execution to fail; generation does not open a
-live database. The SQL leaves foreign-key enforcement unchanged.
+Rebuilds create a replacement table, copy matching column names, drop the old
+table, and rename the replacement. New columns use defaults; generated columns
+are recomputed. Removed columns produce data-loss warnings. Accessible hidden
+rowids are copied when both tables support rowids; a changed INTEGER PRIMARY KEY
+can determine a different rowid. Retained AUTOINCREMENT high-water marks are preserved. Rename inference
+and custom data transformations are not implemented. Copying can fail when existing
+rows violate the desired constraints or types; rows are never silently ignored or
+replaced to make a migration succeed.
+
+**Rebuild scripts require execution outside a transaction and stop-on-error
+behavior.** They disable foreign keys before BEGIN, check foreign keys before
+commit, then enable enforcement after success. On failure, roll back any open
+transaction and restore `PRAGMA foreign_keys=ON`; generation cannot perform that
+cleanup for a caller. Copy and validation constraint failures request a rollback.
+Simple migrations retain the existing foreign-key setting.
+
+Runtime checks refuse unrepresented explicit indexes or triggers on rebuilt
+tables and any views in affected schemas (including temporary views/triggers).
+The current schema grammar cannot preserve those objects. Rebuilds with all hidden
+rowid aliases shadowed, no writable copy mapping, retained references to removed
+tables, and cyclic/self-referential table drops still produce planning errors.
+The baseline must cover all table declarations involved; a live database can still
+have drift or other semantic errors that cause execution to fail.
 
 ```ts
 const plan = yield * Sqlite.planMigration(before, after);
@@ -142,7 +159,7 @@ const plan = yield * Sqlite.planMigration(before, after);
 const sql = yield * Sqlite.encodeMigration(plan);
 ```
 
-Plans retain typed CreateTable, DropTable and AddColumn operations. Planning
+Plans retain typed CreateTable, DropTable, AddColumn and RebuildTable operations. Planning
 returns the diff's errors plus MigrationPlanError; rendering returns EncodeError.
 A future lock file can record the baseline schema and last generated migration ID,
 separately from the history of migrations actually applied to a database.

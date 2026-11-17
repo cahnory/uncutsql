@@ -45,3 +45,5 @@ export type {
   MigrationDiagnostic,
   MigrationWarning,
 } from "./migration.ts";
+
+export type { RebuildTableOperation } from "./rebuild.ts";
