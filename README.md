@@ -254,8 +254,50 @@ All numbered files from 1 through the locked ID must remain present. The latest
 SQL checksum is verified; earlier migration contents are not rehashed by this
 format. Interrupted runs can leave a writer lock, staging files or an uncommitted
 SQL file. Reconcile those files with the recorded baseline before retrying; remove
-the writer lock only after confirming no generation is active. Automatic recovery
-and migration application/history are not implemented.
+the writer lock only after confirming no command is using the migration directory. Automatic recovery
+is not implemented. Database application and its history are separate, as described
+below.
+
+## Apply generated migrations
+
+```sh
+pnpm cli generate examples/schema.sql
+pnpm cli apply app.sqlite
+pnpm cli generate examples/schema-next.sql
+pnpm cli apply app.sqlite
+# Or read a different migration directory:
+pnpm cli apply app.sqlite db/migrations
+```
+
+`apply` loads a consistent generated history, validates the lock, and applies only
+pending files. It never changes generated SQL or the lock. Applied IDs, checksums,
+format/dialect metadata, timestamps and shared schema snapshots live separately in
+the database's reserved `__uncutsql_migrations` table. An up-to-date run prints
+`Database is up to date.`
+
+Each SQL file and its history row commit in the **same transaction**. A failed file
+is rolled back and remains pending; earlier successful files remain committed.
+After fixing the underlying data problem, rerun `apply` to resume. The driver
+restores foreign-key enforcement and closes the connection on success or failure.
+Independent database writers serialize with BEGIN IMMEDIATE and a five-second
+busy timeout. Application refuses edited applied files, incomplete/ahead history,
+and normalized schema drift from the last applied snapshot. Before the last
+pending file commits, the CLI also verifies its schema against the generation lock.
+
+The first executor uses Node's SQLite support and accepts a persistent **main
+SQLite database file only**. It refuses to adopt an existing nonempty database
+without application history. Attached/temporary database migrations, baseline
+adoption, rollback/down migrations and standalone indexes/views/triggers are not
+yet supported. `__uncutsql_migrations` is reserved for application metadata.
+Migration scripts must use the generated BEGIN/COMMIT envelope; PRAGMAs outside
+it are limited to the emitted foreign-key settings. An initial failed attempt can
+leave an empty database file, which the runner does not delete automatically.
+
+Execution is optional and separately swappable: `MigrationExecutor` is a core type
+contract; `apps/cli/src/executor.ts` selects the default
+`@uncutsql/sqlite/node` adapter. The regular SQLite entry point remains free of
+Node database imports. Core schema comparison and final verification are wired by
+the CLI; the driver does not import diff or logical-planning functions.
 
 ## Parse and serialize
 

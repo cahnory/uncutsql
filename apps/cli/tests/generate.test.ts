@@ -180,7 +180,7 @@ test("concurrent generation is excluded until publication and cleanup finish", a
       Effect.result(generateMigration(dialect, { database: model }, directory)),
     );
     assert.ok(Result.isFailure(second));
-    assert.match(second.failure.message, /Another generation/);
+    assert.match(second.failure.message, /Another command/);
     resume();
     await first;
     assert.deepEqual(readdirSync(directory).sort(), ["000001.sql", "uncutsql.lock.json"]);

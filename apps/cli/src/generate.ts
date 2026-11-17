@@ -65,7 +65,7 @@ const writeNew = async (path: string, contents: string) => {
   }
 };
 
-const readBaseline = (directory: string, dialect: string) =>
+export const readBaseline = (directory: string, dialect: string) =>
   Effect.gen(function* () {
     const path = join(directory, lockName);
     const source = yield* io(path, () => readOptional(path));
@@ -176,65 +176,75 @@ export const generateMigration = <Ast, Plan, E extends Error, R>(
     yield* decodeDatabaseSchema(after).pipe(
       Effect.mapError((error) => new GenerationError({ message: error.message })),
     );
-    const writerPath = join(directory, writerName);
-    return yield* Effect.acquireUseRelease(
-      io(writerPath, async () => {
-        await mkdir(directory, { recursive: true });
-        let handle;
-        try {
-          handle = await open(writerPath, "wx");
-        } catch (cause) {
-          if (hasCode(cause, "EEXIST"))
-            throw new Error(
-              "Another generation is active or was interrupted. Inspect the output and remove this writer lock only when no generation is running.",
-            );
-          throw cause;
-        }
-        return handle;
+    return yield* withMigrationDirectoryLock(
+      directory,
+      true,
+      Effect.gen(function* () {
+        const baseline = yield* readBaseline(directory, dialect.name);
+        const diff = yield* diffDatabases(baseline.database, after);
+        if (!diff.changes.length) return {} satisfies GenerationResult;
+        const id = baseline.lastMigrationId + 1;
+        if (!Number.isSafeInteger(id))
+          return yield* Effect.fail(
+            new GenerationError({ message: "Migration ID range exhausted" }),
+          );
+        const rendered = yield* renderMigration(dialect, {
+          before: baseline.database,
+          after,
+          diff,
+        });
+        if (!rendered.trim())
+          return yield* Effect.fail(
+            new GenerationError({
+              message: "The dialect returned empty SQL for a nonempty schema diff",
+            }),
+          );
+        const sql = rendered.endsWith("\n") ? rendered : `${rendered}\n`;
+        const lock: SchemaLock = {
+          formatVersion: 1,
+          dialect: dialect.name,
+          lastMigrationId: id,
+          lastMigrationSha256: hashMigration(sql),
+          database: after,
+        };
+        // Complete publication/cleanup before releasing the writer lock on interruption.
+        yield* Effect.uninterruptible(io(directory, () => publish(directory, sql, lock)));
+        return {
+          migrationPath: join(directory, migrationFilename(id)),
+          lockPath: join(directory, lockName),
+        } satisfies GenerationResult;
       }),
-      () =>
-        Effect.gen(function* () {
-          const baseline = yield* readBaseline(directory, dialect.name);
-          const diff = yield* diffDatabases(baseline.database, after);
-          if (!diff.changes.length) return {} satisfies GenerationResult;
-          const id = baseline.lastMigrationId + 1;
-          if (!Number.isSafeInteger(id))
-            return yield* Effect.fail(
-              new GenerationError({ message: "Migration ID range exhausted" }),
-            );
-          const rendered = yield* renderMigration(dialect, {
-            before: baseline.database,
-            after,
-            diff,
-          });
-          if (!rendered.trim())
-            return yield* Effect.fail(
-              new GenerationError({
-                message: "The dialect returned empty SQL for a nonempty schema diff",
-              }),
-            );
-          const sql = rendered.endsWith("\n") ? rendered : `${rendered}\n`;
-          const lock: SchemaLock = {
-            formatVersion: 1,
-            dialect: dialect.name,
-            lastMigrationId: id,
-            lastMigrationSha256: hashMigration(sql),
-            database: after,
-          };
-          // Complete publication/cleanup before releasing the writer lock on interruption.
-          yield* Effect.uninterruptible(io(directory, () => publish(directory, sql, lock)));
-          return {
-            migrationPath: join(directory, migrationFilename(id)),
-            lockPath: join(directory, lockName),
-          } satisfies GenerationResult;
-        }),
-      (handle) =>
-        io(writerPath, async () => {
-          try {
-            await handle.close();
-          } finally {
-            await remove(writerPath);
-          }
-        }),
     );
   });
+
+/** Consumers share the same file lock while reading or publishing a generation snapshot. */
+export const withMigrationDirectoryLock = <A, E, R>(
+  directory: string,
+  create: boolean,
+  use: Effect.Effect<A, E, R>,
+) => {
+  const writerPath = join(directory, writerName);
+  return Effect.acquireUseRelease(
+    io(writerPath, async () => {
+      if (create) await mkdir(directory, { recursive: true });
+      try {
+        return await open(writerPath, "wx");
+      } catch (cause) {
+        if (hasCode(cause, "EEXIST"))
+          throw new Error(
+            "Another command is reading or generating migrations, or was interrupted. Inspect the output and remove this writer lock only when no command is using the directory.",
+          );
+        throw cause;
+      }
+    }),
+    () => use,
+    (handle) =>
+      io(writerPath, async () => {
+        try {
+          await handle.close();
+        } finally {
+          await remove(writerPath);
+        }
+      }),
+  );
+};

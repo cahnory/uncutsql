@@ -483,4 +483,48 @@ detection, not a claim of an atomic filesystem transaction across both paths.
 Tests cover repeat/no-op generation, native SQLite execution of emitted history,
 non-SQLite adapters, concurrent writers, malformed metadata/models, missing or
 edited output, publication collisions and lock-replacement failure cleanup.
-No database application state is recorded or inferred from the generated lock.
+No database application state is recorded or inferred from the generated lock;
+application history is stored separately as described below.
+
+## Migration execution
+
+Core adds only MigrationSource, ExecutionResult and MigrationExecutor contracts.
+The CLI independently selects a runtime adapter in executor.ts, snapshots the
+numbered files under the generation directory lock, computes their checksums,
+and supplies a core-based schema verifier. The file lock is released after loading;
+the SQLite database's writer transaction serializes actual execution. Generation
+metadata is never changed by application.
+
+The optional @uncutsql/sqlite/node entry point implements execution with Node's
+DatabaseSync. The regular syntax/model entry point does not import node:sqlite.
+This first executor supports persistent main databases only and reserves
+__uncutsql_migrations. It reads the full ordered history from ID 1, checks its DB
+history is a matching prefix, and validates stored JSON schema snapshots. It
+rejects untracked nonempty databases and unsupported live objects.
+
+Each iteration starts BEGIN IMMEDIATE, inspects the live schema and lets the
+consumer compare it against the last applied snapshot. It chooses the next ID
+from the history read under that writer lock, preventing double application across
+independent processes. With foreign keys disabled outside the transaction, it
+executes one script body, checks foreign keys and inspects the updated schema.
+For the last file, the consumer verifies the desired generation-lock model. It
+then inserts the ID/checksum/dialect/version/snapshot/timestamp row and commits
+DDL and history together. Earlier files remain committed if a later file fails.
+Cleanup rolls back any open transaction, restores foreign_keys=ON and closes the
+connection. There is no separate commit gap between DDL and its history record.
+
+Script boundaries come from SQLite preparation and StatementSync.sourceSQL,
+not semicolon splitting. An authorizer recognizes transaction control and limits
+pre/post-envelope statements to the emitted foreign-key settings. BEGIN and COMMIT
+are not executed by the script; the driver owns them. The entire tail is parsed
+before committing. Scripts cannot access history metadata, attach databases,
+change other PRAGMAs or start nested/savepoint transactions. This protocol targets
+trusted generated migrations, not an arbitrary SQL shell or security sandbox.
+
+Tests cover CLI generation/application/resume, typed execution failures, data-copy
+rollback, checksum edits, live drift, final-model verification, unexpected SQL
+after COMMIT, trigger-body/literal semicolons, non-SQLite executor substitution and
+independent executor processes applying the same files without duplicate history.
+The model/verifier boundary remains consumer-owned; no diff engine moves into the
+runtime adapter. Existing database adoption, down migrations and broader live
+schema object support are left for later work.

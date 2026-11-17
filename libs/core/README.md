@@ -41,3 +41,9 @@ its workflow with a separate fixture adapter that has a different AST and plan.
 serializable semantic values with path-based SchemaModelError failures. Model
 validation is separate from duplicate-identity checking in the diff. Lock versions,
 dialect IDs, migration history and filesystem persistence remain consumer concerns.
+
+`MigrationExecutor` is a separate optional runtime contract. Consumers provide the
+full ordered MigrationSource history and a schema-verification callback, leaving
+core comparison in the application. An executor owns connections, physical
+transactions and applied-history recording. It is selected independently from the
+syntax dialect; core itself has no database driver or filesystem dependency.

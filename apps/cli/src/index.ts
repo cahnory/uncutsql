@@ -3,12 +3,15 @@ import { Data, Effect, Result } from "effect";
 import { SchemaDiffError } from "@uncutsql/core";
 import { ParseError } from "@uncutsql/codec";
 import { dialect } from "./dialect.ts";
+import { applyGenerated } from "./apply.ts";
+import { migrationFilename } from "./lock.ts";
 import { generateMigration } from "./generate.ts";
 import { compareSchemas, renderMigration } from "./workflow.ts";
 
 const help = `Usage: pnpm cli <check|format> [file|-]
        pnpm cli <diff|migration> <before-file|-> <after-file|->
        pnpm cli generate <schema-file|-> [output-dir]
+       pnpm cli apply <database-target> [output-dir]
 
 Read a SQL file, or stdin when file is omitted or '-'.
   check   Validate syntax supported by the selected dialect (no execution).
@@ -17,6 +20,7 @@ Read a SQL file, or stdin when file is omitted or '-'.
           At most one input may be stdin. Changes still exit successfully.
   migration  Print a transaction script for supported changes; never execute it.
   generate   Write the next migration and schema lock (default directory: migrations).
+  apply      Apply pending files to a database and record applied history.
 
 Statements require separating semicolons; the final semicolon is optional.
 Input SQL files are never modified. Unsupported syntax is an error.
@@ -59,6 +63,31 @@ const validPath = (value: string) => !value.startsWith("-") || value === "-";
 const program = Effect.gen(function* () {
   if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) return help;
   const [command, filename = "-"] = args;
+  if (command === "apply") {
+    const directory = args[2] ?? "migrations";
+    if (
+      args.length < 2 ||
+      args.length > 3 ||
+      filename === "-" ||
+      !validPath(filename) ||
+      directory.startsWith("-")
+    ) {
+      return yield* Effect.fail(
+        new UsageError({
+          message: "apply requires a database target and an optional migration directory.",
+        }),
+      );
+    }
+    const { executor } = yield* Effect.promise(() => import("./executor.ts"));
+    if (executor.dialect !== dialect.name)
+      return yield* Effect.fail(
+        new InputError({ message: "Selected dialect and execution driver do not match" }),
+      );
+    const result = yield* applyGenerated(executor, filename, directory);
+    return result.appliedIds.length
+      ? `Applied ${result.appliedIds.map(migrationFilename).join(", ")}.\n`
+      : "Database is up to date.\n";
+  }
   if (command === "generate") {
     const directory = args[2] ?? "migrations";
     if (args.length < 2 || args.length > 3 || !validPath(filename) || directory.startsWith("-")) {
@@ -112,7 +141,7 @@ const program = Effect.gen(function* () {
   if ((command !== "check" && command !== "format") || args.length > 2 || !validPath(filename)) {
     return yield* Effect.fail(
       new UsageError({
-        message: "Expected check, format, diff, migration or generate with input paths.",
+        message: "Expected check, format, diff, migration, generate or apply with input paths.",
       }),
     );
   }
