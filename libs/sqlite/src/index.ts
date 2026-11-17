@@ -47,3 +47,7 @@ export type {
 } from "./migration.ts";
 
 export type { RebuildTableOperation } from "./rebuild.ts";
+
+export { toDatabaseSchema, fromDatabaseSchema } from "./database.ts";
+
+export { planMigrationFromDatabase } from "./migration.ts";

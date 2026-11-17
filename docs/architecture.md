@@ -320,22 +320,22 @@ main and TEMP placement follow CREATE TABLE rules. The indexes reject duplicate
 identities and contradictory temporary schema qualifiers with SchemaDiffError
 diagnostics. They describe declarations rather than executing IF NOT EXISTS.
 
-The first diff remains in the SQLite package and compares supported CREATE TABLE
-ASTs. A full virtual database and a separate migration planner can follow when
-more statement kinds or migration operations need them. Each table change retains
-its original definitions; nested changes describe columns, shared-column ordering,
-table constraints and option flags. Removed tables follow source order; additions
+The reusable diff lives in @uncutsql/core and compares shared DatabaseSchema
+models. SQLite converts supported CREATE TABLE ASTs to those models. The existing
+SQLite report projects shared changes back onto the input definitions for API
+compatibility; nested changes describe columns, shared-column ordering, table
+constraints and option flags. Removed tables follow source order; additions
 and edits follow target order. This order is deterministic reporting, not an
 execution plan. Renames are deliberately represented by removal and addition.
 
-Constraint comparison uses the existing canonical encoders rather than comparing
-object serialization. It ignores SQL trivia and AST property insertion order,
+Constraint comparison uses structured semantic values supplied by the adapter
+rather than SQL encoders or object serialization. It ignores SQL trivia and property insertion order,
 while preserving ordered constraints, expression shape and significant literal
 spellings. Type declarations compare retained SQL text exactly. Effective table
 option flags are compared as sets. Table/column identity spelling, declaration
 order and IF NOT EXISTS do not create changes; this is not a general proof of
 SQL semantic equivalence. Duplicate constraints and other database semantics remain
-outside validation. All constructed tables are encoder-validated before comparison.
+outside validation. All SQLite input tables are encoder-validated by the adapter before comparison.
 
 The CLI reuses file parsing and diagnostics for `diff before.sql after.sql` and
 prints JSON only after both inputs and the diff succeed. One side may read stdin.
@@ -343,7 +343,8 @@ No database access, schema application or migration SQL is introduced.
 
 ## Initial migration planner
 
-`planMigration(before, after)` consumes the structural diff and produces typed
+`planMigration(before, after)` adapts ASTs into shared models, invokes the core
+diff and logical procedure planner, then lowers those procedures into typed
 CreateTable, DropTable and AddColumn operations, plus structured data-loss
 warnings for removed tables. It reuses normalized identities. Drops are ordered
 child-before-parent using column and table foreign keys in the same schema.
@@ -399,3 +400,34 @@ On successful rebuild execution enforcement ends enabled. No generated SQL can
 provide try/finally cleanup for arbitrary callers or resolve live schema drift.
 Native tests cover constraint failures, foreign-key violations, preservation of
 rows and sequences, multiple schemas and refusal to lose unmodeled objects.
+
+## Portable engine and dialect adapters
+
+The dependency direction is now codec -> no dialect dependencies; core -> Effect
+only; SQLite -> core + codec. Core exports DatabaseSchema, diffDatabases and
+planDatabaseMigration. The model is immutable and serializable, with separate
+catalog/schema namespaces, adapter-normalized identity keys, structured data types
+and constraints, and namespaced options. Core never calls a parser, encoder,
+identifier folder or database service. SQL semantic equivalence and vendor-specific
+normalization remain adapter responsibilities; array order is retained.
+
+Core procedures are CreateTable, DropTable and AlterTable. These describe desired
+logical changes, not SQL statement order. SQLite selects ADD COLUMN or rebuild,
+orders drops, preserves sequences and emits guarded transaction SQL. Those choices
+cannot be made generically from an assumption that all dialects behave like SQLite.
+
+SQLite exposes toDatabaseSchema and fromDatabaseSchema. Conversion retains type
+spellings, structured constraint/expression values and effective option flags,
+while removing creation guards and AST syntax tags. The materialization boundary
+rejects unsupported model features and validates native values through encoding
+and reparsing. planMigrationFromDatabase uses these shared models directly, so
+restored lock snapshots do not require parser AST provenance. The native-AST entry
+points remain compatibility conveniences. The SQLite-shaped diff projection is
+reporting glue; it contains no independent comparison algorithm.
+
+Tests exercise core without importing SQLite or codecs, including case-sensitive
+keys, multiple namespace components, structured types and arbitrary vendor options.
+SQLite adapter tests round-trip JSON models and execute migrations planned solely
+from those models. These establish reusable boundaries, not support for a second
+SQL parser or arbitrary cross-dialect semantic conversion. Standalone indexes,
+views and other object kinds still need model extensions as they are implemented.

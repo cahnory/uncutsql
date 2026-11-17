@@ -13,7 +13,19 @@ import {
   sqlString,
   type RebuildTableOperation,
 } from "./rebuild.ts";
-import { diffSchemas, type SchemaDiffError, type TableIdentity } from "./diff.ts";
+import {
+  compareSchemas,
+  sqliteProcedures,
+  type SchemaDiffError,
+  type TableIdentity,
+} from "./diff.ts";
+import {
+  planDatabaseMigration,
+  diffDatabases,
+  type DatabaseSchema,
+  type DatabaseMigration,
+} from "@uncutsql/core";
+import { fromDatabaseSchema } from "./database.ts";
 import { foldIdentifier, tableIdentity, tableKey } from "./schema-identity.ts";
 import type { Statement } from "./schema.ts";
 import type { Expression } from "./codecs/expression.ts";
@@ -111,13 +123,39 @@ const unsupportedColumn = (column: ColumnDefinition): string | undefined => {
   return undefined;
 };
 
-/** Plan a deliberately bounded subset; unsupported changes fail the entire plan. */
+/** Compatibility entry point: native AST -> shared models -> core procedures -> SQLite operations. */
 export const planMigration = (
   before: readonly Statement[],
   after: readonly Statement[],
 ): Effect.Effect<MigrationPlan, SchemaDiffError | EncodeError | MigrationPlanError> =>
   Effect.gen(function* () {
-    const diff = yield* diffSchemas(before, after);
+    const comparison = yield* compareSchemas(before, after);
+    return yield* lowerMigration(
+      planDatabaseMigration(comparison.diff),
+      comparison.before,
+      comparison.after,
+    );
+  });
+
+/** Plan directly from shared models, without requiring the original parser AST. */
+export const planMigrationFromDatabase = (
+  before: DatabaseSchema,
+  after: DatabaseSchema,
+): Effect.Effect<MigrationPlan, SchemaDiffError | EncodeError | MigrationPlanError> =>
+  Effect.gen(function* () {
+    const diff = yield* diffDatabases(before, after);
+    return yield* lowerMigration(planDatabaseMigration(diff), before, after);
+  });
+
+const lowerMigration = (
+  procedures: DatabaseMigration,
+  previous: DatabaseSchema,
+  next: DatabaseSchema,
+): Effect.Effect<MigrationPlan, SchemaDiffError | EncodeError | MigrationPlanError> =>
+  Effect.gen(function* () {
+    const before = yield* fromDatabaseSchema(previous);
+    const after = yield* fromDatabaseSchema(next);
+    const diff = sqliteProcedures(procedures, before, after);
     const diagnostics: MigrationDiagnostic[] = [];
     const drops = diff.changes.filter((change) => change._tag === "TableRemoved");
     const dropped = new Set(drops.map((change) => tableKey(change.table)));

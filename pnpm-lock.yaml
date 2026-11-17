@@ -213,11 +213,24 @@ importers:
         specifier: ^0.23.2
         version: 0.23.7(typescript@5.9.3)
 
+  libs/core:
+    dependencies:
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      tsdown:
+        specifier: ^0.23.2
+        version: 0.23.7(typescript@5.9.3)
+
   libs/sqlite:
     dependencies:
       '@uncutsql/codec':
         specifier: workspace:*
         version: link:../codec
+      '@uncutsql/core':
+        specifier: workspace:*
+        version: link:../core
       effect:
         specifier: 4.1.4
         version: 4.1.4

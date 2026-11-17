@@ -28,7 +28,8 @@ SQLite. Node may print an experimental SQLite warning when running those tests.
 ## Workspace
 
 - `libs/codec` — `@uncutsql/codec`, the generic Effect codec library.
-- `libs/sqlite` — `@uncutsql/sqlite`, depending on the codec via `workspace:*`.
+- `libs/core` — `@uncutsql/core`, shared database models, diff and logical migration procedures.
+- `libs/sqlite` — `@uncutsql/sqlite`, SQLite AST/model conversion and migration SQL.
 - `apps/cli` — `@uncutsql/cli`, schema syntax checking, formatting and structural diff.
 - `apps/demo` — `@uncutsql/demo`, an executable consumer of both libraries.
 
@@ -71,6 +72,49 @@ The library exposes the same file grammar through `Sqlite.schema.decode(sql)`,
 `encode(statements)` and `decodeWithSourceMap(sql)`. It returns an ordered
 `readonly Statement[]` and keeps source offsets relative to the original file.
 
+## Dialect boundaries
+
+The reusable engine compares a shared database representation rather than parser
+ASTs. Each dialect owns SQL parsing, conversion and normalization, selection of
+physical operations, and SQL rendering:
+
+```mermaid
+flowchart LR
+  SQL[Current and desired SQL] --> AST[Dialect ASTs]
+  AST -->|Dialect adapter| DB[Shared database models]
+  DB -->|Core diff and planning| Procedures[Create / Drop / Alter procedures]
+  Procedures -->|Dialect lowering and rendering| Migration[Migration SQL]
+```
+
+`@uncutsql/core` has no dependency on SQLite or the codec package. Its model has
+separate catalog/schema identity fields and adapter-supplied column keys. Shared
+comparison does not assume case-insensitive names, a default namespace, SQLite
+options or SQLite ALTER TABLE limitations. Structured type/constraint values and
+namespaced vendor options are compared without discarding dialect details.
+The current model covers tables and their columns/constraints/options; more object
+kinds and additional dialect adapters can be added without moving the diff back
+into a dialect.
+
+```ts
+import { diffDatabases, planDatabaseMigration } from "@uncutsql/core";
+
+const beforeDatabase = yield * Sqlite.toDatabaseSchema(beforeAst);
+const afterDatabase = yield * Sqlite.toDatabaseSchema(afterAst);
+const diff = yield * diffDatabases(beforeDatabase, afterDatabase);
+const logicalMigration = planDatabaseMigration(diff);
+// Generic intent; SQLite decides whether an AlterTable needs a rebuild.
+const sqlitePlan = yield * Sqlite.planMigrationFromDatabase(beforeDatabase, afterDatabase);
+const migrationSql = yield * Sqlite.encodeMigration(sqlitePlan);
+```
+
+Database models are serializable; migration planning also works after JSON
+restoration, without the original parser AST. SQLite's `fromDatabaseSchema`
+validates its supported model values before producing ASTs. It rejects unknown
+vendor options, structured types it cannot render, and unsupported constraints.
+This boundary does not promise that SQLite can render another dialect's features.
+The existing `Sqlite.diffSchemas` and `planMigration` AST APIs remain conveniences
+that delegate to the shared engine and preserve their SQLite report/plan shapes.
+
 ## Compare schemas
 
 ```sh
@@ -91,7 +135,7 @@ table or column identities and contradictory TEMP/schema declarations fail with
 structured library diagnostics instead of silently overwriting definitions.
 
 This is a conservative structural comparison. Declared type text is retained
-exactly; constraints compare canonical SQL in their original order. Equivalent
+exactly; constraints compare normalized structured values in their original order. Equivalent
 expressions, constraint identifiers with different case, and equivalent ways of
 writing constraints can still produce differences. Renames appear as remove/add.
 The diff report does not generate, execute or order migration operations, validate all
@@ -107,7 +151,9 @@ const diff = yield * Sqlite.diffSchemas(before, after);
 The API returns `Effect<SchemaDiff, SchemaDiffError | EncodeError>` without service
 requirements. SchemaDiffError contains a diagnostics array identifying the input
 side, table and (when applicable) column. Constructed ASTs are validated through
-the encoders; comparisons do not mutate inputs or access a database.
+the encoders; comparisons do not mutate inputs or access a database. Diff diagnostics use the
+shared identity shape (catalog/schema/name); SQLite places its database namespace
+in catalog.
 
 ## Generate migration SQL
 
