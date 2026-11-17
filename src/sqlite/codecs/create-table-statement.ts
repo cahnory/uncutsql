@@ -4,6 +4,7 @@ import {
   document,
   followedBy,
   located,
+  optional,
   prefixed,
   struct,
   transform,
@@ -15,6 +16,7 @@ import { terminator } from "../operators/terminator.ts";
 import { trivia } from "../operators/trivia.ts";
 import { identifier } from "./identifier.ts";
 import { tableDefinition, type TableDefinition } from "./table-definition.ts";
+import { tableOptions, type TableOption } from "./table-options.ts";
 
 const definition = struct(
   {
@@ -25,6 +27,7 @@ const definition = struct(
     ),
     name: identifier,
     definition: tableDefinition,
+    options: optional(tableOptions),
   },
   " ",
 );
@@ -34,6 +37,7 @@ export interface CreateTable extends TableDefinition {
   readonly temporary: boolean;
   readonly ifNotExists: boolean;
   readonly name: string;
+  readonly options?: readonly TableOption[];
 }
 
 export const createTableGrammar: Codec<CreateTable> = lexeme(
@@ -43,15 +47,17 @@ export const createTableGrammar: Codec<CreateTable> = lexeme(
       prefixed(
         keyword("CREATE"),
         transform(definition, {
-          decode: ({ tableKeyword: _, definition, ...value }): CreateTable => ({
+          decode: ({ tableKeyword: _, definition, options, ...value }): CreateTable => ({
             _tag: "CreateTable",
             ...value,
             ...definition,
+            ...(options === undefined ? {} : { options }),
           }),
-          encode: ({ _tag: _, columns, tableConstraints, ...value }: CreateTable) => ({
+          encode: ({ _tag: _, columns, tableConstraints, options, ...value }: CreateTable) => ({
             ...value,
             tableKeyword: undefined,
             definition: { columns, tableConstraints },
+            options,
           }),
         }),
         " ",

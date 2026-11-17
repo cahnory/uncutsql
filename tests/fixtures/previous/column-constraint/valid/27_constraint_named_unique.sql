@@ -1,0 +1,1 @@
+CONSTRAINT uq_a UNIQUE

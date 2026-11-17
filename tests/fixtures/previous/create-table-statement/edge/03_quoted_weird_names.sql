@@ -1,0 +1,1 @@
+CREATE TABLE "💾" ("a b" TEXT,"a""b" TEXT)

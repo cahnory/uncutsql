@@ -1,0 +1,1 @@
+CHECK (a > 0 AND b < 10)

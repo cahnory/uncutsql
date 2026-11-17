@@ -1,8 +1,8 @@
 import { prefixed } from "../../../codec/index.ts";
 import { keyword } from "../../operators/keyword.ts";
-import { marker } from "../../operators/marker.ts";
+import { conflictColumnConstraint } from "./conflict-column-constraint.ts";
 
-export const notNullColumnConstraint = marker(
+export const notNullColumnConstraint = conflictColumnConstraint(
   "NotNull",
   prefixed(keyword("NOT"), keyword("NULL"), " "),
 );

@@ -1,0 +1,1 @@
+DEFAULT X'00FF'

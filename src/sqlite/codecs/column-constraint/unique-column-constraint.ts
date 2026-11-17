@@ -1,4 +1,4 @@
 import { keyword } from "../../operators/keyword.ts";
-import { marker } from "../../operators/marker.ts";
+import { conflictColumnConstraint } from "./conflict-column-constraint.ts";
 
-export const uniqueColumnConstraint = marker("Unique", keyword("UNIQUE"));
+export const uniqueColumnConstraint = conflictColumnConstraint("Unique", keyword("UNIQUE"));

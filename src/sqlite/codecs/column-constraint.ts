@@ -7,6 +7,8 @@ import { defaultColumnConstraint } from "./column-constraint/default-column-cons
 import { notNullColumnConstraint } from "./column-constraint/not-null-column-constraint.ts";
 import { primaryKeyColumnConstraint } from "./column-constraint/primary-key-column-constraint.ts";
 import { uniqueColumnConstraint } from "./column-constraint/unique-column-constraint.ts";
+import { collateColumnConstraint } from "./column-constraint/collate-column-constraint.ts";
+import { generatedColumnConstraint } from "./column-constraint/generated-column-constraint.ts";
 
 export const columnConstraint = lexeme(
   located(
@@ -19,6 +21,8 @@ export const columnConstraint = lexeme(
         Default: defaultColumnConstraint,
         Check: checkColumnConstraint,
         References: referencesColumnConstraint,
+        Collate: collateColumnConstraint,
+        Generated: generatedColumnConstraint,
       }),
     ),
   ),

@@ -110,7 +110,8 @@ references. Original source is retained once by `decodeWithSourceMap`.
 
 Canonical output is intentional. Exact source-preserving editing would require
 a richer concrete syntax model and an explicit policy for modified subtrees.
-An AST alone does not retain comments or formatting.
+An AST generally does not retain comments or formatting. Type declarations are
+an exception: their retained spelling carries SQLite semantics (see below).
 
 ## SQLite expressions
 
@@ -177,11 +178,45 @@ encoding. Behavioral tests cover CHECK/UNIQUE enforcement, composite cascading
 updates/deletes, SET DEFAULT and RESTRICT actions, and immediate versus deferred
 foreign-key enforcement within transactions.
 
+## Type declarations and remaining column features
+
+The previous type-name rule used a list of recognized names and numeric parameters.
+Ordinary SQLite tables also accept custom names. `typeName` remains a string, but
+is now validated by a grammar for identifier words and up to two signed numeric
+parameters. Encoding validates the complete declaration before emitting it, so a
+constructed value cannot append constraints or statements.
+
+Retaining the raw declaration is deliberate: quoted multiword names can produce
+a different declared type than their unquoted equivalent, and comments inside a
+type declaration can affect affinity. For example, `CUSTOM /* INT */ TYPE` has
+integer affinity. Normalizing the words or dropping that comment changes behavior.
+Numeric dimensions reject digit separators, which SQLite accepts in general
+expressions but rejects in this production.
+
+Column PRIMARY KEY retains optional sort order, conflict action and AUTOINCREMENT.
+NOT NULL and UNIQUE share a conflict-clause helper. COLLATE and generated columns
+have individual codecs. Generated columns retain their expression and optional
+VIRTUAL/STORED mode; omitted mode stays absent in the AST. Encoding uses the full
+GENERATED ALWAYS AS prefix.
+
+Unlike the earlier column-definition transformation's last-value selection,
+constraints remain ordered, including repeated defaults and collations. Table
+options also remain an ordered array rather than the earlier pair of booleans:
+SQLite accepts repeated STRICT and WITHOUT ROWID options. Absent new optional
+fields are omitted so existing ASTs continue to round-trip unchanged.
+
+The regression suite imports every column-constraint, type-name and table-options
+fixture from the previous implementation, plus CREATE TABLE edge fixtures. Even
+files named `.skip.sql` run; classification overrides are explicit in the tests.
+Native SQLite tests verify generated values, rowid alias behavior, AUTOINCREMENT,
+conflict actions, collation, STRICT coercion and WITHOUT ROWID metadata. Schema
+checks such as conflicting primary keys or invalid STRICT types remain SQLite's
+responsibility rather than becoming syntax errors in the codec.
+
 ## Next steps
 
 1. Extend expressions with function calls and the remaining SQLite operator families.
-2. Extend `CREATE TABLE` using the existing fixture corpus: type names, column
-   collation/conflict clauses, AUTOINCREMENT, generated columns and table options.
+2. Add schema-qualified table declarations using the existing fixture corpus.
 3. Add statement lists and further DDL variants through tagged unions.
 4. Restore the pipeline `SQL → AST → virtual database → diff → migration AST → SQL`.
    Return schema warnings as structured diagnostics; logging can report them.

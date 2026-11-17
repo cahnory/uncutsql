@@ -1,0 +1,1 @@
+CONSTRAINT nn_a NOT NULL

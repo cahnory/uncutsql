@@ -1,0 +1,1 @@
+CONSTRAINT ck_a CHECK (a NOT NULL)

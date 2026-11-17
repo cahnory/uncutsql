@@ -1,0 +1,1 @@
+CONSTRAINT fk_a REFERENCES parent(id)

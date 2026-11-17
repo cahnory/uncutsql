@@ -37,7 +37,7 @@ for (const filename of readdirSync(new URL("./fixtures/create-table/valid/", imp
       const table = '"' + ast.name.replaceAll('"', '""') + '"';
       const columns = (database: DatabaseSync) =>
         database
-          .prepare(`PRAGMA table_info(${table})`)
+          .prepare(`PRAGMA table_xinfo(${table})`)
           .all()
           .map((column) => ({
             ...column,
@@ -48,6 +48,12 @@ for (const filename of readdirSync(new URL("./fixtures/create-table/valid/", imp
                 : Effect.runSync(sqlExpression.decode(String(column.dflt_value))),
           }));
       assert.deepEqual(columns(after), columns(before));
+      const flags = (database: DatabaseSync) =>
+        database
+          .prepare("PRAGMA table_list")
+          .all()
+          .filter((row) => row.name === ast.name);
+      assert.deepEqual(flags(after), flags(before));
       assert.deepEqual(
         after.prepare(`PRAGMA foreign_key_list(${table})`).all(),
         before.prepare(`PRAGMA foreign_key_list(${table})`).all(),
@@ -86,7 +92,7 @@ test("canonical output normalizes casing, aliases, quoting, comments and termina
   );
   assert.equal(
     Effect.runSync(createTable.encode(ast)),
-    'CREATE TEMPORARY TABLE IF NOT EXISTS "users" ("id" INTEGER PRIMARY KEY, "name" TEXT NOT NULL DEFAULT \'O\'\'Brien\', "note" DEFAULT NULL);',
+    'CREATE TEMPORARY TABLE IF NOT EXISTS "users" ("id" integer PRIMARY KEY, "name" text NOT NULL DEFAULT \'O\'\'Brien\', "note" DEFAULT NULL);',
   );
   assert.deepEqual(ast.columns[1]!.constraints, [
     { _tag: "NotNull" },
@@ -226,8 +232,6 @@ for (const source of [
   "CREATE TABLE t (id INTEGER) garbage",
   "CREATE TABLE t (id INTEGER); CREATE TABLE u (id INTEGER)",
   "CREATE TABLE t (id INTEGER);;",
-  "CREATE TABLE t (id VARCHAR(20))",
-  "CREATE TABLE t (id INTEGER) STRICT",
   "CREATE TABLEX t (id INTEGER)",
   "CREATE TABLE t ([unterminated INTEGER)",
 ]) {
