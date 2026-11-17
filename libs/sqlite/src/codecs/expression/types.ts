@@ -21,6 +21,22 @@ export interface BinaryExpression {
   readonly right: Expression;
 }
 
+export interface PatternExpression {
+  readonly _tag: "PatternExpression";
+  readonly operator:
+    | "LIKE"
+    | "NOT LIKE"
+    | "GLOB"
+    | "NOT GLOB"
+    | "REGEXP"
+    | "NOT REGEXP"
+    | "MATCH"
+    | "NOT MATCH";
+  readonly left: Expression;
+  readonly right: Expression;
+  readonly escape?: Expression;
+}
+
 export interface CaseExpression {
   readonly _tag: "CaseExpression";
   readonly base?: Expression;
@@ -69,6 +85,7 @@ export interface FunctionCall {
 
 /** Parentheses affect tree shape and source spans, not semantic node kinds. */
 export type Expression =
+  | PatternExpression
   | CaseExpression
   | CastExpression
   | CollateExpression

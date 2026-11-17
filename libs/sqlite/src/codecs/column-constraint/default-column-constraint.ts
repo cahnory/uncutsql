@@ -14,6 +14,12 @@ export interface DefaultColumnConstraint {
 
 const isConstant = (value: Expression): boolean => {
   switch (value._tag) {
+    case "PatternExpression":
+      return (
+        isConstant(value.left) &&
+        isConstant(value.right) &&
+        (value.escape === undefined || isConstant(value.escape))
+      );
     case "CaseExpression":
       return (
         (value.base === undefined || isConstant(value.base)) &&
@@ -81,7 +87,8 @@ const defaultValue: Codec<Expression> = make<Expression>({
     ) {
       return signedNumber.encode({ ...value, operator: value.operator, operand: value.operand });
     }
-    return value._tag === "CaseExpression" ||
+    return value._tag === "PatternExpression" ||
+      value._tag === "CaseExpression" ||
       value._tag === "CastExpression" ||
       value._tag === "CollateExpression" ||
       value._tag === "InExpression" ||

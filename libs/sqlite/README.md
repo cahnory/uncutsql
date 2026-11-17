@@ -62,8 +62,9 @@ recognizing a keyword does not imply support for the construct it introduces.
 - [x] Expression-level COLLATE, including repeated clauses and quoted names.
 - [x] JSON extraction `->` / `->>`, retaining their distinct result semantics.
       Path evaluation, JSON validity and function/extension availability belong to SQLite.
-- [ ] LIKE / NOT LIKE with ESCAPE.
-- [ ] GLOB, REGEXP and MATCH, including their NOT forms.
+- [x] LIKE / NOT LIKE with ESCAPE.
+- [x] GLOB, REGEXP and MATCH, including their NOT forms.
+      Extension function availability/arity and escape-character validation are runtime concerns.
 - [x] CAST expressions, including nested operands and custom/parameterized types.
       Type spelling is preserved; SQLite performs the conversion.
 - [x] CASE expressions, both simple and searched forms, with nesting and optional ELSE.
@@ -147,7 +148,7 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 
 Suggested order for further work:
 
-1. Finish schema-useful expressions: pattern matching with ESCAPE.
+1. Add bind parameters, row values and remaining specialized expression forms.
 2. Add standalone indexes and their model/migration support.
 3. Add views/triggers and safe preservation during table rebuilds.
 4. Expand query grammar and the expression forms that depend on it.

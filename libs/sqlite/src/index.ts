@@ -21,6 +21,7 @@ export type {
   CollateExpression,
   CastExpression,
   CaseExpression,
+  PatternExpression,
   BinaryOperator,
   UnaryOperator,
 } from "./codecs/expression.ts";

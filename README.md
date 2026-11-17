@@ -461,6 +461,8 @@ Signs are unary-expression nodes. Blob values contain hexadecimal byte pairs.
   to their equivalent canonical operators.
 - JSON extraction `->` and `->>`, retaining JSON text versus SQL value semantics.
   Paths, labels, indexes and chained extraction use ordinary expressions.
+- LIKE, GLOB, REGEXP and MATCH with NOT forms and optional ESCAPE syntax.
+  SQLite validates pattern-function availability and escape values at execution time.
 - `BETWEEN` and `NOT BETWEEN` range expressions, including nested bounds.
 - `IN` and `NOT IN` with parenthesized expression lists, including empty lists.
   Subquery, table-name and table-function targets are not implemented.
@@ -481,8 +483,7 @@ contract for supported, valid ASTs is `decode(encode(ast))` equal to `ast`.
 This grammar deliberately requires quoting reserved words used as identifiers.
 The built-in `temp` schema is accepted unquoted before a dot; other contextual
 keyword fallbacks are not implemented. Unsupported syntax
-fails: bind parameters, LIKE/GLOB/REGEXP,
-subqueries are not yet
+fails: bind parameters and subqueries are not yet
 implemented. Neither are `AS SELECT` or statement kinds other than CREATE TABLE. Database semantics such as duplicate columns,
 conflicting constraints and contextual name resolution remain SQLite's responsibility.
 

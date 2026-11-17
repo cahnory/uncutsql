@@ -1,3 +1,9 @@
+import {
+  patternOperator,
+  patternPrecedence,
+  readPattern,
+  encodePattern,
+} from "./expression/pattern-expression.ts";
 import { caseExpression } from "./expression/case-expression.ts";
 import { castExpression } from "./expression/cast-expression.ts";
 import {
@@ -71,6 +77,7 @@ const readPrimary = (cursor: Cursor): Effect.Effect<Read<Expression>, ParseError
   });
 
 const precedenceOf = (value: Expression): number => {
+  if (value._tag === "PatternExpression") return patternPrecedence;
   if (value._tag === "CollateExpression") return collatePrecedence;
   if (value._tag === "InExpression") return inPrecedence;
   if (value._tag === "BetweenExpression") return betweenPrecedence;
@@ -82,6 +89,8 @@ const precedenceOf = (value: Expression): number => {
 
 const encodeExpression = (value: Expression): Effect.Effect<string, EncodeError> => {
   switch (value._tag) {
+    case "PatternExpression":
+      return encodePattern(value, at);
     case "CollateExpression":
       return encodeCollate(value, at);
     case "InExpression":
@@ -114,6 +123,7 @@ const encodeExpression = (value: Expression): Effect.Effect<string, EncodeError>
 const maybeCollate = optional(
   transform(collateOperator, { decode: () => true as const, encode: (_value: true) => undefined }),
 );
+const maybePattern = optional(patternOperator);
 const maybeOperator = optional(binaryOperator);
 const maybeIn = optional(inOperator);
 const maybeBetween = optional(betweenOperator);
@@ -150,6 +160,12 @@ const at: ExpressionAt = (minimumPrecedence) =>
             left = yield* readIn(start, left, { ...membership, value: membership.value }, at);
             continue;
           }
+          const pattern = yield* maybePattern.decode(left.next);
+          if (pattern.value !== undefined) {
+            if (patternPrecedence < minimumPrecedence) return left;
+            left = yield* readPattern(start, left, { ...pattern, value: pattern.value }, at);
+            continue;
+          }
           const operator = yield* maybeOperator.decode(left.next);
           if (operator.value === undefined || binaryPrecedence[operator.value] < minimumPrecedence)
             return left;
@@ -181,5 +197,6 @@ export type {
   CollateExpression,
   CastExpression,
   CaseExpression,
+  PatternExpression,
 } from "./expression/types.ts";
 export type { BinaryOperator, UnaryOperator } from "./expression/operators.ts";

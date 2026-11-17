@@ -610,3 +610,15 @@ including unreachable branches, so a column reference cannot be hidden in a
 constant default. Tests import the earlier valid/invalid CASE fixtures, check
 native evaluation with instrumented functions, and execute a rebuild migration
 with CASE-based CHECK and generated expressions.
+
+## Pattern matching
+
+`PatternExpression` keeps the exact LIKE/GLOB/REGEXP/MATCH operator (including NOT),
+left/right operands and optional ESCAPE. Pattern operators share equality's
+left-associative precedence. The ESCAPE operand binds above relational comparisons
+and below bitwise operators. Printing keeps grouping around nested right operands.
+SQLite's grammar admits ESCAPE for the entire pattern-operator family; function
+arity and extension availability remain execution concerns. Native tests register
+REGEXP/MATCH implementations and a three-argument GLOB to check argument ordering.
+Default validation visits both operands and ESCAPE. Model/rebuild tests cover
+pattern-based CHECK and generated expressions.
