@@ -235,7 +235,7 @@ including quoted names containing dots and tables with namesakes in other schema
 
 1. Extend expressions with the remaining SQLite operator families.
 2. Add further DDL variants to the schema statement union.
-3. Restore the pipeline `SQL → AST → virtual database → diff → migration AST → SQL`.
+3. Extend the structural schema diff into migration planning and SQL generation.
    Return schema warnings as structured diagnostics; logging can report them.
 4. Add application services for configuration, filesystem access and database
    inspection. Keep ordinary AST transformations pure.
@@ -310,3 +310,33 @@ the complete input before emitting success output. Format encodes all statements
 before writing, so a later failure cannot emit a partial schema. Check reports
 supported syntax only; neither command opens a database. Files are never modified.
 The CLI has no new external dependencies and remains a private source executable.
+
+## Structural schema diff
+
+`diffSchemas` builds indexes of table and column identities from each parsed
+schema. Identity uses ASCII case folding and a tuple of effective schema and
+name, so quoted dots and non-ASCII names cannot collide accidentally. Implicit
+main and TEMP placement follow CREATE TABLE rules. The indexes reject duplicate
+identities and contradictory temporary schema qualifiers with SchemaDiffError
+diagnostics. They describe declarations rather than executing IF NOT EXISTS.
+
+The first diff remains in the SQLite package and compares supported CREATE TABLE
+ASTs. A full virtual database and a separate migration planner can follow when
+more statement kinds or migration operations need them. Each table change retains
+its original definitions; nested changes describe columns, shared-column ordering,
+table constraints and option flags. Removed tables follow source order; additions
+and edits follow target order. This order is deterministic reporting, not an
+execution plan. Renames are deliberately represented by removal and addition.
+
+Constraint comparison uses the existing canonical encoders rather than comparing
+object serialization. It ignores SQL trivia and AST property insertion order,
+while preserving ordered constraints, expression shape and significant literal
+spellings. Type declarations compare retained SQL text exactly. Effective table
+option flags are compared as sets. Table/column identity spelling, declaration
+order and IF NOT EXISTS do not create changes; this is not a general proof of
+SQL semantic equivalence. Duplicate constraints and other database semantics remain
+outside validation. All constructed tables are encoder-validated before comparison.
+
+The CLI reuses file parsing and diagnostics for `diff before.sql after.sql` and
+prints JSON only after both inputs and the diff succeed. One side may read stdin.
+No database access, schema application or migration SQL is introduced.

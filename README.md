@@ -1,8 +1,8 @@
 # uncutsql — Effect foundation
 
-A new implementation of uncutsql with a bidirectional SQL grammar and composable
-Effect operations. This is a foundation and a small SQLite grammar, not yet the
-schema diff or migration application from `../uncutsql`.
+A new implementation of uncutsql with a bidirectional SQL grammar, structural
+schema comparison and composable Effect operations. The CLI checks, formats and
+compares supported SQLite schema files. Migration SQL generation is not yet implemented.
 
 ## Run
 
@@ -28,7 +28,7 @@ SQLite. Node may print an experimental SQLite warning when running those tests.
 
 - `libs/codec` — `@uncutsql/codec`, the generic Effect codec library.
 - `libs/sqlite` — `@uncutsql/sqlite`, depending on the codec via `workspace:*`.
-- `apps/cli` — `@uncutsql/cli`, schema syntax checking and canonical SQL output.
+- `apps/cli` — `@uncutsql/cli`, schema syntax checking, formatting and structural diff.
 - `apps/demo` — `@uncutsql/demo`, an executable consumer of both libraries.
 
 Each library owns its tests; SQLite fixtures stay beside its tests. Shared
@@ -69,6 +69,44 @@ are accepted. Subqueries and other statement kinds remain unsupported.
 The library exposes the same file grammar through `Sqlite.schema.decode(sql)`,
 `encode(statements)` and `decodeWithSourceMap(sql)`. It returns an ordered
 `readonly Statement[]` and keeps source offsets relative to the original file.
+
+## Compare schemas
+
+```sh
+pnpm cli diff examples/schema.sql examples/schema-next.sql
+```
+
+`diff` prints a structured JSON report from the current schema to the desired
+schema. It reports added/removed tables, added/removed/changed columns, changes
+to the relative order of shared columns, table constraints and table options.
+Definitions are included for later migration planning. Additions/removals include
+zero-based column positions. One input may be `-` for stdin. Success exits 0 even
+when changes exist; parse, input and ambiguous-schema errors exit 1.
+
+Tables match by schema/name and columns by name, ignoring ASCII case. Unqualified
+names use `main`, TEMP tables use `temp`. Table declaration order and IF NOT EXISTS
+are ignored; STRICT/WITHOUT ROWID flags ignore order and duplicates. Duplicate
+table or column identities and contradictory TEMP/schema declarations fail with
+structured library diagnostics instead of silently overwriting definitions.
+
+This is a conservative structural comparison. Declared type text is retained
+exactly; constraints compare canonical SQL in their original order. Equivalent
+expressions, constraint identifiers with different case, and equivalent ways of
+writing constraints can still produce differences. Renames appear as remove/add.
+The report does not generate, execute or order migration operations, validate all
+database semantics, or assess whether a change can preserve existing data.
+
+```ts
+const before = yield * Sqlite.schema.decode(beforeSql);
+const after = yield * Sqlite.schema.decode(afterSql);
+const diff = yield * Sqlite.diffSchemas(before, after);
+// { changes: [{ _tag: "TableChanged", table, before, after, changes: [...] }] }
+```
+
+The API returns `Effect<SchemaDiff, SchemaDiffError | EncodeError>` without service
+requirements. SchemaDiffError contains a diagnostics array identifying the input
+side, table and (when applicable) column. Constructed ASTs are validated through
+the encoders; comparisons do not mutate inputs or access a database.
 
 ## Parse and serialize
 

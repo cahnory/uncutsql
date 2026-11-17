@@ -67,3 +67,42 @@ test("CLI handles help, usage errors, empty input and unsupported SQL", () => {
   assert.equal(unsupported.status, 1);
   assert.match(unsupported.stderr, /<stdin>:1:1/);
 });
+
+test("CLI diff reports structured changes and supports one stdin input", () => {
+  const directory = mkdtempSync(join(tmpdir(), "uncutsql-diff-"));
+  try {
+    const before = join(directory, "before.sql");
+    const after = join(directory, "after.sql");
+    writeFileSync(before, "CREATE TABLE t (a INTEGER)");
+    writeFileSync(after, "CREATE TABLE t (a TEXT, b)");
+    const result = run(["diff", before, after]);
+    assert.equal(result.status, 0, result.stderr);
+    const parsed = JSON.parse(result.stdout);
+    assert.deepEqual(
+      parsed.changes[0].changes.map((change: { _tag: string }) => change._tag),
+      ["ColumnChanged", "ColumnAdded"],
+    );
+    const same = run(["diff", before, "-"], "CREATE TABLE t (a INTEGER)");
+    assert.equal(same.status, 0, same.stderr);
+    assert.deepEqual(JSON.parse(same.stdout), { changes: [] });
+    const invalid = run(["diff", before, "-"], "CREATE TABLE t (a, A)");
+    assert.equal(invalid.status, 1);
+    assert.equal(invalid.stdout, "");
+    assert.match(invalid.stderr, /Duplicate column/);
+    const malformed = run(["diff", before, "-"], "SELECT 1");
+    assert.equal(malformed.status, 1);
+    assert.equal(malformed.stdout, "");
+    assert.match(malformed.stderr, /<stdin>:1:1/);
+    for (const args of [
+      ["diff"],
+      ["diff", before],
+      ["diff", "-", "-"],
+      ["diff", before, after, "extra"],
+    ]) {
+      assert.equal(run(args).status, 2);
+    }
+    assert.equal(readFileSync(before, "utf8"), "CREATE TABLE t (a INTEGER)");
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+});

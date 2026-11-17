@@ -30,3 +30,11 @@ export type { GeneratedColumnConstraint } from "./codecs/column-constraint/gener
 export { tableReference, type TableReference } from "./codecs/table-reference.ts";
 
 export { schema, schemaGrammar, type Statement } from "./schema.ts";
+export { diffSchemas, SchemaDiffError } from "./diff.ts";
+export type {
+  SchemaDiff,
+  TableIdentity,
+  TableChange,
+  TableAlteration,
+  DiffDiagnostic,
+} from "./diff.ts";
