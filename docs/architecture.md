@@ -594,3 +594,19 @@ CAST default when printing. Native tests cover conversion values and types,
 large integers, nested expressions, malformed syntax, source spans, constructed
 type validation and rebuild migrations with CAST-based CHECK/generated columns.
 Conversion and type-affinity behavior remain SQLite's responsibility.
+
+## CASE expressions
+
+`CaseExpression` retains an optional base, an ordered nonempty array of branches
+(condition/result pairs), and an optional else expression. Its dedicated codec
+follows the earlier CASE rule and commits after CASE, WHEN, THEN and ELSE prefixes.
+Omitted ELSE remains distinct from an explicit NULL. CASE is a primary expression;
+nesting is handled by the existing recursive expression grammar.
+
+The encoder retains CASE itself instead of expanding comparisons, preserving
+SQLite's short-circuit behavior and single evaluation of a simple CASE base.
+DEFAULT validation visits the base, every branch condition/result and ELSE,
+including unreachable branches, so a column reference cannot be hidden in a
+constant default. Tests import the earlier valid/invalid CASE fixtures, check
+native evaluation with instrumented functions, and execute a rebuild migration
+with CASE-based CHECK and generated expressions.

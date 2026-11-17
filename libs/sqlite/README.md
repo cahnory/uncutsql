@@ -66,7 +66,7 @@ recognizing a keyword does not imply support for the construct it introduces.
 - [ ] GLOB, REGEXP and MATCH, including their NOT forms.
 - [x] CAST expressions, including nested operands and custom/parameterized types.
       Type spelling is preserved; SQLite performs the conversion.
-- [ ] CASE expressions, both simple and searched forms.
+- [x] CASE expressions, both simple and searched forms, with nesting and optional ELSE.
 - [ ] RAISE expressions in trigger contexts.
 - [ ] Aggregate syntax: `*`, DISTINCT and argument ORDER BY.
 - [ ] FILTER, OVER, named windows and frame specifications.
@@ -147,7 +147,7 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 
 Suggested order for further work:
 
-1. Finish schema-useful expressions: CASE and pattern matching with ESCAPE.
+1. Finish schema-useful expressions: pattern matching with ESCAPE.
 2. Add standalone indexes and their model/migration support.
 3. Add views/triggers and safe preservation during table rebuilds.
 4. Expand query grammar and the expression forms that depend on it.

@@ -21,6 +21,13 @@ export interface BinaryExpression {
   readonly right: Expression;
 }
 
+export interface CaseExpression {
+  readonly _tag: "CaseExpression";
+  readonly base?: Expression;
+  readonly branches: readonly { readonly condition: Expression; readonly result: Expression }[];
+  readonly else?: Expression;
+}
+
 export interface CastExpression {
   readonly _tag: "CastExpression";
   readonly operand: Expression;
@@ -62,6 +69,7 @@ export interface FunctionCall {
 
 /** Parentheses affect tree shape and source spans, not semantic node kinds. */
 export type Expression =
+  | CaseExpression
   | CastExpression
   | CollateExpression
   | InExpression

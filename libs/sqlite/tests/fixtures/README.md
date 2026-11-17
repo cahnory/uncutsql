@@ -43,3 +43,6 @@ collation tests.
 
 `expression/02_json_arrow.sql` is an unchanged copy of the previous implementation's
 `rules/__fixtures__/expression/edge/02_json_arrow.sql`.
+
+`expression/06_case.sql` and `expression/03_bad_case.sql` are unchanged copies
+of the earlier expression valid/invalid CASE fixtures.
