@@ -1,15 +1,22 @@
 import { readFile } from "node:fs/promises";
 import { Data, Effect, Result } from "effect";
-import { schema, diffSchemas, SchemaDiffError } from "@uncutsql/sqlite";
+import {
+  schema,
+  diffSchemas,
+  SchemaDiffError,
+  planMigration,
+  encodeMigration,
+} from "@uncutsql/sqlite";
 
 const help = `Usage: pnpm cli <check|format> [file|-]
-       pnpm cli diff <before-file|-> <after-file|->
+       pnpm cli <diff|migration> <before-file|-> <after-file|->
 
 Read a SQL file, or stdin when file is omitted or '-'.
   check   Validate supported CREATE TABLE syntax (no database execution).
   format  Print canonical SQL to stdout; comments and formatting are discarded.
   diff    Print a structural schema diff as JSON (before -> after).
           At most one input may be stdin. Changes still exit successfully.
+  migration  Print a transaction script for supported changes; never execute it.
 
 Statements require separating semicolons; the final semicolon is optional.
 Input files are never modified. Unsupported syntax is an error.
@@ -50,7 +57,7 @@ const validPath = (value: string) => !value.startsWith("-") || value === "-";
 const program = Effect.gen(function* () {
   if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) return help;
   const [command, filename = "-"] = args;
-  if (command === "diff") {
+  if (command === "diff" || command === "migration") {
     const target = args[2];
     if (
       args.length !== 3 ||
@@ -60,11 +67,16 @@ const program = Effect.gen(function* () {
       (filename === "-" && target === "-")
     ) {
       return yield* Effect.fail(
-        new UsageError({ message: "diff requires two paths; at most one may be stdin (-)." }),
+        new UsageError({ message: `${command} requires two paths; at most one may be stdin (-).` }),
       );
     }
     const before = yield* readSchema(filename);
     const after = yield* readSchema(target);
+    if (command === "migration") {
+      const plan = yield* planMigration(before, after);
+      const sql = yield* encodeMigration(plan);
+      return sql.length ? `${sql}\n` : "";
+    }
     const diff = yield* diffSchemas(before, after).pipe(
       Effect.mapError(
         (error) =>
@@ -82,7 +94,7 @@ const program = Effect.gen(function* () {
   }
   if ((command !== "check" && command !== "format") || args.length > 2 || !validPath(filename)) {
     return yield* Effect.fail(
-      new UsageError({ message: "Expected check, format or diff with input paths." }),
+      new UsageError({ message: "Expected check, format, diff or migration with input paths." }),
     );
   }
   const statements = yield* readSchema(filename);

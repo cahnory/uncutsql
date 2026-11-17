@@ -106,3 +106,33 @@ test("CLI diff reports structured changes and supports one stdin input", () => {
     rmSync(directory, { recursive: true });
   }
 });
+
+test("CLI migration emits complete scripts or errors without partial output", () => {
+  const directory = mkdtempSync(join(tmpdir(), "uncutsql-migration-"));
+  try {
+    const before = join(directory, "before.sql");
+    writeFileSync(before, "CREATE TABLE t (a)");
+    const result = run(["migration", before, "-"], "CREATE TABLE t (a, b TEXT DEFAULT 'new')");
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(
+      result.stdout,
+      'BEGIN;\nALTER TABLE "main"."t" ADD COLUMN "b" TEXT DEFAULT \'new\';\nCOMMIT;\n',
+    );
+    const unsupported = run(
+      ["migration", before, "-"],
+      "CREATE TABLE t (a TEXT); CREATE TABLE added (x)",
+    );
+    assert.equal(unsupported.status, 1);
+    assert.equal(unsupported.stdout, "");
+    assert.match(unsupported.stderr, /requires a rebuild/);
+    const drop = run(["migration", before, "-"], "");
+    assert.equal(drop.status, 0, drop.stderr);
+    assert.match(drop.stdout, /WARNING: Dropping table/);
+    assert.match(drop.stdout, /DROP TABLE "main"\."t";/);
+    assert.equal(run(["migration", before, "-"], "CREATE TABLE t (a)").stdout, "");
+    assert.equal(run(["migration", "-", "-"]).status, 2);
+    assert.equal(readFileSync(before, "utf8"), "CREATE TABLE t (a)");
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+});

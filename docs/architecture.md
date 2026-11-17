@@ -340,3 +340,34 @@ outside validation. All constructed tables are encoder-validated before comparis
 The CLI reuses file parsing and diagnostics for `diff before.sql after.sql` and
 prints JSON only after both inputs and the diff succeed. One side may read stdin.
 No database access, schema application or migration SQL is introduced.
+
+## Initial migration planner
+
+`planMigration(before, after)` consumes the structural diff and produces typed
+CreateTable, DropTable and AddColumn operations, plus structured data-loss
+warnings for removed tables. It reuses normalized identities. Drops are ordered
+child-before-parent using column and table foreign keys in the same schema.
+References retained in the desired schema to a removed table and cyclic/self
+referential drops fail with diagnostics. CREATE statements may retain forward
+references, which SQLite accepts; no data is inserted during creation.
+
+Only appended ordinary columns with literal/signed-numeric defaults, NOT NULL
+(with a non-NULL default), and COLLATE are admitted initially. Other constraint
+forms and changes requiring rebuilds produce MigrationPlanError; a successful
+partial plan is never returned. This avoids silently omitting a requested change.
+The planner does not claim that all parsed schemas are semantically valid or that
+existing data satisfies new declarations.
+
+`encodeMigration` uses the existing identifier, column and table encoders and
+wraps nonempty plans in BEGIN/COMMIT. It qualifies table targets, including main,
+to avoid temporary-table shadowing. New CREATE operations discard IF NOT EXISTS
+so a stale baseline cannot silently skip a table. The renderer changes no PRAGMAs
+and expects to run outside an existing transaction. It encodes the complete plan
+before CLI stdout receives SQL. Native SQLite tests execute generated scripts
+with populated tables and foreign-key enforcement and compare resulting schema
+ASTs to the desired schema.
+
+The old lock file stored a virtual database snapshot and lastMigrationId. A later
+versioned lock format can record the baseline for generation; applied migration
+history is a separate database concern. No lock format or persistence is added
+as part of this planner.

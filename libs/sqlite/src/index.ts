@@ -38,3 +38,10 @@ export type {
   TableAlteration,
   DiffDiagnostic,
 } from "./diff.ts";
+export { planMigration, encodeMigration, MigrationPlanError } from "./migration.ts";
+export type {
+  MigrationPlan,
+  MigrationOperation,
+  MigrationDiagnostic,
+  MigrationWarning,
+} from "./migration.ts";

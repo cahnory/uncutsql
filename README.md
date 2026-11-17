@@ -2,7 +2,8 @@
 
 A new implementation of uncutsql with a bidirectional SQL grammar, structural
 schema comparison and composable Effect operations. The CLI checks, formats and
-compares supported SQLite schema files. Migration SQL generation is not yet implemented.
+compares supported SQLite schema files and generates migrations for a limited set
+of changes.
 
 ## Run
 
@@ -93,7 +94,7 @@ This is a conservative structural comparison. Declared type text is retained
 exactly; constraints compare canonical SQL in their original order. Equivalent
 expressions, constraint identifiers with different case, and equivalent ways of
 writing constraints can still produce differences. Renames appear as remove/add.
-The report does not generate, execute or order migration operations, validate all
+The diff report does not generate, execute or order migration operations, validate all
 database semantics, or assess whether a change can preserve existing data.
 
 ```ts
@@ -107,6 +108,44 @@ The API returns `Effect<SchemaDiff, SchemaDiffError | EncodeError>` without serv
 requirements. SchemaDiffError contains a diagnostics array identifying the input
 side, table and (when applicable) column. Constructed ASTs are validated through
 the encoders; comparisons do not mutate inputs or access a database.
+
+## Generate migration SQL
+
+```sh
+pnpm cli migration examples/schema.sql examples/schema-expand.sql
+```
+
+The command prints a transaction script to stdout. It never executes SQL, changes
+input files or writes a lock file. Identical schemas produce empty output. The
+baseline must describe the actual database, and attached schemas must already
+exist. Run the generated transaction outside an existing transaction. As with
+`diff`, one input may be stdin; unsupported changes fail before any SQL is emitted.
+
+The first planner supports:
+
+- Creating tables with explicit schema placement and without IF NOT EXISTS.
+- Dropping tables in child-before-parent foreign-key order. The plan includes
+  data-loss warnings, which the SQL renderer writes as comments.
+- Appending ordinary columns with optional COLLATE, literal/signed-numeric DEFAULT
+  and NOT NULL constraints. NOT NULL requires a non-NULL literal default.
+
+Column edits, removals, insertion/reordering, table constraint/option changes,
+cyclic or self-referential table drops and other ADD COLUMN constraint forms
+produce MigrationPlanError diagnostics. Rebuilds, rename inference, data-copy
+mapping and migration application are not implemented. Database semantics and
+existing data can still cause execution to fail; generation does not open a
+live database. The SQL leaves foreign-key enforcement unchanged.
+
+```ts
+const plan = yield * Sqlite.planMigration(before, after);
+// { operations: [...], warnings: [...] }
+const sql = yield * Sqlite.encodeMigration(plan);
+```
+
+Plans retain typed CreateTable, DropTable and AddColumn operations. Planning
+returns the diff's errors plus MigrationPlanError; rendering returns EncodeError.
+A future lock file can record the baseline schema and last generated migration ID,
+separately from the history of migrations actually applied to a database.
 
 ## Parse and serialize
 

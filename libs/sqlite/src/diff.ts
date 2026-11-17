@@ -6,6 +6,12 @@ import { tableConstraint, type TableConstraint } from "./codecs/table-constraint
 import type { TableOption } from "./codecs/table-options.ts";
 import type { Statement } from "./schema.ts";
 
+import {
+  foldIdentifier as fold,
+  tableIdentity as identity,
+  tableKey as key,
+} from "./schema-identity.ts";
+
 export interface TableIdentity {
   readonly schema: string;
   readonly name: string;
@@ -71,13 +77,6 @@ export interface SchemaDiff {
   readonly changes: readonly TableChange[];
 }
 
-// SQLite folds ASCII identifiers. Unicode lowercasing would conflate distinct names.
-const fold = (name: string) => name.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
-const identity = (table: CreateTable): TableIdentity => ({
-  schema: fold(table.schema ?? (table.temporary ? "temp" : "main")),
-  name: fold(table.name),
-});
-const key = (table: TableIdentity) => JSON.stringify([table.schema, table.name]);
 const equal = (before: readonly string[], after: readonly string[]) =>
   before.length === after.length && before.every((value, index) => value === after[index]);
 

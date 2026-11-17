@@ -3,6 +3,9 @@ import { type Value, EncodeError, ParseError } from "@uncutsql/codec";
 import {
   createTable,
   diffSchemas,
+  planMigration,
+  encodeMigration,
+  MigrationPlanError,
   SchemaDiffError,
   literalValue,
   expression,
@@ -38,4 +41,15 @@ expression.encode({ _tag: "UnaryExpression", operator: "!", operand: { _tag: "Nu
 type _DiffRequirements = Assert<Equal<Effect.Services<ReturnType<typeof diffSchemas>>, never>>;
 type _DiffErrors = Assert<
   Equal<Effect.Error<ReturnType<typeof diffSchemas>>, SchemaDiffError | EncodeError>
+>;
+
+type _PlanRequirements = Assert<Equal<Effect.Services<ReturnType<typeof planMigration>>, never>>;
+type _PlanErrors = Assert<
+  Equal<
+    Effect.Error<ReturnType<typeof planMigration>>,
+    SchemaDiffError | EncodeError | MigrationPlanError
+  >
+>;
+type _MigrationEncodeErrors = Assert<
+  Equal<Effect.Error<ReturnType<typeof encodeMigration>>, EncodeError>
 >;
