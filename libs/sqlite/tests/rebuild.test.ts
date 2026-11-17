@@ -1,15 +1,10 @@
+import { diffSchemas, planMigration } from "./workflow.ts";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { Effect, Result } from "effect";
-import {
-  schema,
-  diffSchemas,
-  planMigration,
-  encodeMigration,
-  MigrationPlanError,
-} from "../src/index.ts";
+import { schema, encodeMigration, MigrationPlanError } from "../src/index.ts";
 
 const parse = (sql: string) => Effect.runSync(schema.decode(sql));
 const migration = (before: string, after: string) =>

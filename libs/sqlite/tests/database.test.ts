@@ -7,7 +7,7 @@ import {
   schema,
   toDatabaseSchema,
   fromDatabaseSchema,
-  planMigrationFromDatabase,
+  lowerMigration,
   encodeMigration,
 } from "../src/index.ts";
 
@@ -55,7 +55,8 @@ test("SQLite renders and executes a migration using only JSON-restored shared mo
   const after = JSON.parse(
     JSON.stringify(convert("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT UNIQUE)")),
   );
-  const plan = Effect.runSync(planMigrationFromDatabase(before, after));
+  const diff = Effect.runSync(diffDatabases(before, after));
+  const plan = Effect.runSync(lowerMigration(planDatabaseMigration(diff), before, after));
   const sql = Effect.runSync(encodeMigration(plan));
   const database = new DatabaseSync(":memory:");
   try {
@@ -84,4 +85,14 @@ test("SQLite refuses unsupported model extensions instead of dropping their sema
       Result.isFailure(Effect.runSync(Effect.result(fromDatabaseSchema({ tables: [table] })))),
     );
   }
+});
+
+test("SQLite lowering rejects procedures absent from the supplied model context", () => {
+  const model = convert("CREATE TABLE t (id)");
+  const procedures = { procedures: [{ _tag: "DropTable" as const, table: model.tables[0]! }] };
+  const result = Effect.runSync(
+    Effect.result(lowerMigration(procedures, { tables: [] }, { tables: [] })),
+  );
+  assert.ok(Result.isFailure(result));
+  assert.match(result.failure.message, /absent from its database context/);
 });

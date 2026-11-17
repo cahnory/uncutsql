@@ -3,7 +3,7 @@ import { EncodeError } from "@uncutsql/codec";
 import { createTable, type CreateTable } from "./create-table.ts";
 import { identifier } from "./codecs/identifier.ts";
 import { stringLiteral } from "./codecs/string-literal.ts";
-import type { TableIdentity } from "./diff.ts";
+import type { TableIdentity } from "./schema-identity.ts";
 import { foldIdentifier } from "./schema-identity.ts";
 
 export interface RebuildTableOperation {

@@ -313,18 +313,17 @@ The CLI has no new external dependencies and remains a private source executable
 
 ## Structural schema diff
 
-`diffSchemas` builds indexes of table and column identities from each parsed
-schema. Identity uses ASCII case folding and a tuple of effective schema and
+Core's `diffDatabases` builds indexes of table and column identities from each
+shared schema model. Identity uses ASCII case folding and a tuple of effective schema and
 name, so quoted dots and non-ASCII names cannot collide accidentally. Implicit
 main and TEMP placement follow CREATE TABLE rules. The indexes reject duplicate
 identities and contradictory temporary schema qualifiers with SchemaDiffError
 diagnostics. They describe declarations rather than executing IF NOT EXISTS.
 
 The reusable diff lives in @uncutsql/core and compares shared DatabaseSchema
-models. SQLite converts supported CREATE TABLE ASTs to those models. The existing
-SQLite report projects shared changes back onto the input definitions for API
-compatibility; nested changes describe columns, shared-column ordering, table
-constraints and option flags. Removed tables follow source order; additions
+models. SQLite converts supported CREATE TABLE ASTs to those models. The CLI
+outputs the shared report directly; nested changes describe columns,
+shared-column ordering, table constraints and option flags. Removed tables follow source order; additions
 and edits follow target order. This order is deterministic reporting, not an
 execution plan. Renames are deliberately represented by removal and addition.
 
@@ -343,8 +342,8 @@ No database access, schema application or migration SQL is introduced.
 
 ## Initial migration planner
 
-`planMigration(before, after)` adapts ASTs into shared models, invokes the core
-diff and logical procedure planner, then lowers those procedures into typed
+The CLI adapts ASTs into shared models, invokes the core diff and logical
+procedure planner, then passes those procedures to SQLite's `lowerMigration` for typed
 CreateTable, DropTable and AddColumn operations, plus structured data-loss
 warnings for removed tables. It reuses normalized identities. Drops are ordered
 child-before-parent using column and table foreign keys in the same schema.
@@ -420,10 +419,11 @@ SQLite exposes toDatabaseSchema and fromDatabaseSchema. Conversion retains type
 spellings, structured constraint/expression values and effective option flags,
 while removing creation guards and AST syntax tags. The materialization boundary
 rejects unsupported model features and validates native values through encoding
-and reparsing. planMigrationFromDatabase uses these shared models directly, so
-restored lock snapshots do not require parser AST provenance. The native-AST entry
-points remain compatibility conveniences. The SQLite-shaped diff projection is
-reporting glue; it contains no independent comparison algorithm.
+and reparsing. Lowering accepts shared models and caller-supplied logical
+procedures directly, so restored lock snapshots do not require parser AST
+provenance. Native diff/planning convenience APIs have been removed. The internal
+procedure projection resolves native definitions for physical operations; it
+contains no comparison algorithm.
 
 Tests exercise core without importing SQLite or codecs, including case-sensitive
 keys, multiple namespace components, structured types and arbitrary vendor options.
@@ -431,3 +431,23 @@ SQLite adapter tests round-trip JSON models and execute migrations planned solel
 from those models. These establish reusable boundaries, not support for a second
 SQL parser or arbitrary cross-dialect semantic conversion. Standalone indexes,
 views and other object kinds still need model extensions as they are implemented.
+
+## Consumer-owned wiring
+
+Core defines the Dialect capability interface with independent AST and physical
+plan types and Effect error/service parameters. SQLite exports a conforming
+`dialect` object and its individual conversion/lowering/rendering functions.
+It does not import or export diffDatabases or planDatabaseMigration, and there
+are no diffSchemas/planMigration/planMigrationFromDatabase facade functions.
+
+The CLI composition root selects an adapter in apps/cli/src/dialect.ts. Its generic
+workflow explicitly calls the chosen adapter for model conversion, core for diff
+and logical planning, and the adapter for lowering/rendering. File I/O, source
+excerpts, adapter selection and process output remain CLI concerns. Conversion
+validation can use core's model validator without taking over comparison.
+
+The CLI diff command now outputs the shared core report instead of a SQLite AST
+projection. Tests replace the SQLite adapter with a fixture whose AST, plan and
+case rules differ and exercise the same workflow. Compile-only tests guard the
+absence of the removed dialect orchestration exports. This establishes the
+swap boundary without adding runtime plugin discovery or another SQL parser.

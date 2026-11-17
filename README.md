@@ -97,14 +97,15 @@ into a dialect.
 
 ```ts
 import { diffDatabases, planDatabaseMigration } from "@uncutsql/core";
+import { dialect } from "@uncutsql/sqlite";
 
-const beforeDatabase = yield * Sqlite.toDatabaseSchema(beforeAst);
-const afterDatabase = yield * Sqlite.toDatabaseSchema(afterAst);
+const beforeDatabase = yield * dialect.toDatabaseSchema(beforeAst, "before");
+const afterDatabase = yield * dialect.toDatabaseSchema(afterAst, "after");
 const diff = yield * diffDatabases(beforeDatabase, afterDatabase);
 const logicalMigration = planDatabaseMigration(diff);
 // Generic intent; SQLite decides whether an AlterTable needs a rebuild.
-const sqlitePlan = yield * Sqlite.planMigrationFromDatabase(beforeDatabase, afterDatabase);
-const migrationSql = yield * Sqlite.encodeMigration(sqlitePlan);
+const sqlitePlan = yield * dialect.lowerMigration(logicalMigration, beforeDatabase, afterDatabase);
+const migrationSql = yield * dialect.encodeMigration(sqlitePlan);
 ```
 
 Database models are serializable; migration planning also works after JSON
@@ -112,8 +113,13 @@ restoration, without the original parser AST. SQLite's `fromDatabaseSchema`
 validates its supported model values before producing ASTs. It rejects unknown
 vendor options, structured types it cannot render, and unsupported constraints.
 This boundary does not promise that SQLite can render another dialect's features.
-The existing `Sqlite.diffSchemas` and `planMigration` AST APIs remain conveniences
-that delegate to the shared engine and preserve their SQLite report/plan shapes.
+The dialect does not export diff or logical-planning functions. Users and the CLI
+compose core with a `Dialect<Ast, PhysicalPlan, Error, Services>` adapter, which
+exposes parse/format, model conversion, procedure lowering and SQL rendering.
+The CLI selects its adapter in `apps/cli/src/dialect.ts`; its generic workflow in
+`apps/cli/src/workflow.ts` imports comparison and logical planning from core.
+Swapping the adapter changes no comparison code. Core supplies the interface but
+does not discover, import or select dialect packages.
 
 ## Compare schemas
 
@@ -121,8 +127,8 @@ that delegate to the shared engine and preserve their SQLite report/plan shapes.
 pnpm cli diff examples/schema.sql examples/schema-next.sql
 ```
 
-`diff` prints a structured JSON report from the current schema to the desired
-schema. It reports added/removed tables, added/removed/changed columns, changes
+`diff` prints core's shared JSON report from the current schema to the desired
+schema, using catalog/schema/name identities and `dataType` column fields. It reports added/removed tables, added/removed/changed columns, changes
 to the relative order of shared columns, table constraints and table options.
 Definitions are included for later migration planning. Additions/removals include
 zero-based column positions. One input may be `-` for stdin. Success exits 0 even
@@ -142,16 +148,16 @@ The diff report does not generate, execute or order migration operations, valida
 database semantics, or assess whether a change can preserve existing data.
 
 ```ts
-const before = yield * Sqlite.schema.decode(beforeSql);
-const after = yield * Sqlite.schema.decode(afterSql);
-const diff = yield * Sqlite.diffSchemas(before, after);
+const before = yield * dialect.toDatabaseSchema(yield * dialect.parse(beforeSql), "before");
+const after = yield * dialect.toDatabaseSchema(yield * dialect.parse(afterSql), "after");
+const diff = yield * diffDatabases(before, after);
 // { changes: [{ _tag: "TableChanged", table, before, after, changes: [...] }] }
 ```
 
-The API returns `Effect<SchemaDiff, SchemaDiffError | EncodeError>` without service
+The core API returns `Effect<DatabaseDiff, SchemaDiffError>` without service
 requirements. SchemaDiffError contains a diagnostics array identifying the input
-side, table and (when applicable) column. Constructed ASTs are validated through
-the encoders; comparisons do not mutate inputs or access a database. Diff diagnostics use the
+side, table and (when applicable) column. Conversion errors belong to the dialect;
+comparison does not mutate inputs or access a database. Diff diagnostics use the
 shared identity shape (catalog/schema/name); SQLite places its database namespace
 in catalog.
 
@@ -200,13 +206,15 @@ The baseline must cover all table declarations involved; a live database can sti
 have drift or other semantic errors that cause execution to fail.
 
 ```ts
-const plan = yield * Sqlite.planMigration(before, after);
-// { operations: [...], warnings: [...] }
-const sql = yield * Sqlite.encodeMigration(plan);
+const procedures = planDatabaseMigration(diff);
+const plan = yield * dialect.lowerMigration(procedures, before, after);
+// SQLite plan: { operations: [...], warnings: [...] }
+const sql = yield * dialect.encodeMigration(plan);
 ```
 
-Plans retain typed CreateTable, DropTable, AddColumn and RebuildTable operations. Planning
-returns the diff's errors plus MigrationPlanError; rendering returns EncodeError.
+SQLite plans retain typed CreateTable, DropTable, AddColumn and RebuildTable operations.
+Core logical planning is pure. SQLite lowering returns SchemaDiffError, EncodeError
+or MigrationPlanError; rendering returns EncodeError.
 A future lock file can record the baseline schema and last generated migration ID,
 separately from the history of migrations actually applied to a database.
 

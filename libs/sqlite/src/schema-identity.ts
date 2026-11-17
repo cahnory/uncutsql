@@ -1,5 +1,8 @@
 import type { CreateTable } from "./create-table.ts";
-import type { TableIdentity } from "./diff.ts";
+export interface TableIdentity {
+  readonly schema: string;
+  readonly name: string;
+}
 
 // SQLite folds ASCII identifiers. Unicode lowercasing would conflate distinct names.
 export const foldIdentifier = (name: string) =>

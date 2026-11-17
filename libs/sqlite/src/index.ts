@@ -30,15 +30,7 @@ export type { GeneratedColumnConstraint } from "./codecs/column-constraint/gener
 export { tableReference, type TableReference } from "./codecs/table-reference.ts";
 
 export { schema, schemaGrammar, type Statement } from "./schema.ts";
-export { diffSchemas, SchemaDiffError } from "./diff.ts";
-export type {
-  SchemaDiff,
-  TableIdentity,
-  TableChange,
-  TableAlteration,
-  DiffDiagnostic,
-} from "./diff.ts";
-export { planMigration, encodeMigration, MigrationPlanError } from "./migration.ts";
+export { lowerMigration, encodeMigration, MigrationPlanError } from "./migration.ts";
 export type {
   MigrationPlan,
   MigrationOperation,
@@ -50,4 +42,4 @@ export type { RebuildTableOperation } from "./rebuild.ts";
 
 export { toDatabaseSchema, fromDatabaseSchema } from "./database.ts";
 
-export { planMigrationFromDatabase } from "./migration.ts";
+export { dialect } from "./dialect.ts";

@@ -3,7 +3,9 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { Effect, Result } from "effect";
 import { EncodeError } from "@uncutsql/codec";
-import { schema, diffSchemas, SchemaDiffError, type Statement } from "../src/index.ts";
+import { schema, type Statement } from "../src/index.ts";
+import { SchemaDiffError } from "@uncutsql/core";
+import { diffSchemas } from "./workflow.ts";
 
 const parse = (sql: string) => Effect.runSync(schema.decode(sql));
 const diff = (before: string, after: string) =>
@@ -24,8 +26,8 @@ test("table additions and removals carry definitions and never infer renames", (
   assert.deepEqual(
     result.changes.map((change) => [change._tag, change.table]),
     [
-      ["TableRemoved", { schema: "main", name: "old" }],
-      ["TableAdded", { schema: "main", name: "fresh" }],
+      ["TableRemoved", { catalog: "main", name: "old" }],
+      ["TableAdded", { catalog: "main", name: "fresh" }],
     ],
   );
   const added = result.changes[1]!;
@@ -65,9 +67,9 @@ test("column additions, removals and edits are directional with ordered position
   if (removed._tag === "ColumnRemoved") assert.equal(removed.position, 1);
   const edited = table.changes[1]!;
   if (edited._tag === "ColumnChanged") {
-    assert.deepEqual(edited.fields, ["typeName", "constraints"]);
-    assert.equal(edited.before.typeName, "INTEGER");
-    assert.equal(edited.after.typeName, "TEXT");
+    assert.deepEqual(edited.fields, ["dataType", "constraints"]);
+    assert.equal(edited.before.dataType, "INTEGER");
+    assert.equal(edited.after.dataType, "TEXT");
   }
   const reverse = diff("CREATE TABLE t (a TEXT)", "CREATE TABLE t (a INTEGER)").changes[0]!;
   assert.equal(reverse._tag, "TableChanged");

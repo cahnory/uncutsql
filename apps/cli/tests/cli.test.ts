@@ -27,7 +27,7 @@ test("CLI formats complete stdin atomically and validates without database execu
   assert.doesNotMatch(invalid.stderr, /at file:/);
   const checked = run(["check"], "CREATE TABLE t (a, a)");
   assert.equal(checked.status, 0, checked.stderr);
-  assert.match(checked.stdout, /Valid supported SQL syntax: 1 statement/);
+  assert.match(checked.stdout, /Valid supported SQL syntax/);
 });
 
 test("CLI reads paths relative to the caller and leaves files unchanged", () => {
@@ -62,7 +62,7 @@ test("CLI handles help, usage errors, empty input and unsupported SQL", () => {
   assert.equal(run(["format"], "; -- empty").stdout, "");
   const empty = run(["check"]);
   assert.equal(empty.status, 0);
-  assert.match(empty.stdout, /0 statement/);
+  assert.match(empty.stdout, /Valid supported SQL syntax/);
   const unsupported = run(["check"], "SELECT 1;");
   assert.equal(unsupported.status, 1);
   assert.match(unsupported.stderr, /<stdin>:1:1/);

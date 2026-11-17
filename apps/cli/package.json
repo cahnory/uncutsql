@@ -9,6 +9,8 @@
     "check:types": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@uncutsql/codec": "workspace:*",
+    "@uncutsql/core": "workspace:*",
     "@uncutsql/sqlite": "workspace:*",
     "effect": "4.1.4"
   },

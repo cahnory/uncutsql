@@ -184,6 +184,12 @@ importers:
 
   apps/cli:
     dependencies:
+      '@uncutsql/codec':
+        specifier: workspace:*
+        version: link:../../libs/codec
+      '@uncutsql/core':
+        specifier: workspace:*
+        version: link:../../libs/core
       '@uncutsql/sqlite':
         specifier: workspace:*
         version: link:../../libs/sqlite

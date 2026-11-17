@@ -13,21 +13,11 @@ import {
   sqlString,
   type RebuildTableOperation,
 } from "./rebuild.ts";
-import {
-  compareSchemas,
-  sqliteProcedures,
-  type SchemaDiffError,
-  type TableIdentity,
-} from "./diff.ts";
-import {
-  planDatabaseMigration,
-  diffDatabases,
-  type DatabaseSchema,
-  type DatabaseMigration,
-} from "@uncutsql/core";
+import { resolveProcedures } from "./procedures.ts";
+import type { SchemaDiffError, DatabaseSchema, DatabaseMigration } from "@uncutsql/core";
+import type { TableIdentity } from "./schema-identity.ts";
 import { fromDatabaseSchema } from "./database.ts";
 import { foldIdentifier, tableIdentity, tableKey } from "./schema-identity.ts";
-import type { Statement } from "./schema.ts";
 import type { Expression } from "./codecs/expression.ts";
 
 export type MigrationOperation =
@@ -123,31 +113,8 @@ const unsupportedColumn = (column: ColumnDefinition): string | undefined => {
   return undefined;
 };
 
-/** Compatibility entry point: native AST -> shared models -> core procedures -> SQLite operations. */
-export const planMigration = (
-  before: readonly Statement[],
-  after: readonly Statement[],
-): Effect.Effect<MigrationPlan, SchemaDiffError | EncodeError | MigrationPlanError> =>
-  Effect.gen(function* () {
-    const comparison = yield* compareSchemas(before, after);
-    return yield* lowerMigration(
-      planDatabaseMigration(comparison.diff),
-      comparison.before,
-      comparison.after,
-    );
-  });
-
-/** Plan directly from shared models, without requiring the original parser AST. */
-export const planMigrationFromDatabase = (
-  before: DatabaseSchema,
-  after: DatabaseSchema,
-): Effect.Effect<MigrationPlan, SchemaDiffError | EncodeError | MigrationPlanError> =>
-  Effect.gen(function* () {
-    const diff = yield* diffDatabases(before, after);
-    return yield* lowerMigration(planDatabaseMigration(diff), before, after);
-  });
-
-const lowerMigration = (
+/** Lower caller-supplied logical procedures; comparison and logical planning belong to the caller. */
+export const lowerMigration = (
   procedures: DatabaseMigration,
   previous: DatabaseSchema,
   next: DatabaseSchema,
@@ -155,9 +122,9 @@ const lowerMigration = (
   Effect.gen(function* () {
     const before = yield* fromDatabaseSchema(previous);
     const after = yield* fromDatabaseSchema(next);
-    const diff = sqliteProcedures(procedures, before, after);
+    const changes = yield* resolveProcedures(procedures, before, after);
     const diagnostics: MigrationDiagnostic[] = [];
-    const drops = diff.changes.filter((change) => change._tag === "TableRemoved");
+    const drops = changes.filter((change) => change._tag === "DropTable");
     const dropped = new Set(drops.map((change) => tableKey(change.table)));
     for (const table of after) {
       if (references(table).some((reference) => dropped.has(tableKey(reference))))
@@ -205,8 +172,8 @@ const lowerMigration = (
         message: `Dropping table ${tableKey(change!.table)} removes all its data.`,
       });
     }
-    for (const change of diff.changes) {
-      if (change._tag === "TableAdded") {
+    for (const change of changes) {
+      if (change._tag === "CreateTable") {
         // Make placement explicit; never conceal baseline drift with IF NOT EXISTS.
         operations.push({
           _tag: "CreateTable",
@@ -217,7 +184,7 @@ const lowerMigration = (
             ifNotExists: false,
           },
         });
-      } else if (change._tag === "TableChanged") {
+      } else if (change._tag === "AlterTable") {
         const rebuild =
           change.changes.some((item) => item._tag !== "ColumnAdded") ||
           change.before.columns.some(

@@ -1,12 +1,11 @@
+import { diffDatabases, SchemaDiffError } from "@uncutsql/core";
 import { Effect } from "effect";
 import { type Value, EncodeError, ParseError } from "@uncutsql/codec";
 import {
   createTable,
-  diffSchemas,
-  planMigration,
+  lowerMigration,
   encodeMigration,
   MigrationPlanError,
-  SchemaDiffError,
   literalValue,
   expression,
   sqlExpression,
@@ -38,18 +37,24 @@ expression.encode({ _tag: "NumericLiteral", value: 42 });
 // @ts-expect-error Only supported SQLite operators can be constructed.
 expression.encode({ _tag: "UnaryExpression", operator: "!", operand: { _tag: "NullLiteral" } });
 
-type _DiffRequirements = Assert<Equal<Effect.Services<ReturnType<typeof diffSchemas>>, never>>;
-type _DiffErrors = Assert<
-  Equal<Effect.Error<ReturnType<typeof diffSchemas>>, SchemaDiffError | EncodeError>
->;
+type _DiffRequirements = Assert<Equal<Effect.Services<ReturnType<typeof diffDatabases>>, never>>;
+type _DiffErrors = Assert<Equal<Effect.Error<ReturnType<typeof diffDatabases>>, SchemaDiffError>>;
 
-type _PlanRequirements = Assert<Equal<Effect.Services<ReturnType<typeof planMigration>>, never>>;
+type _PlanRequirements = Assert<Equal<Effect.Services<ReturnType<typeof lowerMigration>>, never>>;
 type _PlanErrors = Assert<
   Equal<
-    Effect.Error<ReturnType<typeof planMigration>>,
+    Effect.Error<ReturnType<typeof lowerMigration>>,
     SchemaDiffError | EncodeError | MigrationPlanError
   >
 >;
 type _MigrationEncodeErrors = Assert<
   Equal<Effect.Error<ReturnType<typeof encodeMigration>>, EncodeError>
 >;
+
+// @ts-expect-error Diff orchestration is owned by the consumer, not exported by the dialect.
+import { diffSchemas } from "../src/index.ts";
+// @ts-expect-error Logical planning is owned by core, not exported by the dialect.
+import { planMigration } from "../src/index.ts";
+
+void diffSchemas;
+void planMigration;

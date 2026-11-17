@@ -29,3 +29,10 @@ indexes and views remain future work; the engine is independent of SQLite today.
 pnpm --filter @uncutsql/core check
 pnpm --filter @uncutsql/core build
 ```
+
+`Dialect<Ast, PhysicalPlan, E, R>` is the capability contract for interchangeable
+adapters: parse/format SQL, convert ASTs to the shared model, lower logical
+procedures and render a physical plan. Users own the composition. Core never
+selects or imports a dialect, and dialect packages must not run the core diff or
+logical planner on behalf of callers. The CLI demonstrates the wiring and tests
+its workflow with a separate fixture adapter that has a different AST and plan.

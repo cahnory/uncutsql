@@ -1,18 +1,15 @@
 import { readFile } from "node:fs/promises";
 import { Data, Effect, Result } from "effect";
-import {
-  schema,
-  diffSchemas,
-  SchemaDiffError,
-  planMigration,
-  encodeMigration,
-} from "@uncutsql/sqlite";
+import { SchemaDiffError } from "@uncutsql/core";
+import { ParseError } from "@uncutsql/codec";
+import { dialect } from "./dialect.ts";
+import { compareSchemas, renderMigration } from "./workflow.ts";
 
 const help = `Usage: pnpm cli <check|format> [file|-]
        pnpm cli <diff|migration> <before-file|-> <after-file|->
 
 Read a SQL file, or stdin when file is omitted or '-'.
-  check   Validate supported CREATE TABLE syntax (no database execution).
+  check   Validate syntax supported by the selected dialect (no execution).
   format  Print canonical SQL to stdout; comments and formatting are discarded.
   diff    Print a structural schema diff as JSON (before -> after).
           At most one input may be stdin. Changes still exit successfully.
@@ -41,8 +38,10 @@ const readSchema = (filename: string) =>
           message: `${label}: ${cause instanceof Error ? cause.message : String(cause)}`,
         }),
     });
-    return yield* schema.decode(source).pipe(
+    return yield* dialect.parse(source).pipe(
       Effect.mapError((error) => {
+        if (!(error instanceof ParseError))
+          return new InputError({ message: `${label}: ${error.message}` });
         const line = source.split(/\r\n|\r|\n/)[error.line - 1] ?? "";
         const prefix = line.slice(0, error.column - 1).replace(/[^\t]/g, " ");
         return new InputError({
@@ -72,12 +71,7 @@ const program = Effect.gen(function* () {
     }
     const before = yield* readSchema(filename);
     const after = yield* readSchema(target);
-    if (command === "migration") {
-      const plan = yield* planMigration(before, after);
-      const sql = yield* encodeMigration(plan);
-      return sql.length ? `${sql}\n` : "";
-    }
-    const diff = yield* diffSchemas(before, after).pipe(
+    const comparison = yield* compareSchemas(dialect, before, after).pipe(
       Effect.mapError(
         (error) =>
           new InputError({
@@ -90,6 +84,11 @@ const program = Effect.gen(function* () {
           }),
       ),
     );
+    if (command === "migration") {
+      const sql = yield* renderMigration(dialect, comparison);
+      return sql.length ? `${sql}\n` : "";
+    }
+    const diff = comparison.diff;
     return `${JSON.stringify(diff, null, 2)}\n`;
   }
   if ((command !== "check" && command !== "format") || args.length > 2 || !validPath(filename)) {
@@ -98,9 +97,8 @@ const program = Effect.gen(function* () {
     );
   }
   const statements = yield* readSchema(filename);
-  if (command === "check")
-    return `Valid supported SQL syntax: ${statements.length} statement(s).\n`;
-  const sql = yield* schema.encode(statements);
+  if (command === "check") return "Valid supported SQL syntax.\n";
+  const sql = yield* dialect.format(statements);
   return sql.length === 0 ? "" : `${sql}\n`;
 });
 
