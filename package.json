@@ -1,15 +1,35 @@
 {
-  "name": "uncutsql",
+  "name": "uncutsql-workspace",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
-  "packageManager": "pnpm@12.4.2",
-  "engines": { "node": ">=24.11.0" },
-  "scripts": {
-    "check": "tsc --noEmit",
-    "test": "node --test tests/*.test.ts",
-    "demo": "node examples/create-table.ts"
+  "workspaces": {
+    "packages": [
+      "libs/*",
+      "apps/*"
+    ]
   },
-  "dependencies": { "effect": "4.1.4" },
-  "devDependencies": { "@types/node": "^24.10.1", "typescript": "~5.9.3" }
+  "type": "module",
+  "scripts": {
+    "build": "pnpm --filter './libs/**' -r build",
+    "check": "concurrently --names format,lint,test,types --group \"pnpm check:format\" \"pnpm check:lint\" \"pnpm check:test\" \"pnpm check:types\"",
+    "check:format": "oxfmt --check",
+    "check:lint": "oxlint --deny-warnings",
+    "check:test": "pnpm --reporter=append-only -r --no-bail --aggregate-output run check:test",
+    "check:types": "tsc --noEmit && pnpm --reporter=append-only -r --no-bail --aggregate-output run check:types",
+    "test": "pnpm check:test",
+    "demo": "pnpm --filter @uncutsql/demo dev",
+    "fix:format": "oxfmt",
+    "fix:lint": "oxlint --fix"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "concurrently": "^10.0.6",
+    "oxfmt": "^0.72.0",
+    "oxlint": "^1.87.0",
+    "typescript": "~5.9.3"
+  },
+  "engines": {
+    "node": ">=24.11.0"
+  },
+  "packageManager": "pnpm@12.4.2"
 }

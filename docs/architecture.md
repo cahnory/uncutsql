@@ -44,19 +44,19 @@ JSON. A future Effect Schema adapter can perform that validation.
 
 ## Composition contracts
 
-| Combinator | Decode | Encode |
-| --- | --- | --- |
-| `literal` | Match exact text | Check the literal value and print it |
-| `tuple` / `struct` | Parse members sequentially | Print the same members in order |
-| `transform` | Apply the forward mapping | Apply the supplied inverse |
-| `transformEffect` | Effectful forward mapping | Effectful inverse mapping |
-| `taggedUnion` | Try members until one matches | Select the member using `_tag` |
-| `alternatives` | Try equivalent spellings | Use the first, canonical spelling |
-| `optional` | Recover an uncommitted mismatch | Omit `undefined` |
-| `repeat` | Parse items, optionally with syntax separators | Print items and separators |
-| `prefixed` / `followedBy` | Parse fixed syntax and commit the remainder | Print fixed syntax around the value |
-| `located` | Wrap child spans in a named source node | Forward the semantic value |
-| `observe` | Add a span and a success debug event | Add a span and a success debug event |
+| Combinator                | Decode                                         | Encode                               |
+| ------------------------- | ---------------------------------------------- | ------------------------------------ |
+| `literal`                 | Match exact text                               | Check the literal value and print it |
+| `tuple` / `struct`        | Parse members sequentially                     | Print the same members in order      |
+| `transform`               | Apply the forward mapping                      | Apply the supplied inverse           |
+| `transformEffect`         | Effectful forward mapping                      | Effectful inverse mapping            |
+| `taggedUnion`             | Try members until one matches                  | Select the member using `_tag`       |
+| `alternatives`            | Try equivalent spellings                       | Use the first, canonical spelling    |
+| `optional`                | Recover an uncommitted mismatch                | Omit `undefined`                     |
+| `repeat`                  | Parse items, optionally with syntax separators | Print items and separators           |
+| `prefixed` / `followedBy` | Parse fixed syntax and commit the remainder    | Print fixed syntax around the value  |
+| `located`                 | Wrap child spans in a named source node        | Forward the semantic value           |
+| `observe`                 | Add a span and a success debug event           | Add a span and a success debug event |
 
 `alternatives` is for branches with the same semantic domain, such as `TEMP` and
 `TEMPORARY`, or identifier quote styles. It does not try encoders until one works.
@@ -251,3 +251,17 @@ References: [Effect transformations](https://effect.website/docs/v4/schema/trans
 [SQLite comments](https://www.sqlite.org/lang_comment.html),
 [SQLite expression precedence](https://www.sqlite.org/lang_expr.html),
 [SQLite DEFAULT and CHECK clauses](https://www.sqlite.org/lang_createtable.html).
+
+## Workspace boundaries
+
+The workspace separates reusable libraries in `libs/*`
+from executable consumers in `apps/*`. `@uncutsql/codec` has no SQLite dependency;
+`@uncutsql/sqlite` imports the codec through its package export. The demo imports
+both packages rather than reaching into sibling source trees. All packages retain
+Effect 4.1.4 and the existing TypeScript strictness settings.
+
+Tests and compile-only inference checks belong to their library. The root runs
+recursive package checks and shares the compact Node test reporter, formatting,
+lint and TypeScript configuration. Library builds use tsdown with external
+dependencies, source exports for workspace development, and ESM/CommonJS exports
+for distribution. No release workflow is enabled while the packages are private.

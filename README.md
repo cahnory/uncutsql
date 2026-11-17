@@ -14,19 +14,38 @@ pnpm install
 pnpm check
 pnpm test
 pnpm demo
+pnpm build
 ```
 
-`check` includes compile-only inference tests. Runtime tests cover both codec
+`check` runs formatting, lint, package tests and TypeScript checks, including
+compile-only inference tests. Runtime tests cover both codec
 directions, failure semantics, source locations, concurrent execution, service
 Layers and custom logging. Selected SQL fixtures were copied unchanged from the
 previous implementation; tests also compare their schemas with Node's built-in
 SQLite. Node may print an experimental SQLite warning when running those tests.
 
+## Workspace
+
+- `libs/codec` — `@uncutsql/codec`, the generic Effect codec library.
+- `libs/sqlite` — `@uncutsql/sqlite`, depending on the codec via `workspace:*`.
+- `apps/demo` — `@uncutsql/demo`, an executable consumer of both libraries.
+
+Each library owns its tests; SQLite fixtures stay beside its tests. Shared
+TypeScript settings live in `tsconfig.base.json` and `tsconfig.node.json`.
+Workspace exports resolve to TypeScript source so tests and the demo work without
+building first. `pnpm build` builds libraries in dependency order with tsdown,
+producing ESM, CommonJS and declarations in each library's `dist` directory.
+Packages remain private; build configuration includes distribution export maps.
+
+Use `pnpm --filter @uncutsql/sqlite check` to check one library,
+`pnpm check:types` for workspace type checks, and `pnpm fix:format` to format.
+The root `pnpm test` alias still runs all runtime tests.
+
 ## Parse and serialize
 
 ```ts
 import { Effect } from "effect";
-import { Sqlite } from "./src/index.ts";
+import * as Sqlite from "@uncutsql/sqlite";
 
 const program = Effect.gen(function* () {
   const ast = yield* Sqlite.createTable.decode(`
@@ -66,19 +85,19 @@ column numbers, expectations and commitment status.
 
 ```ts
 import { Effect, Logger, References } from "effect";
-import { Codec, Sqlite } from "./src/index.ts";
-import { trivia } from "./src/sqlite/tokens.ts";
+import * as Codec from "@uncutsql/codec";
+import * as Sqlite from "@uncutsql/sqlite";
+import { trivia } from "@uncutsql/sqlite/tokens";
 
-const sql = Codec.document(
-  Codec.observe("sqlite.createTable", Sqlite.createTableGrammar),
-  trivia,
-);
+const sql = Codec.document(Codec.observe("sqlite.createTable", Sqlite.createTableGrammar), trivia);
 
-const program = sql.decode("CREATE TABLE t (id INTEGER)").pipe(
-  Effect.annotateLogs({ filename: "schema.sql" }),
-  Effect.provideService(References.MinimumLogLevel, "Debug"),
-  Effect.provide(Logger.layer([Logger.consoleJson])),
-);
+const program = sql
+  .decode("CREATE TABLE t (id INTEGER)")
+  .pipe(
+    Effect.annotateLogs({ filename: "schema.sql" }),
+    Effect.provideService(References.MinimumLogLevel, "Debug"),
+    Effect.provide(Logger.layer([Logger.consoleJson])),
+  );
 
 await Effect.runPromise(program);
 ```
@@ -91,8 +110,8 @@ compose `Effect.tap`, `Effect.tapError`, and `Effect.log` directly.
 ## Expressions
 
 ```ts
-const ast = yield* Sqlite.sqlExpression.decode("a - (b - c)");
-const sql = yield* Sqlite.sqlExpression.encode(ast);
+const ast = yield * Sqlite.sqlExpression.decode("a - (b - c)");
+const sql = yield * Sqlite.sqlExpression.encode(ast);
 // "a" - ("b" - "c")
 ```
 
@@ -154,25 +173,25 @@ conflicting constraints and contextual name resolution remain SQLite's responsib
 
 ## Code layout
 
-| Location | Responsibility |
-| --- | --- |
-| `src/codec` | Cursor, errors, bidirectional combinators, source maps and observability |
-| `src/sqlite/lexer` | Character classes, keyword set and quoted-text scanner |
-| `src/sqlite/operators` | Trivia, lexemes, keywords, punctuation and grammar helpers |
-| `src/sqlite/codecs/*-literal.ts` | Separate codecs for each literal kind |
-| `src/sqlite/codecs/expression` | Operator precedence, expression variants and AST types |
-| `src/sqlite/codecs/expression.ts` | Recursive precedence-climbing grammar and encoder dispatch |
-| `src/sqlite/codecs/column-constraint` | Separate codec for each column constraint |
-| `src/sqlite/codecs/table-constraint` | Separate codecs for table keys, checks and foreign keys |
-| `src/sqlite/codecs/foreign-key` | Shared reference actions and deferrability rules |
-| `src/sqlite/codecs/type-name.ts` / `type-parameter.ts` | Validated type declarations and numeric dimensions |
-| `src/sqlite/codecs/table-options.ts` | Ordered STRICT / WITHOUT ROWID options |
-| `src/sqlite/codecs/table-reference.ts` | Optional schema qualifier and table name |
-| `src/sqlite/codecs/table-definition.ts` | Column list followed by ordered table constraints |
-| `src/sqlite/codecs/create-table-statement.ts` | Table grammar composed from its definition |
-| `src/sqlite/index.ts` | Public API; the original `create-table.ts` and `tokens.ts` imports still work |
-| `tests` | Runtime, SQLite compatibility, and compile-only type checks |
-| `examples/create-table.ts` | Executable example with JSON logging |
+| Location                                                    | Responsibility                                                           |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `libs/codec/src`                                            | Cursor, errors, bidirectional combinators, source maps and observability |
+| `libs/sqlite/src/lexer`                                     | Character classes, keyword set and quoted-text scanner                   |
+| `libs/sqlite/src/operators`                                 | Trivia, lexemes, keywords, punctuation and grammar helpers               |
+| `libs/sqlite/src/codecs/*-literal.ts`                       | Separate codecs for each literal kind                                    |
+| `libs/sqlite/src/codecs/expression`                         | Operator precedence, expression variants and AST types                   |
+| `libs/sqlite/src/codecs/expression.ts`                      | Recursive precedence-climbing grammar and encoder dispatch               |
+| `libs/sqlite/src/codecs/column-constraint`                  | Separate codec for each column constraint                                |
+| `libs/sqlite/src/codecs/table-constraint`                   | Separate codecs for table keys, checks and foreign keys                  |
+| `libs/sqlite/src/codecs/foreign-key`                        | Shared reference actions and deferrability rules                         |
+| `libs/sqlite/src/codecs/type-name.ts` / `type-parameter.ts` | Validated type declarations and numeric dimensions                       |
+| `libs/sqlite/src/codecs/table-options.ts`                   | Ordered STRICT / WITHOUT ROWID options                                   |
+| `libs/sqlite/src/codecs/table-reference.ts`                 | Optional schema qualifier and table name                                 |
+| `libs/sqlite/src/codecs/table-definition.ts`                | Column list followed by ordered table constraints                        |
+| `libs/sqlite/src/codecs/create-table-statement.ts`          | Table grammar composed from its definition                               |
+| `libs/sqlite/src/index.ts`                                  | Public API with `@uncutsql/sqlite/create-table` and `/tokens` subpaths   |
+| `libs/*/tests`                                              | Runtime, SQLite compatibility, and compile-only type checks              |
+| `apps/demo/src/index.ts`                                    | Executable example with JSON logging                                     |
 
 See [architecture notes](docs/architecture.md) for combinator contracts, the
 relationship to the earlier experiments, and the next implementation steps.

@@ -1,15 +1,5 @@
 {
-  "compilerOptions": {
-    "target": "ES2023",
-    "module": "NodeNext",
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-    "verbatimModuleSyntax": true,
-    "allowImportingTsExtensions": true,
-    "noEmit": true,
-    "skipLibCheck": true,
-    "types": ["node"]
-  },
-  "include": ["src", "tests", "examples"],
+  "display": "Workspace",
+  "extends": "./tsconfig.node.json",
+  "include": ["scripts/**/*.ts"]
 }

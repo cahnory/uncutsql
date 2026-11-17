@@ -1,0 +1,7 @@
+{
+  "display": "Node",
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "ignorePatterns": ["**/dist/**", "pnpm-lock.yaml"],
+  "trailingComma": "all"
+}

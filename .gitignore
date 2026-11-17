@@ -1,2 +1,6 @@
 node_modules/
+.pnpm-store/
+libs/*/dist/
+apps/*/dist/
 *.tsbuildinfo
+.DS_Store
