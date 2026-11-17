@@ -580,3 +580,17 @@ native values/types, chained paths, negative indexes, JSONB input, JSON function
 composition and rebuild migrations containing extraction expressions.
 
 Reference: [SQLite JSON extraction](https://www.sqlite.org/json1.html#the_and_operators).
+
+## CAST expressions
+
+`CastExpression` is a primary expression with an operand and retained `typeName`.
+Its separate codec follows the previous implementation's CAST/parentheses/AS/type
+production and reuses the bidirectional type-declaration codec. This preserves
+quoted words, numeric dimensions and significant internal comments in custom types.
+The parser commits after CAST; a quoted function named "CAST" remains a function.
+
+DEFAULT traversal checks the operand for column references and always groups a
+CAST default when printing. Native tests cover conversion values and types,
+large integers, nested expressions, malformed syntax, source spans, constructed
+type validation and rebuild migrations with CAST-based CHECK/generated columns.
+Conversion and type-affinity behavior remain SQLite's responsibility.

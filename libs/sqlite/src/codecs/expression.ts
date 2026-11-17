@@ -1,3 +1,4 @@
+import { castExpression } from "./expression/cast-expression.ts";
 import {
   collatePrecedence,
   collateOperator,
@@ -52,6 +53,7 @@ const readPrimary = (cursor: Cursor): Effect.Effect<Read<Expression>, ParseError
     const choices: readonly Pick<Codec<Expression>, "decode">[] = [
       parenthesizedExpression(at(0)),
       unaryExpression(at),
+      castExpression(at(0)),
       functionCall(at(0)),
       columnReference,
       literalValue,
@@ -88,6 +90,8 @@ const encodeExpression = (value: Expression): Effect.Effect<string, EncodeError>
       return unaryExpression(at).encode(value);
     case "BinaryExpression":
       return encodeBinaryExpression(value, at);
+    case "CastExpression":
+      return castExpression(at(0)).encode(value);
     case "FunctionCall":
       return functionCall(at(0)).encode(value);
     case "ColumnReference":
@@ -171,5 +175,6 @@ export type {
   BinaryExpression,
   NullTestExpression,
   CollateExpression,
+  CastExpression,
 } from "./expression/types.ts";
 export type { BinaryOperator, UnaryOperator } from "./expression/operators.ts";

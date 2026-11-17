@@ -64,7 +64,8 @@ recognizing a keyword does not imply support for the construct it introduces.
       Path evaluation, JSON validity and function/extension availability belong to SQLite.
 - [ ] LIKE / NOT LIKE with ESCAPE.
 - [ ] GLOB, REGEXP and MATCH, including their NOT forms.
-- [ ] CAST expressions.
+- [x] CAST expressions, including nested operands and custom/parameterized types.
+      Type spelling is preserved; SQLite performs the conversion.
 - [ ] CASE expressions, both simple and searched forms.
 - [ ] RAISE expressions in trigger contexts.
 - [ ] Aggregate syntax: `*`, DISTINCT and argument ORDER BY.
@@ -146,7 +147,7 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 
 Suggested order for further work:
 
-1. Finish schema-useful expressions: CAST, CASE and pattern matching with ESCAPE.
+1. Finish schema-useful expressions: CASE and pattern matching with ESCAPE.
 2. Add standalone indexes and their model/migration support.
 3. Add views/triggers and safe preservation during table rebuilds.
 4. Expand query grammar and the expression forms that depend on it.

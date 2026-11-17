@@ -464,6 +464,7 @@ Signs are unary-expression nodes. Blob values contain hexadecimal byte pairs.
 - `BETWEEN` and `NOT BETWEEN` range expressions, including nested bounds.
 - `IN` and `NOT IN` with parenthesized expression lists, including empty lists.
   Subquery, table-name and table-function targets are not implemented.
+- `CAST(expression AS type)` with nested expressions and validated type declarations.
 - Expression-level `COLLATE name`, including nested clauses and quoted/custom
   collation names. SQLite resolves the actual collation at execution time.
 - Defaults containing literals, signed numbers or parenthesized constant expressions;
@@ -479,7 +480,7 @@ contract for supported, valid ASTs is `decode(encode(ast))` equal to `ast`.
 This grammar deliberately requires quoting reserved words used as identifiers.
 The built-in `temp` schema is accepted unquoted before a dot; other contextual
 keyword fallbacks are not implemented. Unsupported syntax
-fails: bind parameters, CASE, CAST, LIKE/GLOB/REGEXP,
+fails: bind parameters, CASE, LIKE/GLOB/REGEXP,
 subqueries are not yet
 implemented. Neither are `AS SELECT` or statement kinds other than CREATE TABLE. Database semantics such as duplicate columns,
 conflicting constraints and contextual name resolution remain SQLite's responsibility.
