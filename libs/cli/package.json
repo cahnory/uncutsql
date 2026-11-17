@@ -1,0 +1,46 @@
+{
+  "name": "@uncutsql/cli",
+  "version": "0.0.0",
+  "private": true,
+  "bin": {
+    "uncutsql": "./src/index.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./src/api.ts",
+    "./bin": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "bin": {
+      "uncutsql": "./dist/index.mjs"
+    },
+    "exports": {
+      ".": "./dist/api.mjs",
+      "./bin": "./dist/index.mjs",
+      "./package.json": "./package.json"
+    }
+  },
+  "scripts": {
+    "dev": "node src/index.ts",
+    "check:test": "node --test --test-reporter=../../scripts/test-reporter.ts tests/*.test.ts",
+    "check:types": "tsc --noEmit -p tsconfig.json",
+    "build": "tsdown",
+    "check": "pnpm check:types && pnpm check:test"
+  },
+  "dependencies": {
+    "@uncutsql/codec": "workspace:*",
+    "@uncutsql/core": "workspace:*",
+    "effect": "4.1.4",
+    "import-meta-resolve": "^4.2.0"
+  },
+  "devDependencies": {
+    "tsdown": "^0.23.2"
+  },
+  "engines": {
+    "node": ">=24.11.0"
+  }
+}

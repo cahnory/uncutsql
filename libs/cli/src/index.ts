@@ -1,8 +1,11 @@
+#!/usr/bin/env node
 import { readFile } from "node:fs/promises";
 import { Data, Effect, Result } from "effect";
 import { SchemaDiffError } from "@uncutsql/core";
 import { ParseError } from "@uncutsql/codec";
-import { dialect } from "./dialect.ts";
+import type { Dialect } from "@uncutsql/core";
+import { parseOptions, resolveConfig, UsageError } from "./config.ts";
+import { loadDialect, loadDriver } from "./plugins.ts";
 import { applyGenerated } from "./apply.ts";
 import { migrationFilename } from "./lock.ts";
 import { generateMigration } from "./generate.ts";
@@ -12,6 +15,9 @@ const help = `Usage: pnpm cli <check|format> [file|-]
        pnpm cli <diff|migration> <before-file|-> <after-file|->
        pnpm cli generate <schema-file|-> [output-dir]
        pnpm cli apply <database-target> [output-dir]
+
+Options: --config <file>, --dialect <module>, --driver <module>
+Flags override configuration. Drivers are loaded only for apply.
 
 Read a SQL file, or stdin when file is omitted or '-'.
   check   Validate syntax supported by the selected dialect (no execution).
@@ -26,10 +32,9 @@ Statements require separating semicolons; the final semicolon is optional.
 Input SQL files are never modified. Unsupported syntax is an error.
 `;
 
-class UsageError extends Data.TaggedError("UsageError")<{ readonly message: string }> {}
 class InputError extends Data.TaggedError("InputError")<{ readonly message: string }> {}
 
-const readSchema = (filename: string) =>
+const readSchemaWith = (dialect: Dialect<unknown, unknown>, filename: string) =>
   Effect.gen(function* () {
     const label = filename === "-" ? "<stdin>" : filename;
     const source = yield* Effect.tryPromise({
@@ -58,11 +63,19 @@ const readSchema = (filename: string) =>
     );
   });
 
-const args = process.argv.slice(2);
 const validPath = (value: string) => !value.startsWith("-") || value === "-";
 const program = Effect.gen(function* () {
+  const { args, options } = yield* parseOptions(process.argv.slice(2));
   if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) return help;
   const [command, filename = "-"] = args;
+  if (!["check", "format", "diff", "migration", "generate", "apply"].includes(command ?? ""))
+    return yield* Effect.fail(
+      new UsageError({ message: "Expected check, format, diff, migration, generate or apply." }),
+    );
+  const selected = yield* resolveConfig(options, process.cwd());
+  // Apply only needs the driver's dialect ID; it does not load a SQL parser.
+  const dialect = command === "apply" ? undefined : yield* loadDialect(selected.dialect);
+  const readSchema = (path: string) => readSchemaWith(dialect!, path);
   if (command === "apply") {
     const directory = args[2] ?? "migrations";
     if (
@@ -78,11 +91,7 @@ const program = Effect.gen(function* () {
         }),
       );
     }
-    const { executor } = yield* Effect.promise(() => import("./executor.ts"));
-    if (executor.dialect !== dialect.name)
-      return yield* Effect.fail(
-        new InputError({ message: "Selected dialect and execution driver do not match" }),
-      );
+    const executor = yield* loadDriver(selected.driver);
     const result = yield* applyGenerated(executor, filename, directory);
     return result.appliedIds.length
       ? `Applied ${result.appliedIds.map(migrationFilename).join(", ")}.\n`
@@ -98,7 +107,7 @@ const program = Effect.gen(function* () {
       );
     }
     const ast = yield* readSchema(filename);
-    const result = yield* generateMigration(dialect, ast, directory);
+    const result = yield* generateMigration(dialect!, ast, directory);
     return result.migrationPath
       ? `Generated ${result.migrationPath}\nUpdated ${result.lockPath}\n`
       : "No schema changes.\n";
@@ -118,7 +127,7 @@ const program = Effect.gen(function* () {
     }
     const before = yield* readSchema(filename);
     const after = yield* readSchema(target);
-    const comparison = yield* compareSchemas(dialect, before, after).pipe(
+    const comparison = yield* compareSchemas(dialect!, before, after).pipe(
       Effect.mapError(
         (error) =>
           new InputError({
@@ -132,7 +141,7 @@ const program = Effect.gen(function* () {
       ),
     );
     if (command === "migration") {
-      const sql = yield* renderMigration(dialect, comparison);
+      const sql = yield* renderMigration(dialect!, comparison);
       return sql.length ? `${sql}\n` : "";
     }
     const diff = comparison.diff;
@@ -147,7 +156,7 @@ const program = Effect.gen(function* () {
   }
   const statements = yield* readSchema(filename);
   if (command === "check") return "Valid supported SQL syntax.\n";
-  const sql = yield* dialect.format(statements);
+  const sql = yield* dialect!.format(statements);
   return sql.length === 0 ? "" : `${sql}\n`;
 });
 

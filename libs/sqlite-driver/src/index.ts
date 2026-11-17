@@ -8,9 +8,8 @@ import {
   type ExecutionResult,
   type MigrationExecutor,
 } from "@uncutsql/core";
-import { schema } from "./schema.ts";
-import { toDatabaseSchema } from "./database.ts";
-import { executeScriptBody } from "./node/script.ts";
+import { schema, toDatabaseSchema } from "@uncutsql/sqlite";
+import { executeScriptBody } from "./script.ts";
 
 export class SqliteExecutionError extends Data.TaggedError("SqliteExecutionError")<{
   readonly message: string;

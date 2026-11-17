@@ -9,7 +9,7 @@ pnpm --filter @uncutsql/sqlite check
 pnpm --filter @uncutsql/sqlite build
 ```
 
-The optional `@uncutsql/sqlite/node` entry point exports an executor and
+The separate `@uncutsql/sqlite-driver` package exports an executor and
 applyMigrations for persistent main SQLite databases. It receives the complete
 ordered SQL history plus a consumer-provided schema verifier. It owns per-file
 transactions and atomic applied-history recording, and reserves

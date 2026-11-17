@@ -30,7 +30,8 @@ SQLite. Node may print an experimental SQLite warning when running those tests.
 - `libs/codec` — `@uncutsql/codec`, the generic Effect codec library.
 - `libs/core` — `@uncutsql/core`, shared database models, diff and logical migration procedures.
 - `libs/sqlite` — `@uncutsql/sqlite`, SQLite AST/model conversion and migration SQL.
-- `apps/cli` — `@uncutsql/cli`, schema syntax checking, formatting and structural diff.
+- `libs/cli` — `@uncutsql/cli`, a CLI package with an `uncutsql` executable and API.
+- `libs/sqlite-driver` — `@uncutsql/sqlite-driver`, optional native SQLite execution.
 - `apps/demo` — `@uncutsql/demo`, an executable consumer of both libraries.
 
 Each library owns its tests; SQLite fixtures stay beside its tests. Shared
@@ -46,12 +47,15 @@ The root `pnpm test` alias still runs all runtime tests.
 
 ## Schema CLI
 
-Start using the supported grammar on real schema files:
+The [demo walkthrough](apps/demo/README.md) includes schemas, plugin configuration
+and a migration sequence. `pnpm demo` runs the Effect/logging example;
+`pnpm demo:cli` runs the CLI from `apps/demo`, where it discovers that config.
+Paths in the following demo commands are relative to `apps/demo`:
 
 ```sh
-pnpm cli check examples/schema.sql
-pnpm cli format examples/schema.sql
-cat examples/schema.sql | pnpm cli format
+pnpm demo:cli check examples/schema.sql
+pnpm demo:cli format examples/schema.sql
+cat apps/demo/examples/schema.sql | pnpm demo:cli format
 pnpm cli --help
 ```
 
@@ -116,15 +120,15 @@ This boundary does not promise that SQLite can render another dialect's features
 The dialect does not export diff or logical-planning functions. Users and the CLI
 compose core with a `Dialect<Ast, PhysicalPlan, Error, Services>` adapter, which
 exposes parse/format, model conversion, procedure lowering and SQL rendering.
-The CLI selects its adapter in `apps/cli/src/dialect.ts`; its generic workflow in
-`apps/cli/src/workflow.ts` imports comparison and logical planning from core.
+The CLI loads its configured adapter through `libs/cli/src/plugins.ts`; its generic workflow in
+`libs/cli/src/workflow.ts` imports comparison and logical planning from core.
 Swapping the adapter changes no comparison code. Core supplies the interface but
 does not discover, import or select dialect packages.
 
 ## Compare schemas
 
 ```sh
-pnpm cli diff examples/schema.sql examples/schema-next.sql
+pnpm demo:cli diff examples/schema.sql examples/schema-next.sql
 ```
 
 `diff` prints core's shared JSON report from the current schema to the desired
@@ -164,7 +168,7 @@ in catalog.
 ## Generate migration SQL
 
 ```sh
-pnpm cli migration examples/schema.sql examples/schema-next.sql
+pnpm demo:cli migration examples/schema.sql examples/schema-next.sql
 ```
 
 The command prints a transaction script to stdout. It never executes SQL, changes
@@ -221,8 +225,8 @@ separately from the history of migrations actually applied to a database.
 ## Generate migration files with a lock
 
 ```sh
-pnpm cli generate examples/schema.sql
-pnpm cli generate examples/schema-expand.sql
+pnpm demo:cli generate examples/schema.sql .local/migrations
+pnpm demo:cli generate examples/schema-expand.sql .local/migrations
 # Or choose an output directory:
 pnpm cli generate schema.sql db/migrations
 ```
@@ -261,10 +265,10 @@ below.
 ## Apply generated migrations
 
 ```sh
-pnpm cli generate examples/schema.sql
-pnpm cli apply app.sqlite
-pnpm cli generate examples/schema-next.sql
-pnpm cli apply app.sqlite
+pnpm demo:cli generate examples/schema.sql .local/migrations
+pnpm demo:cli apply .local/app.sqlite .local/migrations
+pnpm demo:cli generate examples/schema-next.sql .local/migrations
+pnpm demo:cli apply .local/app.sqlite .local/migrations
 # Or read a different migration directory:
 pnpm cli apply app.sqlite db/migrations
 ```
@@ -294,10 +298,51 @@ it are limited to the emitted foreign-key settings. An initial failed attempt ca
 leave an empty database file, which the runner does not delete automatically.
 
 Execution is optional and separately swappable: `MigrationExecutor` is a core type
-contract; `apps/cli/src/executor.ts` selects the default
-`@uncutsql/sqlite/node` adapter. The regular SQLite entry point remains free of
-Node database imports. Core schema comparison and final verification are wired by
+contract; `--driver` or configuration selects an adapter such as
+`@uncutsql/sqlite-driver`. The SQLite dialect package has no driver dependency
+or production database imports. Core schema comparison and final verification are wired by
 the CLI; the driver does not import diff or logical-planning functions.
+
+## Selecting dialects and drivers
+
+The CLI depends on core contracts and codecs, never on a concrete dialect or
+driver. The SQLite dialect is driver-free; `@uncutsql/sqlite-driver` owns native
+database access and depends on the dialect for schema inspection.
+
+Install chosen plugins in the calling project and configure module specifiers:
+
+```json
+{
+  "dialect": "@uncutsql/sqlite",
+  "driver": "@uncutsql/sqlite-driver"
+}
+```
+
+Save this as `uncutsql.config.json` (or use `.uncutsqlrc.json`, a default-exported
+`uncutsql.config.{js,cjs,mjs,ts,cts,mts}`, or the `uncutsql` object in package.json).
+The package.json field takes precedence over discovered config files. An explicit
+`--config path` selects just that file. `--dialect module` and `--driver module`
+override its values. Package specifiers resolve from the config's directory;
+relative module paths resolve there too. Flag specifiers resolve from the caller's
+working directory. Absolute paths and file URLs also work.
+
+```sh
+uncutsql format schema.sql --dialect @uncutsql/sqlite
+uncutsql apply app.sqlite --driver @uncutsql/sqlite-driver
+uncutsql check schema.sql --config uncutsql.config.json
+```
+
+The demo config in `apps/demo/uncutsql.config.json` selects installed workspace
+packages by name. There is no root example configuration. The CLI itself
+has no default dialect or driver. Syntax/generation commands load only a dialect;
+`apply` loads only a driver and checks its dialect ID against the generation lock.
+Plugins export `dialect` / `executor`, or a default adapter implementing the core
+contract, with any required Effect services already provided. Loading and shape
+validation failures produce CLI diagnostics. Config files are executable when
+using JavaScript or TypeScript.
+
+The CLI is built as a package with a distribution `bin`, not as an app. Its
+integration tests live in `apps/demo`, which explicitly installs the chosen plugins.
 
 ## Parse and serialize
 
@@ -455,7 +500,7 @@ conflicting constraints and contextual name resolution remain SQLite's responsib
 | `libs/sqlite/src/codecs/create-table-statement.ts`          | Table grammar composed from its definition                               |
 | `libs/sqlite/src/index.ts`                                  | Public API with `@uncutsql/sqlite/create-table` and `/tokens` subpaths   |
 | `libs/*/tests`                                              | Runtime, SQLite compatibility, and compile-only type checks              |
-| `apps/cli/src/index.ts`                                     | CLI file/stdin boundary and diagnostics                                  |
+| `libs/cli/src/index.ts`                                     | CLI file/stdin boundary and diagnostics                                  |
 | `apps/demo/src/index.ts`                                    | Executable example with JSON logging                                     |
 
 See [architecture notes](docs/architecture.md) for combinator contracts, the

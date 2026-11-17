@@ -20,12 +20,23 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { Effect, Result } from "effect";
 import type { DatabaseSchema, Dialect } from "@uncutsql/core";
-import { generateMigration } from "../src/generate.ts";
-import { hashMigration } from "../src/lock.ts";
+import { generateMigration } from "@uncutsql/cli";
+import { hashMigration } from "@uncutsql/cli";
 
-const cli = fileURLToPath(new URL("../src/index.ts", import.meta.url));
+const cli = fileURLToPath(import.meta.resolve("@uncutsql/cli/bin"));
 const run = (cwd: string, sql: string, args = ["generate", "-"]) =>
-  spawnSync(process.execPath, [cli, ...args], { cwd, input: sql, encoding: "utf8" });
+  spawnSync(
+    process.execPath,
+    [
+      cli,
+      "--dialect",
+      import.meta.resolve("@uncutsql/sqlite"),
+      "--driver",
+      import.meta.resolve("@uncutsql/sqlite-driver"),
+      ...args,
+    ],
+    { cwd, input: sql, encoding: "utf8" },
+  );
 const createDirectory = () => mkdtempSync(join(tmpdir(), "uncutsql-generate-"));
 const lockFile = (directory: string) => join(directory, "migrations", "uncutsql.lock.json");
 const readLock = (directory: string) => JSON.parse(readFileSync(lockFile(directory), "utf8"));

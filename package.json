@@ -20,7 +20,8 @@
     "demo": "pnpm --filter @uncutsql/demo dev",
     "fix:format": "oxfmt",
     "fix:lint": "oxlint --fix",
-    "cli": "node apps/cli/src/index.ts"
+    "cli": "node libs/cli/src/index.ts",
+    "demo:cli": "pnpm --filter @uncutsql/demo cli"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

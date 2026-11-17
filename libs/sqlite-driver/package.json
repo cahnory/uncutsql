@@ -1,0 +1,42 @@
+{
+  "name": "@uncutsql/sqlite-driver",
+  "version": "0.0.0",
+  "private": true,
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.cts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "import": "./dist/index.js",
+        "require": "./dist/index.cjs"
+      },
+      "./package.json": "./package.json"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "check": "pnpm check:types && pnpm check:test",
+    "check:test": "node --test --test-reporter=../../scripts/test-reporter.ts tests/*.test.ts",
+    "check:types": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@uncutsql/core": "workspace:*",
+    "@uncutsql/sqlite": "workspace:*",
+    "effect": "4.1.4"
+  },
+  "devDependencies": {
+    "tsdown": "^0.23.2"
+  },
+  "engines": {
+    "node": ">=24.11.0"
+  }
+}

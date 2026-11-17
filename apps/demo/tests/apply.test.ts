@@ -8,14 +8,25 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { Effect } from "effect";
 import type { DatabaseSchema, MigrationExecutor } from "@uncutsql/core";
-import { applyGenerated } from "../src/apply.ts";
-import { generateMigration } from "../src/generate.ts";
+import { applyGenerated } from "@uncutsql/cli";
+import { generateMigration } from "@uncutsql/cli";
 import type { Dialect } from "@uncutsql/core";
 
-const cli = fileURLToPath(new URL("../src/index.ts", import.meta.url));
+const cli = fileURLToPath(import.meta.resolve("@uncutsql/cli/bin"));
 const directory = () => mkdtempSync(join(tmpdir(), "uncutsql-apply-"));
 const run = (cwd: string, args: string[], input = "") =>
-  spawnSync(process.execPath, [cli, ...args], { cwd, input, encoding: "utf8" });
+  spawnSync(
+    process.execPath,
+    [
+      cli,
+      "--dialect",
+      import.meta.resolve("@uncutsql/sqlite"),
+      "--driver",
+      import.meta.resolve("@uncutsql/sqlite-driver"),
+      ...args,
+    ],
+    { cwd, input, encoding: "utf8" },
+  );
 const exec = (path: string, sql: string) => {
   const database = new DatabaseSync(path);
   try {

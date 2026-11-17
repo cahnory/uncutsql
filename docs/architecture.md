@@ -297,7 +297,7 @@ range bounds, source spans and schema behavior.
 
 ## First application tooling
 
-`apps/cli` consumes the public SQLite package through `schema`, a whole-file
+`libs/cli` consumes the public SQLite package through `schema`, a whole-file
 entry point returning ordered statements. The existing single-table API retains
 its behavior. A shared table body leaves terminator handling to each entry point:
 the file parser requires a semicolon between statements and accepts an omitted
@@ -439,7 +439,7 @@ plan types and Effect error/service parameters. SQLite exports a conforming
 It does not import or export diffDatabases or planDatabaseMigration, and there
 are no diffSchemas/planMigration/planMigrationFromDatabase facade functions.
 
-The CLI composition root selects an adapter in apps/cli/src/dialect.ts. Its generic
+The CLI composition root loads a configured adapter through libs/cli/src/plugins.ts. Its generic
 workflow explicitly calls the chosen adapter for model conversion, core for diff
 and logical planning, and the adapter for lowering/rendering. File I/O, source
 excerpts, adapter selection and process output remain CLI concerns. Conversion
@@ -489,13 +489,13 @@ application history is stored separately as described below.
 ## Migration execution
 
 Core adds only MigrationSource, ExecutionResult and MigrationExecutor contracts.
-The CLI independently selects a runtime adapter in executor.ts, snapshots the
+The CLI dynamically loads the selected driver, snapshots the
 numbered files under the generation directory lock, computes their checksums,
 and supplies a core-based schema verifier. The file lock is released after loading;
 the SQLite database's writer transaction serializes actual execution. Generation
 metadata is never changed by application.
 
-The optional @uncutsql/sqlite/node entry point implements execution with Node's
+The separate @uncutsql/sqlite-driver package implements execution with Node's
 DatabaseSync. The regular syntax/model entry point does not import node:sqlite.
 This first executor supports persistent main databases only and reserves
 __uncutsql_migrations. It reads the full ordered history from ID 1, checks its DB
@@ -528,3 +528,23 @@ independent executor processes applying the same files without duplicate history
 The model/verifier boundary remains consumer-owned; no diff engine moves into the
 runtime adapter. Existing database adoption, down migrations and broader live
 schema object support are left for later work.
+
+## Plugin loading and package independence
+
+`libs/cli` is a distributable executable/library package. It depends on core,
+codec, Effect and ESM module resolution, with no concrete dialect or driver
+in either runtime or development dependencies. Its generic workflow tests use
+fixture adapters. SQLite integration tests live in the demo consumer.
+
+Config discovery carries forward the previous package.json/config-file precedence.
+The loader resolves a package, file path or file URL relative to the selecting
+project/config file, validates the exported capability, and reports load errors
+through Effect. Explicit flags override discovered selections. The AST and physical
+plan types are erased only at this plugin boundary; a single adapter produces and
+consumes its own values. Exported plugins must provide their Effect requirements.
+
+The entire native executor moved from the dialect into `libs/sqlite-driver`.
+The dependency direction is driver → dialect → codec/core. Parsing and generation
+never load a driver. Application loads the driver only, then verifies its dialect
+identifier against the stored lock before executing migrations. Existing transaction,
+locking, history and drift checks remain unchanged.

@@ -5,12 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "node src/index.ts",
-    "check:types": "tsc --noEmit -p tsconfig.json"
+    "check:types": "tsc --noEmit -p tsconfig.json",
+    "check:test": "node --test --test-reporter=../../scripts/test-reporter.ts tests/*.test.ts",
+    "cli": "uncutsql"
   },
   "dependencies": {
     "@uncutsql/codec": "workspace:*",
     "@uncutsql/sqlite": "workspace:*",
     "effect": "4.1.4"
+  },
+  "devDependencies": {
+    "@uncutsql/cli": "workspace:*",
+    "@uncutsql/core": "workspace:*",
+    "@uncutsql/sqlite-driver": "workspace:*"
   },
   "engines": {
     "node": ">=24.11.0"

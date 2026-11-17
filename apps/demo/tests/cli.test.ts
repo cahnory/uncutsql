@@ -6,13 +6,24 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
-const cli = fileURLToPath(new URL("../src/index.ts", import.meta.url));
+const cli = fileURLToPath(import.meta.resolve("@uncutsql/cli/bin"));
 const run = (args: string[], input = "", cwd?: string) =>
-  spawnSync(process.execPath, [cli, ...args], {
-    input,
-    encoding: "utf8",
-    ...(cwd === undefined ? {} : { cwd }),
-  });
+  spawnSync(
+    process.execPath,
+    [
+      cli,
+      "--dialect",
+      import.meta.resolve("@uncutsql/sqlite"),
+      "--driver",
+      import.meta.resolve("@uncutsql/sqlite-driver"),
+      ...args,
+    ],
+    {
+      input,
+      encoding: "utf8",
+      ...(cwd === undefined ? {} : { cwd }),
+    },
+  );
 
 test("CLI formats complete stdin atomically and validates without database execution", () => {
   const result = run(["format"], "create table a (x default ';'); create table b (y)");

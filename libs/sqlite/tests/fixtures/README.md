@@ -32,3 +32,7 @@ The doubled-bracket fixture remains unchanged but is expected to fail: SQLite
 ends bracket quoting at the first closing bracket. Reserved-word edge fixtures
 require quotes. The CREATE TABLE selection includes `05_schema_qualified.sql`;
 additional native tests check main, temp and attached schema placement.
+
+`rebuild/schema.sql` and `rebuild/schema-next.sql` snapshot the demo schemas for
+the table-rebuild regression test. Keeping them local makes this regression
+independent of changes to the demo layout or examples.

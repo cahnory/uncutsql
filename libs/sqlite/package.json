@@ -12,7 +12,6 @@
   "exports": {
     ".": "./src/index.ts",
     "./create-table": "./src/create-table.ts",
-    "./node": "./src/node.ts",
     "./tokens": "./src/tokens.ts",
     "./package.json": "./package.json"
   },
@@ -25,10 +24,6 @@
       "./create-table": {
         "import": "./dist/create-table.js",
         "require": "./dist/create-table.cjs"
-      },
-      "./node": {
-        "import": "./dist/node.js",
-        "require": "./dist/node.cjs"
       },
       "./tokens": {
         "import": "./dist/tokens.js",

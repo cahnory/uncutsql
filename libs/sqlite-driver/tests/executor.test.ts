@@ -14,8 +14,8 @@ import {
   type DatabaseSchema,
   type MigrationSource,
 } from "@uncutsql/core";
-import { schema, toDatabaseSchema, lowerMigration, encodeMigration } from "../src/index.ts";
-import { applyMigrations, SqliteExecutionError } from "../src/node.ts";
+import { schema, toDatabaseSchema, lowerMigration, encodeMigration } from "@uncutsql/sqlite";
+import { applyMigrations, SqliteExecutionError } from "../src/index.ts";
 
 const hash = (sql: string) => createHash("sha256").update(sql).digest("hex");
 const source = (id: number, sql: string): MigrationSource => ({ id, sql, sha256: hash(sql) });
@@ -293,7 +293,7 @@ test("independent executor processes serialize history and do not apply files tw
   const program = `
     import {Effect} from "effect";
     import {diffDatabases} from "@uncutsql/core";
-    import {applyMigrations} from ${JSON.stringify(new URL("../src/node.ts", import.meta.url).href)};
+    import {applyMigrations} from ${JSON.stringify(new URL("../src/index.ts", import.meta.url).href)};
     const input = JSON.parse(process.argv[1]);
     await Effect.runPromise(applyMigrations(input.path, input.migrations, input.desired,
       (actual, expected) => Effect.gen(function* () {

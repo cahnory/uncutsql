@@ -29,8 +29,11 @@ const rollback = (database: DatabaseSync) => {
 };
 
 test("rebuild migrates the original next-schema example and preserves incoming references", () => {
-  const before = readFileSync(new URL("../../../examples/schema.sql", import.meta.url), "utf8");
-  const after = readFileSync(new URL("../../../examples/schema-next.sql", import.meta.url), "utf8");
+  const before = readFileSync(new URL("./fixtures/rebuild/schema.sql", import.meta.url), "utf8");
+  const after = readFileSync(
+    new URL("./fixtures/rebuild/schema-next.sql", import.meta.url),
+    "utf8",
+  );
   const database = new DatabaseSync(":memory:");
   try {
     database.exec("PRAGMA foreign_keys=ON");
