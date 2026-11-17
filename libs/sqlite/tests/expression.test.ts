@@ -262,7 +262,7 @@ for (const source of [
   "1 2",
   "a.b.c.d",
   "1;",
-  "abs(1)",
+
   "a BETWEEN 1 AND 2",
   "a IN (1)",
   "a COLLATE NOCASE",
@@ -304,4 +304,35 @@ test("expression effects can be reused and parsed concurrently", async () => {
   assert.deepEqual(values, inputs.map(decode));
   const repeated = document(expression).decode("1 + 2");
   assert.deepEqual(Effect.runSync(repeated), Effect.runSync(repeated));
+});
+
+test("function calls preserve nested arguments, precedence and SQLite results", () => {
+  const database = openDatabase();
+  try {
+    for (const source of [
+      "abs(-3) + 2 * length('hello')",
+      "coalesce(NULL, abs(a - b), 0)",
+      "round(1.25, 1)",
+      "length /* comment */ (lower('ABC'))",
+      "pi()",
+      '"abs"(-2)',
+    ]) {
+      const ast = decode(source);
+      const sql = encode(ast);
+      assert.deepEqual(decode(sql), ast);
+      assert.equal(evaluate(database, sql), evaluate(database, source));
+    }
+    assert.deepEqual(decode("custom()"), { _tag: "FunctionCall", name: "custom", arguments: [] });
+    assert.equal(encode(decode("abs(-1)")), '"abs"(-1)');
+  } finally {
+    database.close();
+  }
+});
+
+test("malformed calls commit after the opening parenthesis", () => {
+  for (const sql of ["f(", "f(1,)", "f(,1)", "f(1 2)", "f(g(1)", "f(*)", "f(DISTINCT a)"]) {
+    const error = failure(sqlExpression.decode(sql));
+    assert.ok(error instanceof ParseError, sql);
+    assert.equal(error.committed, true, sql);
+  }
 });

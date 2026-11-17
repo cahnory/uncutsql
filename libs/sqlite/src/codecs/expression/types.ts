@@ -27,8 +27,15 @@ export interface NullTestExpression {
   readonly operand: Expression;
 }
 
+export interface FunctionCall {
+  readonly _tag: "FunctionCall";
+  readonly name: string;
+  readonly arguments: readonly Expression[];
+}
+
 /** Parentheses affect tree shape and source spans, not semantic node kinds. */
 export type Expression =
+  | FunctionCall
   | LiteralValue
   | ColumnReference
   | UnaryExpression

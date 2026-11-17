@@ -11,6 +11,7 @@ export type { KeywordLiteral } from "./codecs/keyword-literal.ts";
 export { expression, sqlExpression } from "./codecs/expression.ts";
 export type {
   Expression,
+  FunctionCall,
   ColumnReference,
   UnaryExpression,
   BinaryExpression,

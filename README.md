@@ -148,6 +148,9 @@ Signs are unary-expression nodes. Blob values contain hexadecimal byte pairs.
   NULL, current-time/date/timestamp and TRUE/FALSE literal spellings. TRUE/FALSE
   remain keywords on output so SQLite retains its contextual name resolution.
 - Column references with one, two or three identifier components.
+- Ordinary function calls with zero or more expression arguments, including nested calls.
+  Function names use identifier syntax and are quoted on output. Aggregate modifiers
+  (`DISTINCT`, `*`, argument ordering), FILTER and OVER are not supported.
 - Unary `+`, `-`, `~`, `NOT`; arithmetic `+`, `-`, `*`, `/`, `%`; concatenation `||`;
   bitwise `&`, `|`, `<<`, `>>`; comparisons `<`, `>`, `<=`, `>=`, `=`, `!=`, `IS`,
   `IS NOT`; postfix `ISNULL`, `NOTNULL`, `NOT NULL`; and logical `AND`, `OR`.
@@ -166,7 +169,7 @@ contract for supported, valid ASTs is `decode(encode(ast))` equal to `ast`.
 This grammar deliberately requires quoting reserved words used as identifiers.
 The built-in `temp` schema is accepted unquoted before a dot; other contextual
 keyword fallbacks are not implemented. Unsupported syntax
-fails: function calls, bind parameters, CASE, CAST, BETWEEN, IN, LIKE/GLOB/REGEXP,
+fails: bind parameters, CASE, CAST, BETWEEN, IN, LIKE/GLOB/REGEXP,
 expression COLLATE, JSON extract operators and subqueries are not yet
 implemented. Neither are `AS SELECT` or statement lists. Database semantics such as duplicate columns,
 conflicting constraints and contextual name resolution remain SQLite's responsibility.

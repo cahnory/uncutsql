@@ -13,6 +13,7 @@ import {
 import { mergeErrors } from "@uncutsql/codec";
 import { trivia } from "../operators/trivia.ts";
 import { literalValue } from "./literal-value.ts";
+import { functionCall } from "./expression/function-call.ts";
 import { columnReference } from "./expression/column-reference.ts";
 import { readBinaryExpression, encodeBinaryExpression } from "./expression/binary-expression.ts";
 import { unaryExpression } from "./expression/unary-expression.ts";
@@ -35,6 +36,7 @@ const readPrimary = (cursor: Cursor): Effect.Effect<Read<Expression>, ParseError
     const choices: readonly Pick<Codec<Expression>, "decode">[] = [
       parenthesizedExpression(at(0)),
       unaryExpression(at),
+      functionCall(at(0)),
       columnReference,
       literalValue,
     ];
@@ -61,6 +63,8 @@ const encodeExpression = (value: Expression): Effect.Effect<string, EncodeError>
       return unaryExpression(at).encode(value);
     case "BinaryExpression":
       return encodeBinaryExpression(value, at);
+    case "FunctionCall":
+      return functionCall(at(0)).encode(value);
     case "ColumnReference":
       return columnReference.encode(value);
     case "NullTestExpression":
@@ -110,6 +114,7 @@ export const expression: Codec<Expression> = at(0);
 export const sqlExpression = document(expression, trivia);
 export type {
   Expression,
+  FunctionCall,
   ColumnReference,
   UnaryExpression,
   BinaryExpression,

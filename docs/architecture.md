@@ -145,7 +145,7 @@ The DEFAULT codec follows the restricted SQLite production: a literal, a signed
 numeric literal, or a parenthesized constant expression. It does not accept an
 unparenthesized `DEFAULT 1 + 2`. Column references are rejected when decoding or
 encoding defaults. The CHECK codec requires parentheses but permits column references.
-Function calls, parameters, subqueries and additional operator families are not yet
+Parameters, subqueries and additional operator families are not yet
 part of the expression grammar.
 
 Tests compare original and encoded SQL against SQLite, including INTEGER/REAL
@@ -233,7 +233,7 @@ including quoted names containing dots and tables with namesakes in other schema
 
 ## Next steps
 
-1. Extend expressions with function calls and the remaining SQLite operator families.
+1. Extend expressions with the remaining SQLite operator families.
 2. Add statement lists and further DDL variants through tagged unions.
 3. Restore the pipeline `SQL → AST → virtual database → diff → migration AST → SQL`.
    Return schema warnings as structured diagnostics; logging can report them.
@@ -265,3 +265,13 @@ recursive package checks and shares the compact Node test reporter, formatting,
 lint and TypeScript configuration. Library builds use tsdown with external
 dependencies, source exports for workspace development, and ESM/CommonJS exports
 for distribution. No release workflow is enabled while the packages are private.
+
+## Function calls
+
+Ordinary calls are primary expressions with a name and ordered expression arguments.
+The opening parenthesis commits parsing; a bare name can still fall back to a
+column reference. Calls share the existing expression grammar for arguments,
+including nested calls and source spans. Names encode as quoted identifiers.
+DEFAULT validation recursively checks arguments for column references and wraps
+calls in parentheses. Function lookup, arity and context restrictions remain
+SQLite's responsibility. Aggregate modifiers, FILTER and OVER are not implemented.
