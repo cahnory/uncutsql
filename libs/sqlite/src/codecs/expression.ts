@@ -38,6 +38,8 @@ import {
   encodeBetween,
 } from "./expression/between-expression.ts";
 
+import { inOperator, inPrecedence, readIn, encodeIn } from "./expression/in-expression.ts";
+
 const readPrimary = (cursor: Cursor): Effect.Effect<Read<Expression>, ParseError> =>
   Effect.gen(function* () {
     const choices: readonly Pick<Codec<Expression>, "decode">[] = [
@@ -58,6 +60,7 @@ const readPrimary = (cursor: Cursor): Effect.Effect<Read<Expression>, ParseError
   });
 
 const precedenceOf = (value: Expression): number => {
+  if (value._tag === "InExpression") return inPrecedence;
   if (value._tag === "BetweenExpression") return betweenPrecedence;
   if (value._tag === "BinaryExpression") return binaryPrecedence[value.operator];
   if (value._tag === "UnaryExpression") return unaryPrecedence[value.operator];
@@ -67,6 +70,8 @@ const precedenceOf = (value: Expression): number => {
 
 const encodeExpression = (value: Expression): Effect.Effect<string, EncodeError> => {
   switch (value._tag) {
+    case "InExpression":
+      return encodeIn(value, at);
     case "BetweenExpression":
       return encodeBetween(value, at);
     case "UnaryExpression":
@@ -89,6 +94,7 @@ const encodeExpression = (value: Expression): Effect.Effect<string, EncodeError>
 };
 
 const maybeOperator = optional(binaryOperator);
+const maybeIn = optional(inOperator);
 const maybeBetween = optional(betweenOperator);
 const maybeNullTest = optional(nullTestOperator);
 const at: ExpressionAt = (minimumPrecedence) =>
@@ -108,6 +114,12 @@ const at: ExpressionAt = (minimumPrecedence) =>
           if (between.value !== undefined) {
             if (betweenPrecedence < minimumPrecedence) return left;
             left = yield* readBetween(start, left, { ...between, value: between.value }, at);
+            continue;
+          }
+          const membership = yield* maybeIn.decode(left.next);
+          if (membership.value !== undefined) {
+            if (inPrecedence < minimumPrecedence) return left;
+            left = yield* readIn(start, left, { ...membership, value: membership.value }, at);
             continue;
           }
           const operator = yield* maybeOperator.decode(left.next);
@@ -133,6 +145,7 @@ export type {
   Expression,
   FunctionCall,
   BetweenExpression,
+  InExpression,
   ColumnReference,
   UnaryExpression,
   BinaryExpression,

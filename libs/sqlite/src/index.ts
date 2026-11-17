@@ -13,6 +13,7 @@ export type {
   Expression,
   FunctionCall,
   BetweenExpression,
+  InExpression,
   ColumnReference,
   UnaryExpression,
   BinaryExpression,

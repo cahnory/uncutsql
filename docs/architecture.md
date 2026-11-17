@@ -283,3 +283,14 @@ They are never lowered to two comparisons, so SQLite evaluates the operand once.
 The lower bound stops at the delimiter AND while allowing nested range expressions;
 the upper bound uses the operator's precedence for left associativity. Encoding
 preserves grouping in all three positions. DEFAULT validation visits each child.
+
+## IN expression lists
+
+IN and NOT IN retain their operand and ordered values in an InExpression node.
+The list reuses the recursive expression grammar and comma-list combinator,
+including SQLite's empty-list syntax. Parsing commits after the operator and
+requires parentheses; subquery, table and table-function targets are unsupported.
+Encoding keeps membership syntax intact so SQLite handles NULL and empty-list
+semantics. DEFAULT validation visits the operand and every item, even in cases
+SQLite could simplify. Tests cover mixed operator precedence, nested membership,
+range bounds, source spans and schema behavior.
