@@ -1,0 +1,69 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { test } from "node:test";
+
+const cli = fileURLToPath(new URL("../src/index.ts", import.meta.url));
+const run = (args: string[], input = "", cwd?: string) =>
+  spawnSync(process.execPath, [cli, ...args], {
+    input,
+    encoding: "utf8",
+    ...(cwd === undefined ? {} : { cwd }),
+  });
+
+test("CLI formats complete stdin atomically and validates without database execution", () => {
+  const result = run(["format"], "create table a (x default ';'); create table b (y)");
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, "");
+  assert.equal(result.stdout, 'CREATE TABLE "a" ("x" DEFAULT \';\');\nCREATE TABLE "b" ("y");\n');
+  const invalid = run(["format", "-"], "CREATE TABLE a (x);\nCREATE TABLE b (y DEFAULT );");
+  assert.equal(invalid.status, 1);
+  assert.equal(invalid.stdout, "");
+  assert.match(invalid.stderr, /<stdin>:2:\d+: Expected/);
+  assert.match(invalid.stderr, /\^/);
+  assert.doesNotMatch(invalid.stderr, /at file:/);
+  const checked = run(["check"], "CREATE TABLE t (a, a)");
+  assert.equal(checked.status, 0, checked.stderr);
+  assert.match(checked.stdout, /Valid supported SQL syntax: 1 statement/);
+});
+
+test("CLI reads paths relative to the caller and leaves files unchanged", () => {
+  const directory = mkdtempSync(join(tmpdir(), "uncutsql-cli-"));
+  try {
+    const source = "-- comment\ncreate table t (a)";
+    const path = join(directory, "schema with spaces.sql");
+    writeFileSync(path, source);
+    const result = run(["format", "schema with spaces.sql"], "", directory);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, 'CREATE TABLE "t" ("a");\n');
+    assert.equal(readFileSync(path, "utf8"), source);
+    const missing = run(["check", "missing.sql"], "", directory);
+    assert.equal(missing.status, 1);
+    assert.equal(missing.stdout, "");
+    assert.match(missing.stderr, /missing.sql:.*ENOENT/);
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
+});
+
+test("CLI handles help, usage errors, empty input and unsupported SQL", () => {
+  const help = run(["--help"]);
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, /Usage:/);
+  for (const args of [[], ["unknown"], ["check", "a", "b"], ["format", "--write"]]) {
+    const result = run(args);
+    assert.equal(result.status, 2);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /Usage:/);
+  }
+  assert.equal(run(["format"], "; -- empty").stdout, "");
+  const empty = run(["check"]);
+  assert.equal(empty.status, 0);
+  assert.match(empty.stdout, /0 statement/);
+  const unsupported = run(["check"], "SELECT 1;");
+  assert.equal(unsupported.status, 1);
+  assert.match(unsupported.stderr, /<stdin>:1:1/);
+});

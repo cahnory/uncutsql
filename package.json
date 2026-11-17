@@ -19,7 +19,8 @@
     "test": "pnpm check:test",
     "demo": "pnpm --filter @uncutsql/demo dev",
     "fix:format": "oxfmt",
-    "fix:lint": "oxlint --fix"
+    "fix:lint": "oxlint --fix",
+    "cli": "node apps/cli/src/index.ts"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

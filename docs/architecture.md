@@ -234,7 +234,7 @@ including quoted names containing dots and tables with namesakes in other schema
 ## Next steps
 
 1. Extend expressions with the remaining SQLite operator families.
-2. Add statement lists and further DDL variants through tagged unions.
+2. Add further DDL variants to the schema statement union.
 3. Restore the pipeline `SQL → AST → virtual database → diff → migration AST → SQL`.
    Return schema warnings as structured diagnostics; logging can report them.
 4. Add application services for configuration, filesystem access and database
@@ -294,3 +294,19 @@ Encoding keeps membership syntax intact so SQLite handles NULL and empty-list
 semantics. DEFAULT validation visits the operand and every item, even in cases
 SQLite could simplify. Tests cover mixed operator precedence, nested membership,
 range bounds, source spans and schema behavior.
+
+## First application tooling
+
+`apps/cli` consumes the public SQLite package through `schema`, a whole-file
+entry point returning ordered statements. The existing single-table API retains
+its behavior. A shared table body leaves terminator handling to each entry point:
+the file parser requires a semicolon between statements and accepts an omitted
+final terminator. It parses syntax directly rather than splitting strings on
+semicolons, preserving quoted text, comments and file-level source locations.
+
+The CLI owns argument parsing, file/stdin reads, diagnostics and process exit
+codes. Effects run only at its executable boundary. Both check and format parse
+the complete input before emitting success output. Format encodes all statements
+before writing, so a later failure cannot emit a partial schema. Check reports
+supported syntax only; neither command opens a database. Files are never modified.
+The CLI has no new external dependencies and remains a private source executable.

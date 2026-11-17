@@ -41,41 +41,38 @@ export interface CreateTable extends TableDefinition {
   readonly options?: readonly TableOption[];
 }
 
+/** Internal statement body; document entry points own terminators. */
+export const createTableBodyGrammar: Codec<CreateTable> = prefixed(
+  keyword("CREATE"),
+  transform(definition, {
+    decode: ({ tableKeyword: _, reference, definition, options, ...value }): CreateTable => ({
+      _tag: "CreateTable",
+      ...value,
+      ...definition,
+      ...reference,
+      ...(options === undefined ? {} : { options }),
+    }),
+    encode: ({
+      _tag: _,
+      name,
+      schema,
+      columns,
+      tableConstraints,
+      options,
+      ...value
+    }: CreateTable) => ({
+      ...value,
+      tableKeyword: undefined,
+      reference: { name, ...(schema === undefined ? {} : { schema }) },
+      definition: { columns, tableConstraints },
+      options,
+    }),
+  }),
+  " ",
+);
+
 export const createTableGrammar: Codec<CreateTable> = lexeme(
-  located(
-    "CreateTable",
-    followedBy(
-      prefixed(
-        keyword("CREATE"),
-        transform(definition, {
-          decode: ({ tableKeyword: _, reference, definition, options, ...value }): CreateTable => ({
-            _tag: "CreateTable",
-            ...value,
-            ...definition,
-            ...reference,
-            ...(options === undefined ? {} : { options }),
-          }),
-          encode: ({
-            _tag: _,
-            name,
-            schema,
-            columns,
-            tableConstraints,
-            options,
-            ...value
-          }: CreateTable) => ({
-            ...value,
-            tableKeyword: undefined,
-            reference: { name, ...(schema === undefined ? {} : { schema }) },
-            definition: { columns, tableConstraints },
-            options,
-          }),
-        }),
-        " ",
-      ),
-      terminator,
-    ),
-  ),
+  located("CreateTable", followedBy(createTableBodyGrammar, terminator)),
 );
 
 export const createTable = document(createTableGrammar, trivia);

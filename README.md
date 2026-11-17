@@ -28,6 +28,7 @@ SQLite. Node may print an experimental SQLite warning when running those tests.
 
 - `libs/codec` — `@uncutsql/codec`, the generic Effect codec library.
 - `libs/sqlite` — `@uncutsql/sqlite`, depending on the codec via `workspace:*`.
+- `apps/cli` — `@uncutsql/cli`, schema syntax checking and canonical SQL output.
 - `apps/demo` — `@uncutsql/demo`, an executable consumer of both libraries.
 
 Each library owns its tests; SQLite fixtures stay beside its tests. Shared
@@ -40,6 +41,34 @@ Packages remain private; build configuration includes distribution export maps.
 Use `pnpm --filter @uncutsql/sqlite check` to check one library,
 `pnpm check:types` for workspace type checks, and `pnpm fix:format` to format.
 The root `pnpm test` alias still runs all runtime tests.
+
+## Schema CLI
+
+Start using the supported grammar on real schema files:
+
+```sh
+pnpm cli check examples/schema.sql
+pnpm cli format examples/schema.sql
+cat examples/schema.sql | pnpm cli format
+pnpm cli --help
+```
+
+Both commands accept a file path relative to your current directory, or stdin
+when the path is omitted or `-`. `check` validates supported syntax without
+executing SQL or checking database semantics. `format` writes canonical SQL to
+stdout after the entire input succeeds; input files are never modified.
+Canonical output does not preserve comments or formatting, except significant
+spelling within type declarations. Unsupported statements and expressions fail
+with a filename, line, column and source excerpt. Exit codes are 0 for success,
+1 for input/SQL failures, and 2 for invalid command usage.
+
+Files can contain multiple supported CREATE TABLE statements, separated by
+semicolons. The final semicolon is optional; empty statements and empty files
+are accepted. Subqueries and other statement kinds remain unsupported.
+
+The library exposes the same file grammar through `Sqlite.schema.decode(sql)`,
+`encode(statements)` and `decodeWithSourceMap(sql)`. It returns an ordered
+`readonly Statement[]` and keeps source offsets relative to the original file.
 
 ## Parse and serialize
 
@@ -174,7 +203,7 @@ The built-in `temp` schema is accepted unquoted before a dot; other contextual
 keyword fallbacks are not implemented. Unsupported syntax
 fails: bind parameters, CASE, CAST, LIKE/GLOB/REGEXP,
 expression COLLATE, JSON extract operators and subqueries are not yet
-implemented. Neither are `AS SELECT` or statement lists. Database semantics such as duplicate columns,
+implemented. Neither are `AS SELECT` or statement kinds other than CREATE TABLE. Database semantics such as duplicate columns,
 conflicting constraints and contextual name resolution remain SQLite's responsibility.
 
 ## Code layout
@@ -197,6 +226,7 @@ conflicting constraints and contextual name resolution remain SQLite's responsib
 | `libs/sqlite/src/codecs/create-table-statement.ts`          | Table grammar composed from its definition                               |
 | `libs/sqlite/src/index.ts`                                  | Public API with `@uncutsql/sqlite/create-table` and `/tokens` subpaths   |
 | `libs/*/tests`                                              | Runtime, SQLite compatibility, and compile-only type checks              |
+| `apps/cli/src/index.ts`                                     | CLI file/stdin boundary and diagnostics                                  |
 | `apps/demo/src/index.ts`                                    | Executable example with JSON logging                                     |
 
 See [architecture notes](docs/architecture.md) for combinator contracts, the

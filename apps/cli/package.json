@@ -1,0 +1,18 @@
+{
+  "name": "@uncutsql/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node src/index.ts",
+    "check:test": "node --test --test-reporter=../../scripts/test-reporter.ts tests/*.test.ts",
+    "check:types": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@uncutsql/sqlite": "workspace:*",
+    "effect": "4.1.4"
+  },
+  "engines": {
+    "node": ">=24.11.0"
+  }
+}
