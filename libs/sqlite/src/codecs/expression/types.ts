@@ -27,6 +27,14 @@ export interface NullTestExpression {
   readonly operand: Expression;
 }
 
+export interface BetweenExpression {
+  readonly _tag: "BetweenExpression";
+  readonly operator: "BETWEEN" | "NOT BETWEEN";
+  readonly operand: Expression;
+  readonly lower: Expression;
+  readonly upper: Expression;
+}
+
 export interface FunctionCall {
   readonly _tag: "FunctionCall";
   readonly name: string;
@@ -35,6 +43,7 @@ export interface FunctionCall {
 
 /** Parentheses affect tree shape and source spans, not semantic node kinds. */
 export type Expression =
+  | BetweenExpression
   | FunctionCall
   | LiteralValue
   | ColumnReference

@@ -275,3 +275,11 @@ including nested calls and source spans. Names encode as quoted identifiers.
 DEFAULT validation recursively checks arguments for column references and wraps
 calls in parentheses. Function lookup, arity and context restrictions remain
 SQLite's responsibility. Aggregate modifiers, FILTER and OVER are not implemented.
+
+## BETWEEN expressions
+
+BETWEEN and NOT BETWEEN retain an operand and two bounds in a dedicated node.
+They are never lowered to two comparisons, so SQLite evaluates the operand once.
+The lower bound stops at the delimiter AND while allowing nested range expressions;
+the upper bound uses the operator's precedence for left associativity. Encoding
+preserves grouping in all three positions. DEFAULT validation visits each child.

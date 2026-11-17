@@ -14,6 +14,8 @@ export interface DefaultColumnConstraint {
 
 const isConstant = (value: Expression): boolean => {
   switch (value._tag) {
+    case "BetweenExpression":
+      return isConstant(value.operand) && isConstant(value.lower) && isConstant(value.upper);
     case "FunctionCall":
       return value.arguments.every(isConstant);
     case "ColumnReference":
@@ -67,7 +69,8 @@ const defaultValue: Codec<Expression> = make<Expression>({
     ) {
       return signedNumber.encode({ ...value, operator: value.operator, operand: value.operand });
     }
-    return value._tag === "FunctionCall" ||
+    return value._tag === "BetweenExpression" ||
+      value._tag === "FunctionCall" ||
       value._tag === "BinaryExpression" ||
       value._tag === "UnaryExpression" ||
       value._tag === "NullTestExpression"

@@ -31,6 +31,13 @@ import {
   readNullTest,
 } from "./expression/null-test-expression.ts";
 
+import {
+  betweenOperator,
+  betweenPrecedence,
+  readBetween,
+  encodeBetween,
+} from "./expression/between-expression.ts";
+
 const readPrimary = (cursor: Cursor): Effect.Effect<Read<Expression>, ParseError> =>
   Effect.gen(function* () {
     const choices: readonly Pick<Codec<Expression>, "decode">[] = [
@@ -51,6 +58,7 @@ const readPrimary = (cursor: Cursor): Effect.Effect<Read<Expression>, ParseError
   });
 
 const precedenceOf = (value: Expression): number => {
+  if (value._tag === "BetweenExpression") return betweenPrecedence;
   if (value._tag === "BinaryExpression") return binaryPrecedence[value.operator];
   if (value._tag === "UnaryExpression") return unaryPrecedence[value.operator];
   if (value._tag === "NullTestExpression") return nullTestPrecedence;
@@ -59,6 +67,8 @@ const precedenceOf = (value: Expression): number => {
 
 const encodeExpression = (value: Expression): Effect.Effect<string, EncodeError> => {
   switch (value._tag) {
+    case "BetweenExpression":
+      return encodeBetween(value, at);
     case "UnaryExpression":
       return unaryExpression(at).encode(value);
     case "BinaryExpression":
@@ -79,6 +89,7 @@ const encodeExpression = (value: Expression): Effect.Effect<string, EncodeError>
 };
 
 const maybeOperator = optional(binaryOperator);
+const maybeBetween = optional(betweenOperator);
 const maybeNullTest = optional(nullTestOperator);
 const at: ExpressionAt = (minimumPrecedence) =>
   make<Expression>({
@@ -91,6 +102,12 @@ const at: ExpressionAt = (minimumPrecedence) =>
           if (postfix.value !== undefined) {
             if (nullTestPrecedence < minimumPrecedence) return left;
             left = readNullTest(start, left, { ...postfix, value: postfix.value });
+            continue;
+          }
+          const between = yield* maybeBetween.decode(left.next);
+          if (between.value !== undefined) {
+            if (betweenPrecedence < minimumPrecedence) return left;
+            left = yield* readBetween(start, left, { ...between, value: between.value }, at);
             continue;
           }
           const operator = yield* maybeOperator.decode(left.next);
@@ -115,6 +132,7 @@ export const sqlExpression = document(expression, trivia);
 export type {
   Expression,
   FunctionCall,
+  BetweenExpression,
   ColumnReference,
   UnaryExpression,
   BinaryExpression,

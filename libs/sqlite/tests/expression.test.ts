@@ -263,7 +263,6 @@ for (const source of [
   "a.b.c.d",
   "1;",
 
-  "a BETWEEN 1 AND 2",
   "a IN (1)",
   "a COLLATE NOCASE",
   "a -> b",
