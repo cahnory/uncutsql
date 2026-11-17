@@ -22,6 +22,7 @@ export type {
   CastExpression,
   CaseExpression,
   PatternExpression,
+  BindParameter,
   BinaryOperator,
   UnaryOperator,
 } from "./codecs/expression.ts";

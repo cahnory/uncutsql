@@ -263,7 +263,6 @@ for (const source of [
   "a.b.c.d",
   "1;",
 
-  "?1",
   "(SELECT 1)",
 ]) {
   test(`unsupported or incomplete expression fails: ${source}`, () => {

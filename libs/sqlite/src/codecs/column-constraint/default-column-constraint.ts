@@ -34,6 +34,7 @@ const isConstant = (value: Expression): boolean => {
       return isConstant(value.operand) && isConstant(value.lower) && isConstant(value.upper);
     case "FunctionCall":
       return value.arguments.every(isConstant);
+    case "BindParameter":
     case "ColumnReference":
       return false;
     case "CastExpression":
@@ -64,7 +65,11 @@ const defaultValue: Codec<Expression> = make<Expression>({
         if (Result.isSuccess(result)) {
           if (!isConstant(result.success.value)) {
             return yield* Effect.fail(
-              parseError(cursor, "constant default expression without column references", true),
+              parseError(
+                cursor,
+                "constant default expression without column references or parameters",
+                true,
+              ),
             );
           }
           return result.success;
@@ -77,7 +82,9 @@ const defaultValue: Codec<Expression> = make<Expression>({
   encode: (value) => {
     if (!isConstant(value)) {
       return Effect.fail(
-        new EncodeError({ message: "A DEFAULT expression cannot contain column references" }),
+        new EncodeError({
+          message: "A DEFAULT expression cannot contain column references or parameters",
+        }),
       );
     }
     if (

@@ -38,7 +38,7 @@ SQLite conformance.** Update this checklist when adding a grammar feature.
 - [x] NULL, TRUE/FALSE and CURRENT_TIME/CURRENT_DATE/CURRENT_TIMESTAMP spellings.
 - [x] Custom, multiword and parameterized type declarations. One or two signed
       numeric dimensions are accepted; digit separators in dimensions are rejected.
-- [ ] Bind parameters: `?`, `?NNN`, `:name`, `@name`, `$name` and extended names.
+- [x] Bind parameters: `?`, `?NNN`, `:name`, `@name`, `$name` and extended names.
 - [ ] General contextual keyword fallbacks and SQLite's legacy quote reinterpretation.
       Reserved-word identifiers require quotes, except the built-in `temp` schema
       before a dot. TRUE/FALSE retain their contextual expression semantics.
@@ -77,7 +77,7 @@ recognizing a keyword does not imply support for the construct it introduces.
 Parsing and encoding share precedence rules. Encoding inserts parentheses to
 retain tree shape, including right-nested expressions; it does not algebraically
 simplify or evaluate expressions. DEFAULT accepts literals, signed numbers or
-parenthesized constant expressions and rejects column references in both directions.
+parenthesized constant expressions and rejects column references and bind parameters in both directions.
 CHECK and generated expressions can reference columns.
 
 ## CREATE TABLE and schema files
@@ -148,7 +148,7 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 
 Suggested order for further work:
 
-1. Add bind parameters, row values and remaining specialized expression forms.
+1. Add row values and remaining specialized expression forms.
 2. Add standalone indexes and their model/migration support.
 3. Add views/triggers and safe preservation during table rebuilds.
 4. Expand query grammar and the expression forms that depend on it.

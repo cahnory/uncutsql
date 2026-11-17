@@ -1,3 +1,4 @@
+import { bindParameter } from "./expression/bind-parameter.ts";
 import {
   patternOperator,
   patternPrecedence,
@@ -63,6 +64,7 @@ const readPrimary = (cursor: Cursor): Effect.Effect<Read<Expression>, ParseError
       caseExpression(at(0)),
       castExpression(at(0)),
       functionCall(at(0)),
+      bindParameter,
       columnReference,
       literalValue,
     ];
@@ -107,6 +109,8 @@ const encodeExpression = (value: Expression): Effect.Effect<string, EncodeError>
       return castExpression(at(0)).encode(value);
     case "FunctionCall":
       return functionCall(at(0)).encode(value);
+    case "BindParameter":
+      return bindParameter.encode(value);
     case "ColumnReference":
       return columnReference.encode(value);
     case "NullTestExpression":
@@ -198,5 +202,6 @@ export type {
   CastExpression,
   CaseExpression,
   PatternExpression,
+  BindParameter,
 } from "./expression/types.ts";
 export type { BinaryOperator, UnaryOperator } from "./expression/operators.ts";

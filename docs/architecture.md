@@ -622,3 +622,18 @@ arity and extension availability remain execution concerns. Native tests registe
 REGEXP/MATCH implementations and a three-argument GLOB to check argument ordering.
 Default validation visits both operands and ESCAPE. Model/rebuild tests cover
 pattern-based CHECK and generated expressions.
+
+## Bind parameters
+
+`BindParameter` retains its complete SQL token in `value`. The codec accepts
+anonymous/numbered question marks and colon/at/dollar names, including SQLite's
+namespace and parenthesized-suffix extensions. It does not assign parameter
+numbers, strip sigils or convert indices to JavaScript numbers. These changes
+could alter binding identity. Encoding validates the complete retained token.
+The previous parser's simple name/index split served as the starting reference;
+SQLite's tokenizer supplies the extended-name boundaries.
+
+Native binding tests cover repeated indices, distinct names with the same suffix,
+anonymous ordering and nested expressions. DEFAULT validation rejects parameters
+through every expression variant. SQLite remains responsible for parameter limits
+and statement-context restrictions (including CHECK and generated columns).
