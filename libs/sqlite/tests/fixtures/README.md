@@ -36,3 +36,10 @@ additional native tests check main, temp and attached schema placement.
 `rebuild/schema.sql` and `rebuild/schema-next.sql` snapshot the demo schemas for
 the table-rebuild regression test. Keeping them local makes this regression
 independent of changes to the demo layout or examples.
+
+`expression/07_collate.sql` is an unchanged copy of the previous implementation's
+`rules/__fixtures__/expression/valid/07_collate.sql`, exercised by the expression
+collation tests.
+
+`expression/02_json_arrow.sql` is an unchanged copy of the previous implementation's
+`rules/__fixtures__/expression/edge/02_json_arrow.sql`.

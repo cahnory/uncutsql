@@ -548,3 +548,35 @@ The dependency direction is driver → dialect → codec/core. Parsing and gener
 never load a driver. Application loads the driver only, then verifies its dialect
 identifier against the stored lock before executing migrations. Existing transaction,
 locking, history and drift checks remain unchanged.
+
+## Expression collation
+
+`CollateExpression` retains an operand and collation identifier. A dedicated
+postfix codec follows the earlier collate-expression rule; the complete expression
+parser supplies its operand and precedence. COLLATE binds below symbolic unary
+operators and above concatenation, per [SQLite's expression rules](https://www.sqlite.org/lang_expr.html).
+The encoder groups lower-precedence operands and retains repeated clauses rather
+than discarding one. It quotes collation names without changing their spelling.
+
+Parenthesized defaults walk through the new operand when checking for column
+references. An expression default such as `DEFAULT ('A' COLLATE NOCASE)` remains
+distinct from `DEFAULT 'A' COLLATE NOCASE`, which has a separate column constraint.
+Tests compare SQLite results, check source spans and run a rebuild migration with
+collated CHECK/generated expressions. Custom collation registration remains an
+execution concern; the dialect imports no database driver.
+
+## JSON extraction operators
+
+`->` and `->>` use the existing BinaryExpression variant, with the same precedence
+as concatenation and left associativity. The shared scanner recognizes the longest
+operator first; it never splits an arrow into subtraction and comparison. Right-nested
+extraction and concatenation keep their required parentheses when printed.
+
+The dialect retains both spellings because `->` returns JSON text while `->>`
+returns SQL values. It does not evaluate JSON, validate paths or normalize extraction
+into function calls. SQLite's JSON subtype behavior and path-error timing are left
+unchanged. The regression suite imports the previous arrow edge fixture and checks
+native values/types, chained paths, negative indexes, JSONB input, JSON function
+composition and rebuild migrations containing extraction expressions.
+
+Reference: [SQLite JSON extraction](https://www.sqlite.org/json1.html#the_and_operators).

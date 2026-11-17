@@ -263,8 +263,6 @@ for (const source of [
   "a.b.c.d",
   "1;",
 
-  "a COLLATE NOCASE",
-  "a -> b",
   "?1",
   "(SELECT 1)",
 ]) {

@@ -459,9 +459,13 @@ Signs are unary-expression nodes. Blob values contain hexadecimal byte pairs.
   `IS NOT`; postfix `ISNULL`, `NOTNULL`, `NOT NULL`; and logical `AND`, `OR`.
   Equality and IS DISTINCT FROM aliases normalize
   to their equivalent canonical operators.
+- JSON extraction `->` and `->>`, retaining JSON text versus SQL value semantics.
+  Paths, labels, indexes and chained extraction use ordinary expressions.
 - `BETWEEN` and `NOT BETWEEN` range expressions, including nested bounds.
 - `IN` and `NOT IN` with parenthesized expression lists, including empty lists.
   Subquery, table-name and table-function targets are not implemented.
+- Expression-level `COLLATE name`, including nested clauses and quoted/custom
+  collation names. SQLite resolves the actual collation at execution time.
 - Defaults containing literals, signed numbers or parenthesized constant expressions;
   column-reference defaults are rejected in both directions.
 - Column- and table-level `CHECK (expression)`, with nested parentheses and column references.
@@ -476,7 +480,7 @@ This grammar deliberately requires quoting reserved words used as identifiers.
 The built-in `temp` schema is accepted unquoted before a dot; other contextual
 keyword fallbacks are not implemented. Unsupported syntax
 fails: bind parameters, CASE, CAST, LIKE/GLOB/REGEXP,
-expression COLLATE, JSON extract operators and subqueries are not yet
+subqueries are not yet
 implemented. Neither are `AS SELECT` or statement kinds other than CREATE TABLE. Database semantics such as duplicate columns,
 conflicting constraints and contextual name resolution remain SQLite's responsibility.
 

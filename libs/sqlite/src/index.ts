@@ -18,6 +18,7 @@ export type {
   UnaryExpression,
   BinaryExpression,
   NullTestExpression,
+  CollateExpression,
   BinaryOperator,
   UnaryOperator,
 } from "./codecs/expression.ts";

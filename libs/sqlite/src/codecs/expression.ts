@@ -1,3 +1,9 @@
+import {
+  collatePrecedence,
+  collateOperator,
+  readCollate,
+  encodeCollate,
+} from "./expression/collate-expression.ts";
 import { Effect, Result } from "effect";
 import {
   type Codec,
@@ -8,6 +14,7 @@ import {
   document,
   make,
   optional,
+  transform,
   parseError,
 } from "@uncutsql/codec";
 import { mergeErrors } from "@uncutsql/codec";
@@ -60,6 +67,7 @@ const readPrimary = (cursor: Cursor): Effect.Effect<Read<Expression>, ParseError
   });
 
 const precedenceOf = (value: Expression): number => {
+  if (value._tag === "CollateExpression") return collatePrecedence;
   if (value._tag === "InExpression") return inPrecedence;
   if (value._tag === "BetweenExpression") return betweenPrecedence;
   if (value._tag === "BinaryExpression") return binaryPrecedence[value.operator];
@@ -70,6 +78,8 @@ const precedenceOf = (value: Expression): number => {
 
 const encodeExpression = (value: Expression): Effect.Effect<string, EncodeError> => {
   switch (value._tag) {
+    case "CollateExpression":
+      return encodeCollate(value, at);
     case "InExpression":
       return encodeIn(value, at);
     case "BetweenExpression":
@@ -93,6 +103,9 @@ const encodeExpression = (value: Expression): Effect.Effect<string, EncodeError>
   }
 };
 
+const maybeCollate = optional(
+  transform(collateOperator, { decode: () => true as const, encode: (_value: true) => undefined }),
+);
 const maybeOperator = optional(binaryOperator);
 const maybeIn = optional(inOperator);
 const maybeBetween = optional(betweenOperator);
@@ -104,6 +117,13 @@ const at: ExpressionAt = (minimumPrecedence) =>
         const start = (yield* trivia.decode(cursor)).next;
         let left = yield* readPrimary(start);
         while (true) {
+          if (minimumPrecedence <= collatePrecedence) {
+            const operator = yield* maybeCollate.decode(left.next);
+            if (operator.value !== undefined) {
+              left = yield* readCollate(start, left, { ...operator, value: undefined });
+              continue;
+            }
+          }
           const postfix = yield* maybeNullTest.decode(left.next);
           if (postfix.value !== undefined) {
             if (nullTestPrecedence < minimumPrecedence) return left;
@@ -150,5 +170,6 @@ export type {
   UnaryExpression,
   BinaryExpression,
   NullTestExpression,
+  CollateExpression,
 } from "./expression/types.ts";
 export type { BinaryOperator, UnaryOperator } from "./expression/operators.ts";

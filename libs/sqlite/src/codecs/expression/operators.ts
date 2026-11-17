@@ -35,6 +35,8 @@ export const binaryPrecedence = {
   "/": 80,
   "%": 80,
   "||": 90,
+  "->": 90,
+  "->>": 90,
 } as const;
 export type BinaryOperator = keyof typeof binaryPrecedence;
 
@@ -73,6 +75,8 @@ const wordOperator = <A extends string>(spelling: string, value: A): Codec<A> =>
 
 const symbols = {
   "||": "||",
+  "->": "->",
+  "->>": "->>",
   "*": "*",
   "/": "/",
   "%": "%",

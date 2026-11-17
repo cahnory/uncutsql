@@ -21,6 +21,12 @@ export interface BinaryExpression {
   readonly right: Expression;
 }
 
+export interface CollateExpression {
+  readonly _tag: "CollateExpression";
+  readonly operand: Expression;
+  readonly collation: string;
+}
+
 export interface NullTestExpression {
   readonly _tag: "NullTestExpression";
   readonly operator: "ISNULL" | "NOTNULL";
@@ -50,6 +56,7 @@ export interface FunctionCall {
 
 /** Parentheses affect tree shape and source spans, not semantic node kinds. */
 export type Expression =
+  | CollateExpression
   | InExpression
   | BetweenExpression
   | FunctionCall

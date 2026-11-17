@@ -22,6 +22,7 @@ const isConstant = (value: Expression): boolean => {
       return value.arguments.every(isConstant);
     case "ColumnReference":
       return false;
+    case "CollateExpression":
     case "NullTestExpression":
     case "UnaryExpression":
       return isConstant(value.operand);
@@ -71,7 +72,8 @@ const defaultValue: Codec<Expression> = make<Expression>({
     ) {
       return signedNumber.encode({ ...value, operator: value.operator, operand: value.operand });
     }
-    return value._tag === "InExpression" ||
+    return value._tag === "CollateExpression" ||
+      value._tag === "InExpression" ||
       value._tag === "BetweenExpression" ||
       value._tag === "FunctionCall" ||
       value._tag === "BinaryExpression" ||
