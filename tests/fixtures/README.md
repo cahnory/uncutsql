@@ -26,3 +26,9 @@ them), and reject unquoted reserved words used as collation/type/table names (th
 new grammar requires quoting). Syntax-only tests intentionally accept constraints
 that SQLite later rejects during schema validation, such as conflicting primary
 keys. Separate behavioral tests exercise executable schemas against SQLite.
+
+`previous/table-reference` also imports the entire earlier table-reference corpus.
+The doubled-bracket fixture remains unchanged but is expected to fail: SQLite
+ends bracket quoting at the first closing bracket. Reserved-word edge fixtures
+require quotes. The CREATE TABLE selection includes `05_schema_qualified.sql`;
+additional native tests check main, temp and attached schema placement.

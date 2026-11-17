@@ -51,8 +51,9 @@ metadata is never required for encoding. Constraints stay in their original
 order. An absent column type is represented by `typeName: undefined`.
 Tables contain `columns` and `tableConstraints` arrays; use `tableConstraints: []`
 when constructing a table with no table-level constraints. Optional constraint
-names are stored in `name` on the corresponding constraint node. Optional table
-`options` retain the ordered `"STRICT"` / `"WITHOUT ROWID"` spellings.
+names are stored in `name` on the corresponding constraint node. Optional
+`schema` qualifies the table name without changing `name`; omitted schemas remain
+implicit. Optional table `options` retain the ordered `"STRICT"` / `"WITHOUT ROWID"` spellings.
 `typeName` is validated SQL text: quoted words and internal trivia are retained
 because their spelling can affect SQLite's declared type and affinity.
 
@@ -108,7 +109,7 @@ Signs are unary-expression nodes. Blob values contain hexadecimal byte pairs.
 
 ## Supported SQLite slice
 
-- One `CREATE [TEMP | TEMPORARY] TABLE [IF NOT EXISTS] name (...)` statement.
+- One `CREATE [TEMP | TEMPORARY] TABLE [IF NOT EXISTS] [schema.]name (...)` statement.
 - Bare non-keyword identifiers and double-quoted, backtick or bracket identifiers.
   Output always uses escaped double quotes.
 - One or more columns, with optional custom, multiword or parameterized types.
@@ -144,11 +145,11 @@ type declarations where the original spelling is significant. The round-trip
 contract for supported, valid ASTs is `decode(encode(ast))` equal to `ast`.
 
 This grammar deliberately requires quoting reserved words used as identifiers.
-It does not implement SQLite's contextual keyword fallbacks. Unsupported syntax
+The built-in `temp` schema is accepted unquoted before a dot; other contextual
+keyword fallbacks are not implemented. Unsupported syntax
 fails: function calls, bind parameters, CASE, CAST, BETWEEN, IN, LIKE/GLOB/REGEXP,
 expression COLLATE, JSON extract operators and subqueries are not yet
-implemented. Neither are schema-qualified table declarations, `AS SELECT`, or
-statement lists. Database semantics such as duplicate columns,
+implemented. Neither are `AS SELECT` or statement lists. Database semantics such as duplicate columns,
 conflicting constraints and contextual name resolution remain SQLite's responsibility.
 
 ## Code layout
@@ -166,6 +167,7 @@ conflicting constraints and contextual name resolution remain SQLite's responsib
 | `src/sqlite/codecs/foreign-key` | Shared reference actions and deferrability rules |
 | `src/sqlite/codecs/type-name.ts` / `type-parameter.ts` | Validated type declarations and numeric dimensions |
 | `src/sqlite/codecs/table-options.ts` | Ordered STRICT / WITHOUT ROWID options |
+| `src/sqlite/codecs/table-reference.ts` | Optional schema qualifier and table name |
 | `src/sqlite/codecs/table-definition.ts` | Column list followed by ordered table constraints |
 | `src/sqlite/codecs/create-table-statement.ts` | Table grammar composed from its definition |
 | `src/sqlite/index.ts` | Public API; the original `create-table.ts` and `tokens.ts` imports still work |

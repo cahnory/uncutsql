@@ -24,3 +24,4 @@ export { foreignKeyClause } from "./codecs/foreign-key-clause.ts";
 export type { ForeignKeyClause } from "./codecs/foreign-key-clause.ts";
 export type { TableOption } from "./codecs/table-options.ts";
 export type { GeneratedColumnConstraint } from "./codecs/column-constraint/generated-column-constraint.ts";
+export { tableReference, type TableReference } from "./codecs/table-reference.ts";

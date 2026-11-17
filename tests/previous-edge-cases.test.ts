@@ -5,6 +5,7 @@ import { Effect, Result } from "effect";
 import { type Codec, document, ParseError } from "../src/codec/index.ts";
 import { columnConstraint } from "../src/sqlite/codecs/column-constraint.ts";
 import { columnType } from "../src/sqlite/codecs/type-name.ts";
+import { tableReference } from "../src/sqlite/codecs/table-reference.ts";
 import { tableOptions } from "../src/sqlite/codecs/table-options.ts";
 import { createTableGrammar } from "../src/sqlite/codecs/create-table-statement.ts";
 import { trivia } from "../src/sqlite/operators/trivia.ts";
@@ -12,6 +13,10 @@ import { trivia } from "../src/sqlite/operators/trivia.ts";
 // Preserve the old filenames, including .skip, but run every imported case.
 // Explicit overrides document ambiguously classified edges and newly supported syntax.
 const overrides: Readonly<Record<string, boolean>> = {
+  "table-reference/edge/01_table_is_keyword_unquoted.sql": false,
+  "table-reference/edge/02_schema_is_keyword_unquoted.sql": false,
+  // SQLite bracket quoting ends at the first ]; doubled brackets do not escape it.
+  "table-reference/valid/17_table_with_escaped_bracket.sql": false,
   "column-constraint/edge/04_collate_keyword_name_unquoted.sql": false,
   "type-name/edge/02_keyword_like.skip.sql": false,
   "table-options/invalid/03_strict_twice.skip.sql": true,
@@ -48,3 +53,5 @@ fixtureTests("column-constraint", columnConstraint);
 fixtureTests("type-name", columnType);
 fixtureTests("table-options", tableOptions);
 fixtureTests("create-table-statement", createTableGrammar);
+
+fixtureTests("table-reference", tableReference);

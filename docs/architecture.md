@@ -213,14 +213,31 @@ conflict actions, collation, STRICT coercion and WITHOUT ROWID metadata. Schema
 checks such as conflicting primary keys or invalid STRICT types remain SQLite's
 responsibility rather than becoming syntax errors in the codec.
 
+## Schema-qualified table declarations
+
+`table-reference.ts` composes an identifier with an optional dot and second
+identifier, following the old table-reference rule. `CreateTable` keeps `name`
+and adds optional `schema`; existing unqualified ASTs retain their shape. Dots
+inside quoted identifiers are never split. Each identifier retains a separate
+source span, and the dot commits parsing to a following table name.
+
+The built-in `temp` schema is accepted unquoted before a dot, preserving its case.
+Other reserved-word identifiers still require quoting. Qualification is specific
+to table declarations: REFERENCES targets remain unqualified, as SQLite requires.
+Schema existence and TEMP/schema conflicts are left to SQLite validation.
+
+All previous table-reference fixtures run, with explicit corrections for unquoted
+reserved words and the old doubled-bracket example (SQLite does not support that
+escape). Native tests compare placement in main, temp and attached databases,
+including quoted names containing dots and tables with namesakes in other schemas.
+
 ## Next steps
 
 1. Extend expressions with function calls and the remaining SQLite operator families.
-2. Add schema-qualified table declarations using the existing fixture corpus.
-3. Add statement lists and further DDL variants through tagged unions.
-4. Restore the pipeline `SQL → AST → virtual database → diff → migration AST → SQL`.
+2. Add statement lists and further DDL variants through tagged unions.
+3. Restore the pipeline `SQL → AST → virtual database → diff → migration AST → SQL`.
    Return schema warnings as structured diagnostics; logging can report them.
-5. Add application services for configuration, filesystem access and database
+4. Add application services for configuration, filesystem access and database
    inspection. Keep ordinary AST transformations pure.
 
 Effect Schema can validate incoming ASTs or expose a whole-document transformation

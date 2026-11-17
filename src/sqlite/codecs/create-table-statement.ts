@@ -14,7 +14,7 @@ import { keyword } from "../operators/keyword.ts";
 import { lexeme } from "../operators/lexeme.ts";
 import { terminator } from "../operators/terminator.ts";
 import { trivia } from "../operators/trivia.ts";
-import { identifier } from "./identifier.ts";
+import { tableReference } from "./table-reference.ts";
 import { tableDefinition, type TableDefinition } from "./table-definition.ts";
 import { tableOptions, type TableOption } from "./table-options.ts";
 
@@ -25,7 +25,7 @@ const definition = struct(
     ifNotExists: flag(
       prefixed(keyword("IF"), prefixed(keyword("NOT"), keyword("EXISTS"), " "), " "),
     ),
-    name: identifier,
+    reference: tableReference,
     definition: tableDefinition,
     options: optional(tableOptions),
   },
@@ -37,6 +37,7 @@ export interface CreateTable extends TableDefinition {
   readonly temporary: boolean;
   readonly ifNotExists: boolean;
   readonly name: string;
+  readonly schema?: string;
   readonly options?: readonly TableOption[];
 }
 
@@ -47,15 +48,25 @@ export const createTableGrammar: Codec<CreateTable> = lexeme(
       prefixed(
         keyword("CREATE"),
         transform(definition, {
-          decode: ({ tableKeyword: _, definition, options, ...value }): CreateTable => ({
+          decode: ({ tableKeyword: _, reference, definition, options, ...value }): CreateTable => ({
             _tag: "CreateTable",
             ...value,
             ...definition,
+            ...reference,
             ...(options === undefined ? {} : { options }),
           }),
-          encode: ({ _tag: _, columns, tableConstraints, options, ...value }: CreateTable) => ({
+          encode: ({
+            _tag: _,
+            name,
+            schema,
+            columns,
+            tableConstraints,
+            options,
+            ...value
+          }: CreateTable) => ({
             ...value,
             tableKeyword: undefined,
+            reference: { name, ...(schema === undefined ? {} : { schema }) },
             definition: { columns, tableConstraints },
             options,
           }),
