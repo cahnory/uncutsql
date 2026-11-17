@@ -338,7 +338,7 @@ outside validation. All SQLite input tables are encoder-validated by the adapter
 
 The CLI reuses file parsing and diagnostics for `diff before.sql after.sql` and
 prints JSON only after both inputs and the diff succeed. One side may read stdin.
-No database access, schema application or migration SQL is introduced.
+The diff command performs no database access or schema application.
 
 ## Initial migration planner
 
@@ -367,10 +367,9 @@ before CLI stdout receives SQL. Native SQLite tests execute generated scripts
 with populated tables and foreign-key enforcement and compare resulting schema
 ASTs to the desired schema.
 
-The old lock file stored a virtual database snapshot and lastMigrationId. A later
-versioned lock format can record the baseline for generation; applied migration
-history is a separate database concern. No lock format or persistence is added
-as part of this planner.
+The old lock file stored a virtual database snapshot and lastMigrationId. The
+consumer-owned versioned format below records the shared baseline for generation;
+applied migration history remains a separate database concern.
 
 ## Table rebuilds
 
@@ -451,3 +450,37 @@ projection. Tests replace the SQLite adapter with a fixture whose AST, plan and
 case rules differ and exercise the same workflow. Compile-only tests guard the
 absence of the removed dialect orchestration exports. This establishes the
 swap boundary without adding runtime plugin discovery or another SQL parser.
+
+## Lock-backed migration generation
+
+The CLI owns versioned lock metadata and persistence in lock.ts/generate.ts. Core
+only adds decodeDatabaseSchema for validating external shared models: recognized
+shape fields, serializable semantic values, finite numbers and cycle rejection.
+Dialect selection, files, IDs and SQL checksums never enter core or SQLite.
+
+`generate desired.sql [directory]` converts the target through the chosen adapter,
+acquires an exclusive writer file, reads and validates the lock, compares shared
+models with core, then runs the same consumer-owned lowering/rendering workflow.
+A missing lock is an empty baseline only if no numbered migrations exist. The
+lock records formatVersion=1, dialect, lastMigrationId, lastMigrationSha256 and
+database. History filenames must be contiguous and canonical from 000001.sql;
+the most recent SQL bytes must match the saved checksum. No-op comparison leaves
+the saved baseline and IDs untouched. Empty SQL for a nonempty diff is rejected.
+
+The publisher writes and syncs exclusive staging files, hard-links staged SQL to
+its final name without replacement, syncs the directory, then renames the staged
+lock over the old lock. That rename commits the baseline only after complete SQL
+is published. Pre-commit failures remove only owned staging/final SQL files;
+existing files are never overwritten. Post-commit cleanup failures report the
+committed state. The critical publication effect is uninterruptible so its cleanup
+finishes before the writer file is released during cooperative cancellation.
+A process kill can leave markers/artifacts, which are detected on the next run
+and require explicit reconciliation; no automatic stale-lock deletion is attempted.
+
+The workflow requires output-filesystem hard-link, rename and directory-sync
+support. It is a two-file protocol with a clear commit point and interrupted-state
+detection, not a claim of an atomic filesystem transaction across both paths.
+Tests cover repeat/no-op generation, native SQLite execution of emitted history,
+non-SQLite adapters, concurrent writers, malformed metadata/models, missing or
+edited output, publication collisions and lock-replacement failure cleanup.
+No database application state is recorded or inferred from the generated lock.

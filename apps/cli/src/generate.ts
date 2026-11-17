@@ -1,0 +1,240 @@
+import { mkdir, open, readFile, readdir, rename, link, unlink } from "node:fs/promises";
+import { join } from "node:path";
+import { Effect } from "effect";
+import { decodeDatabaseSchema, diffDatabases, type Dialect } from "@uncutsql/core";
+import { renderMigration } from "./workflow.ts";
+import {
+  decodeLock,
+  GenerationError,
+  hashMigration,
+  migrationFilename,
+  type SchemaLock,
+} from "./lock.ts";
+
+const lockName = "uncutsql.lock.json";
+const writerName = ".uncutsql-generation.lock";
+const message = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
+const hasCode = (cause: unknown, code: string) =>
+  cause !== null && typeof cause === "object" && "code" in cause && cause.code === code;
+const io = <A>(label: string, operation: () => Promise<A>) =>
+  Effect.tryPromise({
+    try: operation,
+    catch: (cause) => new GenerationError({ message: `${label}: ${message(cause)}` }),
+  });
+const remove = async (path: string) => {
+  try {
+    await unlink(path);
+  } catch (cause) {
+    if (!hasCode(cause, "ENOENT")) throw cause;
+  }
+};
+const readOptional = async (path: string) => {
+  try {
+    return await readFile(path, "utf8");
+  } catch (cause) {
+    if (hasCode(cause, "ENOENT")) return undefined;
+    throw cause;
+  }
+};
+const syncDirectory = async (directory: string) => {
+  const handle = await open(directory, "r");
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+};
+const writeNew = async (path: string, contents: string) => {
+  const handle = await open(path, "wx");
+  try {
+    await handle.writeFile(contents, "utf8");
+    await handle.sync();
+    await handle.close();
+  } catch (cause) {
+    try {
+      await handle.close();
+    } catch {
+      /* Preserve the write failure. */
+    }
+    try {
+      await remove(path);
+    } catch (cleanup) {
+      throw new Error(`${message(cause)}; cleanup failed: ${message(cleanup)}`);
+    }
+    throw cause;
+  }
+};
+
+const readBaseline = (directory: string, dialect: string) =>
+  Effect.gen(function* () {
+    const path = join(directory, lockName);
+    const source = yield* io(path, () => readOptional(path));
+    const files = (yield* io(directory, () => readdir(directory)))
+      .filter((name) => /^\d+\.sql$/.test(name))
+      .sort((left, right) => Number(left.slice(0, -4)) - Number(right.slice(0, -4)));
+    if (source === undefined) {
+      if (files.length)
+        return yield* Effect.fail(
+          new GenerationError({
+            message: `${directory}: numbered migrations exist without a lock; restore the matching baseline before generating`,
+          }),
+        );
+      return { database: { tables: [] }, lastMigrationId: 0 };
+    }
+    const lock = yield* decodeLock(source, dialect).pipe(
+      Effect.mapError((error) => new GenerationError({ message: `${path}: ${error.message}` })),
+    );
+    if (
+      files.length !== lock.lastMigrationId ||
+      files.some((name, index) => name !== migrationFilename(index + 1))
+    ) {
+      return yield* Effect.fail(
+        new GenerationError({
+          message: `${directory}: numbered migration history does not match the lock; resolve missing or interrupted output before generating`,
+        }),
+      );
+    }
+    const latest = join(directory, migrationFilename(lock.lastMigrationId));
+    const sql = yield* io(latest, () => readFile(latest, "utf8"));
+    if (hashMigration(sql) !== lock.lastMigrationSha256)
+      return yield* Effect.fail(
+        new GenerationError({
+          message: `${latest}: content does not match the lock's migration hash`,
+        }),
+      );
+    return lock;
+  });
+
+const publish = async (directory: string, sql: string, lock: SchemaLock) => {
+  const filename = migrationFilename(lock.lastMigrationId);
+  const migrationPath = join(directory, filename);
+  const stageSql = join(directory, `.${filename}.tmp`);
+  const stageLock = join(directory, `.${lockName}.tmp`);
+  let ownSql = false;
+  let ownLock = false;
+  let publishedSql = false;
+  let committed = false;
+  let failure: unknown;
+  try {
+    await writeNew(stageLock, `${JSON.stringify(lock, null, 2)}\n`);
+    ownLock = true;
+    await writeNew(stageSql, sql);
+    ownSql = true;
+    // A hard link publishes complete SQL atomically without replacing an existing file.
+    await link(stageSql, migrationPath);
+    publishedSql = true;
+    await syncDirectory(directory);
+    // This rename is the commit point, after the migration is present and synced.
+    await rename(stageLock, join(directory, lockName));
+    ownLock = false;
+    committed = true;
+  } catch (cause) {
+    failure = cause;
+  }
+  const cleanup: unknown[] = [];
+  for (const path of [
+    ...(!committed && publishedSql ? [migrationPath] : []),
+    ...(ownSql ? [stageSql] : []),
+    ...(ownLock ? [stageLock] : []),
+  ]) {
+    try {
+      await remove(path);
+    } catch (cause) {
+      cleanup.push(cause);
+    }
+  }
+  try {
+    await syncDirectory(directory);
+  } catch (cause) {
+    cleanup.push(cause);
+  }
+  if (failure !== undefined || cleanup.length)
+    throw new Error(
+      [
+        committed
+          ? "Migration and lock were published, but cleanup failed"
+          : "Generation was not committed",
+        ...(failure === undefined ? [] : [message(failure)]),
+        ...cleanup.map(message),
+      ].join(": "),
+    );
+};
+
+export interface GenerationResult {
+  readonly migrationPath?: string;
+  readonly lockPath?: string;
+}
+
+/** Application-owned generation; no database is opened and no SQL is executed. */
+export const generateMigration = <Ast, Plan, E extends Error, R>(
+  dialect: Dialect<Ast, Plan, E, R>,
+  ast: Ast,
+  directory: string,
+) =>
+  Effect.gen(function* () {
+    const after = yield* dialect.toDatabaseSchema(ast, "after");
+    yield* decodeDatabaseSchema(after).pipe(
+      Effect.mapError((error) => new GenerationError({ message: error.message })),
+    );
+    const writerPath = join(directory, writerName);
+    return yield* Effect.acquireUseRelease(
+      io(writerPath, async () => {
+        await mkdir(directory, { recursive: true });
+        let handle;
+        try {
+          handle = await open(writerPath, "wx");
+        } catch (cause) {
+          if (hasCode(cause, "EEXIST"))
+            throw new Error(
+              "Another generation is active or was interrupted. Inspect the output and remove this writer lock only when no generation is running.",
+            );
+          throw cause;
+        }
+        return handle;
+      }),
+      () =>
+        Effect.gen(function* () {
+          const baseline = yield* readBaseline(directory, dialect.name);
+          const diff = yield* diffDatabases(baseline.database, after);
+          if (!diff.changes.length) return {} satisfies GenerationResult;
+          const id = baseline.lastMigrationId + 1;
+          if (!Number.isSafeInteger(id))
+            return yield* Effect.fail(
+              new GenerationError({ message: "Migration ID range exhausted" }),
+            );
+          const rendered = yield* renderMigration(dialect, {
+            before: baseline.database,
+            after,
+            diff,
+          });
+          if (!rendered.trim())
+            return yield* Effect.fail(
+              new GenerationError({
+                message: "The dialect returned empty SQL for a nonempty schema diff",
+              }),
+            );
+          const sql = rendered.endsWith("\n") ? rendered : `${rendered}\n`;
+          const lock: SchemaLock = {
+            formatVersion: 1,
+            dialect: dialect.name,
+            lastMigrationId: id,
+            lastMigrationSha256: hashMigration(sql),
+            database: after,
+          };
+          // Complete publication/cleanup before releasing the writer lock on interruption.
+          yield* Effect.uninterruptible(io(directory, () => publish(directory, sql, lock)));
+          return {
+            migrationPath: join(directory, migrationFilename(id)),
+            lockPath: join(directory, lockName),
+          } satisfies GenerationResult;
+        }),
+      (handle) =>
+        io(writerPath, async () => {
+          try {
+            await handle.close();
+          } finally {
+            await remove(writerPath);
+          }
+        }),
+    );
+  });

@@ -215,8 +215,47 @@ const sql = yield * dialect.encodeMigration(plan);
 SQLite plans retain typed CreateTable, DropTable, AddColumn and RebuildTable operations.
 Core logical planning is pure. SQLite lowering returns SchemaDiffError, EncodeError
 or MigrationPlanError; rendering returns EncodeError.
-A future lock file can record the baseline schema and last generated migration ID,
+The generation workflow below records the baseline and last generated migration ID,
 separately from the history of migrations actually applied to a database.
+
+## Generate migration files with a lock
+
+```sh
+pnpm cli generate examples/schema.sql
+pnpm cli generate examples/schema-expand.sql
+# Or choose an output directory:
+pnpm cli generate schema.sql db/migrations
+```
+
+`generate` reads the desired schema (a file or `-` for stdin), compares it to the
+recorded baseline, and writes the next numbered SQL file and `uncutsql.lock.json`.
+The default output directory is `migrations`. A missing lock and empty migration
+history mean an empty database baseline, so the first generation creates all
+specified tables. Generation never connects to a database or applies SQL.
+Commit numbered SQL files and the lock together.
+
+The lock stores version 1, the selected dialect name, the shared database model,
+`lastMigrationId`, and the latest migration's SHA-256 hash. The stored model is
+shape-validated before comparison. IDs start at 1 (`000001.sql`) and advance only
+when a migration is published. Equivalent schemas print `No schema changes.` and
+do not rewrite the lock or create a migration. The command may create an empty
+output directory on an initial no-op.
+
+Publication stages and syncs both files, publishes complete SQL without replacing
+an existing file, then atomically replaces the lock as its commit point. A writer
+lock serializes runs. Failures before commit leave the old baseline in place and
+remove output owned by that attempt; foreign files are never overwritten. A
+post-commit cleanup failure explicitly reports that the files were published.
+The output filesystem must support hard links, atomic rename and directory sync.
+
+Corrupt/unsupported locks, a different dialect, missing or extra numbered files,
+and a modified latest migration cause an error rather than resetting the baseline.
+All numbered files from 1 through the locked ID must remain present. The latest
+SQL checksum is verified; earlier migration contents are not rehashed by this
+format. Interrupted runs can leave a writer lock, staging files or an uncommitted
+SQL file. Reconcile those files with the recorded baseline before retrying; remove
+the writer lock only after confirming no generation is active. Automatic recovery
+and migration application/history are not implemented.
 
 ## Parse and serialize
 

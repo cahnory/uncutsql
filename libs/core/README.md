@@ -36,3 +36,8 @@ procedures and render a physical plan. Users own the composition. Core never
 selects or imports a dialect, and dialect packages must not run the core diff or
 logical planner on behalf of callers. The CLI demonstrates the wiring and tests
 its workflow with a separate fixture adapter that has a different AST and plan.
+
+`decodeDatabaseSchema(unknown)` validates JSON-restored/external model shapes and
+serializable semantic values with path-based SchemaModelError failures. Model
+validation is separate from duplicate-identity checking in the diff. Lock versions,
+dialect IDs, migration history and filesystem persistence remain consumer concerns.

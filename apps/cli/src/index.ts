@@ -3,10 +3,12 @@ import { Data, Effect, Result } from "effect";
 import { SchemaDiffError } from "@uncutsql/core";
 import { ParseError } from "@uncutsql/codec";
 import { dialect } from "./dialect.ts";
+import { generateMigration } from "./generate.ts";
 import { compareSchemas, renderMigration } from "./workflow.ts";
 
 const help = `Usage: pnpm cli <check|format> [file|-]
        pnpm cli <diff|migration> <before-file|-> <after-file|->
+       pnpm cli generate <schema-file|-> [output-dir]
 
 Read a SQL file, or stdin when file is omitted or '-'.
   check   Validate syntax supported by the selected dialect (no execution).
@@ -14,9 +16,10 @@ Read a SQL file, or stdin when file is omitted or '-'.
   diff    Print a structural schema diff as JSON (before -> after).
           At most one input may be stdin. Changes still exit successfully.
   migration  Print a transaction script for supported changes; never execute it.
+  generate   Write the next migration and schema lock (default directory: migrations).
 
 Statements require separating semicolons; the final semicolon is optional.
-Input files are never modified. Unsupported syntax is an error.
+Input SQL files are never modified. Unsupported syntax is an error.
 `;
 
 class UsageError extends Data.TaggedError("UsageError")<{ readonly message: string }> {}
@@ -56,6 +59,21 @@ const validPath = (value: string) => !value.startsWith("-") || value === "-";
 const program = Effect.gen(function* () {
   if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) return help;
   const [command, filename = "-"] = args;
+  if (command === "generate") {
+    const directory = args[2] ?? "migrations";
+    if (args.length < 2 || args.length > 3 || !validPath(filename) || directory.startsWith("-")) {
+      return yield* Effect.fail(
+        new UsageError({
+          message: "generate requires a schema path (or -) and an optional output directory.",
+        }),
+      );
+    }
+    const ast = yield* readSchema(filename);
+    const result = yield* generateMigration(dialect, ast, directory);
+    return result.migrationPath
+      ? `Generated ${result.migrationPath}\nUpdated ${result.lockPath}\n`
+      : "No schema changes.\n";
+  }
   if (command === "diff" || command === "migration") {
     const target = args[2];
     if (
@@ -93,7 +111,9 @@ const program = Effect.gen(function* () {
   }
   if ((command !== "check" && command !== "format") || args.length > 2 || !validPath(filename)) {
     return yield* Effect.fail(
-      new UsageError({ message: "Expected check, format, diff or migration with input paths." }),
+      new UsageError({
+        message: "Expected check, format, diff, migration or generate with input paths.",
+      }),
     );
   }
   const statements = yield* readSchema(filename);
