@@ -11,7 +11,17 @@ export interface ValuesQuery {
 }
 
 /** Query syntax is separate from schema declarations and schema lowering. */
-export type Query = ValuesQuery | SelectQuery;
+export type Query = ValuesQuery | SelectQuery | CompoundQuery;
+export type QueryCore = ValuesQuery | SelectCore;
+export type CompoundOperator = "UNION" | "UNION ALL" | "INTERSECT" | "EXCEPT";
+
+export interface CompoundQuery {
+  readonly _tag: "CompoundQuery";
+  readonly head: QueryCore;
+  readonly rest: readonly { readonly operator: CompoundOperator; readonly query: QueryCore }[];
+  readonly orderBy?: readonly OrderingTerm[];
+  readonly limit?: LimitClause;
+}
 
 export type ResultColumn =
   | { readonly _tag: "StarColumn" }
@@ -26,7 +36,7 @@ export type LimitClause =
   | { readonly _tag: "CountLimit"; readonly count: Expression; readonly offset?: Expression }
   | { readonly _tag: "CommaLimit"; readonly offset: Expression; readonly count: Expression };
 
-export interface SelectQuery {
+export interface SelectCore {
   readonly _tag: "SelectQuery";
   readonly modifier?: "ALL" | "DISTINCT";
   readonly columns: readonly ResultColumn[];
@@ -35,6 +45,9 @@ export interface SelectQuery {
   readonly groupBy?: readonly Expression[];
   readonly having?: Expression;
   readonly windows?: readonly { readonly name: string; readonly definition: WindowDefinition }[];
+}
+
+export interface SelectQuery extends SelectCore {
   readonly orderBy?: readonly OrderingTerm[];
   readonly limit?: LimitClause;
 }

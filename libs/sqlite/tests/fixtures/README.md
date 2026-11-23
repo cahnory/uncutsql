@@ -60,3 +60,6 @@ implementation and exercised by `window-expression.test.ts`.
 
 The full `select-core` group is copied unchanged from the previous rules and
 exercised by `select-query.test.ts`, including its VALUES fixture.
+
+`select-statement` copies the previous valid/invalid fixtures unchanged, excluding
+WITH cases until CTE support lands. They run in `compound-query.test.ts`.

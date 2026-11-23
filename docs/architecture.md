@@ -724,7 +724,7 @@ clause ambiguity. A qualified-wildcard probe backtracks before ordinary expressi
 parsing so `table.column` and `table.*` remain distinct.
 
 FROM currently supports tables and table functions, including comma-separated
-sources. Joins, subquery sources, compounds and WITH remain pending; trailing
+sources. Joins, subquery sources and WITH remain pending; trailing
 unsupported clauses fail. Window declarations use the same quote-preserving name
 codec as references. All previous select-core fixtures are retained, and native
 SQLite tests cover aggregation, aliases, qualified wildcards and window inheritance.
@@ -739,3 +739,14 @@ would change bindings. This also fixes the earlier implementation's treatment of
 the first comma-form expression as the count. SQLite validates integer conversion
 and runtime expression restrictions. Tests compare native results, including
 zero/negative counts, negative offsets and anonymous parameters in both forms.
+
+## Compound queries
+
+Query cores are separate from query-level ORDER BY/LIMIT. CompoundQuery stores
+an initial core and an ordered list of operator/core pairs, preserving SQLite's
+left-to-right grouping across UNION, UNION ALL, INTERSECT and EXCEPT. SELECT and
+VALUES can participate as cores. A final VALUES core disallows ORDER BY/LIMIT;
+parsing and encoding enforce this. Encoding also rejects misplaced core-level
+tails instead of silently dropping them. Existing standalone SELECT ASTs keep
+their shape. Previous select-statement fixtures are reused except WITH cases,
+which remain pending.

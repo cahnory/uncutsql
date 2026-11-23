@@ -13,19 +13,17 @@ import { keywordSequence } from "../../operators/keyword-sequence.ts";
 import { punctuation } from "../../operators/punctuation.ts";
 import { windowDefinition } from "../over-clause.ts";
 import { windowName } from "../window-name.ts";
-import { orderingTerm } from "../ordering-term.ts";
 import type { Expression } from "../expression/types.ts";
-import type { SelectQuery } from "./types.ts";
+import type { SelectCore } from "./types.ts";
 import { resultColumn } from "./result-column.ts";
-import { limitClause } from "./limit-clause.ts";
 import { tableSource } from "./table-source.ts";
 
-export const selectQuery = (expression: Codec<Expression>): Codec<SelectQuery> => {
+export const selectCore = (expression: Codec<Expression>): Codec<SelectCore> => {
   const list = <A>(codec: Codec<A>) => repeat(codec, { min: 1, separator: punctuation(",", ", ") });
   const clause = <A>(words: readonly string[], codec: Codec<A>) =>
     optional(prefixed(keywordSequence(words), codec, " "));
   return located(
-    "SelectQuery",
+    "SelectCore",
     transform(
       prefixed(
         keyword("SELECT"),
@@ -49,25 +47,13 @@ export const selectQuery = (expression: Codec<Expression>): Codec<SelectQuery> =
                 ),
               ),
             ),
-            orderBy: clause(["ORDER", "BY"], list(orderingTerm(expression))),
-            limit: optional(limitClause(expression)),
           },
           " ",
         ),
         " ",
       ),
       {
-        decode: ({
-          columns,
-          modifier,
-          from,
-          where,
-          groupBy,
-          having,
-          windows,
-          orderBy,
-          limit,
-        }): SelectQuery => ({
+        decode: ({ columns, modifier, from, where, groupBy, having, windows }): SelectCore => ({
           _tag: "SelectQuery",
           columns,
           ...(modifier === undefined ? {} : { modifier }),
@@ -76,10 +62,8 @@ export const selectQuery = (expression: Codec<Expression>): Codec<SelectQuery> =
           ...(groupBy === undefined ? {} : { groupBy }),
           ...(having === undefined ? {} : { having }),
           ...(windows === undefined ? {} : { windows }),
-          ...(orderBy === undefined ? {} : { orderBy }),
-          ...(limit === undefined ? {} : { limit }),
         }),
-        encode: (value: SelectQuery) => ({
+        encode: (value: SelectCore) => ({
           columns: value.columns,
           modifier: value.modifier,
           from: value.from,
@@ -87,8 +71,6 @@ export const selectQuery = (expression: Codec<Expression>): Codec<SelectQuery> =
           groupBy: value.groupBy,
           having: value.having,
           windows: value.windows,
-          orderBy: value.orderBy,
-          limit: value.limit,
         }),
       },
     ),
