@@ -66,4 +66,5 @@ export {
   type SelectQuery,
   type ResultColumn,
   type TableSource,
+  type LimitClause,
 } from "./query.ts";

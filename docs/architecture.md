@@ -724,7 +724,18 @@ clause ambiguity. A qualified-wildcard probe backtracks before ordinary expressi
 parsing so `table.column` and `table.*` remain distinct.
 
 FROM currently supports tables and table functions, including comma-separated
-sources. Joins, subquery sources, compounds, LIMIT and WITH remain pending; trailing
+sources. Joins, subquery sources, compounds and WITH remain pending; trailing
 unsupported clauses fail. Window declarations use the same quote-preserving name
 codec as references. All previous select-core fixtures are retained, and native
 SQLite tests cover aggregation, aliases, qualified wildcards and window inheritance.
+
+## LIMIT and OFFSET
+
+A dedicated codec retains both `LIMIT count OFFSET offset` and `LIMIT offset, count`.
+The AST exposes the semantic count and offset in either case, with distinct
+CountLimit and CommaLimit tags. Keeping comma syntax preserves the left-to-right
+numbering of anonymous parameters; merely swapping expressions during encoding
+would change bindings. This also fixes the earlier implementation's treatment of
+the first comma-form expression as the count. SQLite validates integer conversion
+and runtime expression restrictions. Tests compare native results, including
+zero/negative counts, negative offsets and anonymous parameters in both forms.

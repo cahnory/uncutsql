@@ -17,6 +17,7 @@ import { orderingTerm } from "../ordering-term.ts";
 import type { Expression } from "../expression/types.ts";
 import type { SelectQuery } from "./types.ts";
 import { resultColumn } from "./result-column.ts";
+import { limitClause } from "./limit-clause.ts";
 import { tableSource } from "./table-source.ts";
 
 export const selectQuery = (expression: Codec<Expression>): Codec<SelectQuery> => {
@@ -49,6 +50,7 @@ export const selectQuery = (expression: Codec<Expression>): Codec<SelectQuery> =
               ),
             ),
             orderBy: clause(["ORDER", "BY"], list(orderingTerm(expression))),
+            limit: optional(limitClause(expression)),
           },
           " ",
         ),
@@ -64,6 +66,7 @@ export const selectQuery = (expression: Codec<Expression>): Codec<SelectQuery> =
           having,
           windows,
           orderBy,
+          limit,
         }): SelectQuery => ({
           _tag: "SelectQuery",
           columns,
@@ -74,6 +77,7 @@ export const selectQuery = (expression: Codec<Expression>): Codec<SelectQuery> =
           ...(having === undefined ? {} : { having }),
           ...(windows === undefined ? {} : { windows }),
           ...(orderBy === undefined ? {} : { orderBy }),
+          ...(limit === undefined ? {} : { limit }),
         }),
         encode: (value: SelectQuery) => ({
           columns: value.columns,
@@ -84,6 +88,7 @@ export const selectQuery = (expression: Codec<Expression>): Codec<SelectQuery> =
           having: value.having,
           windows: value.windows,
           orderBy: value.orderBy,
+          limit: value.limit,
         }),
       },
     ),

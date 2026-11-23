@@ -15,7 +15,7 @@ explicit column definitions. Expression support is substantial but incomplete.
 | Expressions            | Partial              | Arithmetic, comparisons, calls, IN/BETWEEN, COLLATE and JSON extraction; remaining forms listed below |
 | CREATE TABLE           | Supported subset     | Columns, constraints, references, generated columns and table options; no AS SELECT                   |
 | Schema files           | Supported subset     | Ordered CREATE TABLE statements, empty statements and optional final semicolon                        |
-| Queries                | Supported subset     | SELECT cores and VALUES; joins, subqueries, compounds, WITH and LIMIT pending                         |
+| Queries                | Supported subset     | SELECT cores and VALUES; joins, subqueries, compounds, WITH pending                                   |
 | Other input statements | Not implemented      | Other DDL, DML and administrative statements                                                          |
 | AST ↔ database model   | Supported for tables | Columns, constraints, options and schema identity; no standalone indexes/views/triggers               |
 | Migration output       | Supported subset     | Create, drop, add column and rebuild; this is separate from input parsing                             |
@@ -117,13 +117,13 @@ and generated-column dependencies remain SQLite's responsibility.
 
 ## Other statement families still to implement
 
-| Family                  | Remaining input syntax                                                   |
-| ----------------------- | ------------------------------------------------------------------------ |
-| Queries                 | WITH/recursive CTEs, joins, compound queries, subquery sources and LIMIT |
-| Schema DDL              | ALTER TABLE, DROP TABLE, CREATE/DROP INDEX, VIEW and TRIGGER             |
-| Data changes            | INSERT/REPLACE, UPSERT, UPDATE, DELETE and RETURNING                     |
-| Transactions            | BEGIN, COMMIT/END, ROLLBACK, SAVEPOINT and RELEASE                       |
-| Database administration | ATTACH/DETACH, PRAGMA, VACUUM, ANALYZE, REINDEX and EXPLAIN              |
+| Family                  | Remaining input syntax                                         |
+| ----------------------- | -------------------------------------------------------------- |
+| Queries                 | WITH/recursive CTEs, joins, compound queries, subquery sources |
+| Schema DDL              | ALTER TABLE, DROP TABLE, CREATE/DROP INDEX, VIEW and TRIGGER   |
+| Data changes            | INSERT/REPLACE, UPSERT, UPDATE, DELETE and RETURNING           |
+| Transactions            | BEGIN, COMMIT/END, ROLLBACK, SAVEPOINT and RELEASE             |
+| Database administration | ATTACH/DETACH, PRAGMA, VACUUM, ANALYZE, REINDEX and EXPLAIN    |
 
 The migration renderer can emit some of these statements without exposing parsers
 for them. For example, generating ALTER TABLE ADD COLUMN does **not** mean that
@@ -178,7 +178,7 @@ are documented in the [workspace README](../../README.md).
 - [x] SELECT cores, DISTINCT/ALL, wildcards and explicit/implicit aliases.
 - [x] FROM tables and table functions, with schema qualifiers and comma-separated sources.
 - [x] WHERE, GROUP BY/HAVING, WINDOW declarations and ORDER BY.
-- [ ] LIMIT and OFFSET.
+- [x] LIMIT and OFFSET, including comma syntax with its original expression/binding order.
 - [ ] Joins, compound queries and WITH/recursive CTEs.
 
 `sqlQuery` parses one query with an optional final semicolon and emits a canonical

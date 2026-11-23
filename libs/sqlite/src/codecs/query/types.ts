@@ -22,6 +22,10 @@ export interface TableSource extends InTableTarget {
   readonly alias?: string;
 }
 
+export type LimitClause =
+  | { readonly _tag: "CountLimit"; readonly count: Expression; readonly offset?: Expression }
+  | { readonly _tag: "CommaLimit"; readonly offset: Expression; readonly count: Expression };
+
 export interface SelectQuery {
   readonly _tag: "SelectQuery";
   readonly modifier?: "ALL" | "DISTINCT";
@@ -32,4 +36,5 @@ export interface SelectQuery {
   readonly having?: Expression;
   readonly windows?: readonly { readonly name: string; readonly definition: WindowDefinition }[];
   readonly orderBy?: readonly OrderingTerm[];
+  readonly limit?: LimitClause;
 }
