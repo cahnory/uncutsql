@@ -143,7 +143,8 @@ for them. For example, generating ALTER TABLE ADD COLUMN does **not** mean that
       Copy matching names, use defaults for new columns, recompute generated values,
       preserve accessible hidden rowids and retained AUTOINCREMENT high-water marks.
 - [x] Report data-loss warnings and reject unsupported copy/dependency plans.
-- [ ] Infer renames or define custom data transformations.
+- [x] Apply explicit column-rename decisions through rebuild copy mappings, including type/constraint changes.
+- [ ] Infer rename candidates by similarity or define custom data transformations.
 - [ ] Model and preserve standalone indexes, views and triggers during rebuilds.
 - [ ] General cross-dialect conversion or arbitrary migration-script parsing.
 

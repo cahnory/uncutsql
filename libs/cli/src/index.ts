@@ -1,22 +1,23 @@
 #!/usr/bin/env node
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { Data, Effect, Result } from "effect";
-import { SchemaDiffError } from "@uncutsql/core";
+import { SchemaDiffError, MigrationDecisionError, prepareMigrationDecisions } from "@uncutsql/core";
 import { ParseError } from "@uncutsql/codec";
 import type { Dialect } from "@uncutsql/core";
 import { parseOptions, resolveConfig, UsageError } from "./config.ts";
 import { loadDialect, loadDriver } from "./plugins.ts";
 import { applyGenerated } from "./apply.ts";
 import { migrationFilename } from "./lock.ts";
-import { generateMigration } from "./generate.ts";
+import { generateMigration, prepareGeneratedDecisions } from "./generate.ts";
 import { compareSchemas, renderMigration } from "./workflow.ts";
 
 const help = `Usage: pnpm cli <check|format> [file|-]
-       pnpm cli <diff|migration> <before-file|-> <after-file|->
+       pnpm cli <diff|decisions|migration> <before-file|-> <after-file|->
        pnpm cli generate <schema-file|-> [output-dir]
        pnpm cli apply <database-target> [output-dir]
 
 Options: --config <file>, --dialect <module>, --driver <module>
+         --decisions <file>, --write-decisions <new-file> (migration/generate)
 Flags override configuration. Drivers are loaded only for apply.
 
 Read a SQL file, or stdin when file is omitted or '-'.
@@ -24,6 +25,7 @@ Read a SQL file, or stdin when file is omitted or '-'.
   format  Print canonical SQL to stdout; comments and formatting are discarded.
   diff    Print a structural schema diff as JSON (before -> after).
           At most one input may be stdin. Changes still exit successfully.
+  decisions  Print unresolved migration choices as JSON (before -> after).
   migration  Print a transaction script for supported changes; never execute it.
   generate   Write the next migration and schema lock (default directory: migrations).
   apply      Apply pending files to a database and record applied history.
@@ -68,10 +70,46 @@ const program = Effect.gen(function* () {
   const { args, options } = yield* parseOptions(process.argv.slice(2));
   if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) return help;
   const [command, filename = "-"] = args;
-  if (!["check", "format", "diff", "migration", "generate", "apply"].includes(command ?? ""))
+  if (
+    !["check", "format", "diff", "decisions", "migration", "generate", "apply"].includes(
+      command ?? "",
+    )
+  )
     return yield* Effect.fail(
-      new UsageError({ message: "Expected check, format, diff, migration, generate or apply." }),
+      new UsageError({
+        message: "Expected check, format, diff, decisions, migration, generate or apply.",
+      }),
     );
+  if (
+    (options.decisions || options.writeDecisions) &&
+    command !== "migration" &&
+    command !== "generate"
+  )
+    return yield* Effect.fail(
+      new UsageError({ message: "Decision-file options apply only to migration and generate." }),
+    );
+  if (options.decisions && options.writeDecisions)
+    return yield* Effect.fail(
+      new UsageError({ message: "Choose --decisions or --write-decisions, not both." }),
+    );
+  const decisions: unknown =
+    options.decisions === undefined
+      ? undefined
+      : yield* Effect.tryPromise({
+          try: async () => JSON.parse(await readFile(options.decisions!, "utf8")),
+          catch: (cause) => new InputError({ message: `Cannot read decisions: ${String(cause)}` }),
+        });
+  const writeDecisions = (document: unknown) =>
+    Effect.tryPromise({
+      try: async () => {
+        await writeFile(options.writeDecisions!, JSON.stringify(document, null, 2) + "\n", {
+          flag: "wx",
+        });
+        return `Wrote ${options.writeDecisions}. Set each resolution to {"_tag":"Drop"} or {"_tag":"Rename","target":"column-key"}, then rerun with --decisions.\n`;
+      },
+      catch: (cause) =>
+        new InputError({ message: `Cannot create decision file: ${String(cause)}` }),
+    });
   const selected = yield* resolveConfig(options, process.cwd());
   // Apply only needs the driver's dialect ID; it does not load a SQL parser.
   const dialect = command === "apply" ? undefined : yield* loadDialect(selected.dialect);
@@ -107,12 +145,14 @@ const program = Effect.gen(function* () {
       );
     }
     const ast = yield* readSchema(filename);
-    const result = yield* generateMigration(dialect!, ast, directory);
+    if (options.writeDecisions)
+      return yield* writeDecisions(yield* prepareGeneratedDecisions(dialect!, ast, directory));
+    const result = yield* generateMigration(dialect!, ast, directory, decisions);
     return result.migrationPath
       ? `Generated ${result.migrationPath}\nUpdated ${result.lockPath}\n`
       : "No schema changes.\n";
   }
-  if (command === "diff" || command === "migration") {
+  if (command === "diff" || command === "migration" || command === "decisions") {
     const target = args[2];
     if (
       args.length !== 3 ||
@@ -140,8 +180,20 @@ const program = Effect.gen(function* () {
           }),
       ),
     );
+    if (command === "decisions")
+      return (
+        JSON.stringify(
+          yield* prepareMigrationDecisions(comparison.before, comparison.after),
+          null,
+          2,
+        ) + "\n"
+      );
     if (command === "migration") {
-      const sql = yield* renderMigration(dialect!, comparison);
+      if (options.writeDecisions)
+        return yield* writeDecisions(
+          yield* prepareMigrationDecisions(comparison.before, comparison.after),
+        );
+      const sql = yield* renderMigration(dialect!, comparison, decisions);
       return sql.length ? `${sql}\n` : "";
     }
     const diff = comparison.diff;
@@ -167,5 +219,9 @@ if (Result.isSuccess(result)) {
 } else {
   const error = result.failure;
   process.stderr.write(`${error.message}\n${error instanceof UsageError ? `\n${help}` : ""}`);
+  if (error instanceof MigrationDecisionError)
+    process.stderr.write(
+      "Use --write-decisions <new-file> to prepare choices; edit resolution fields, then rerun with --decisions <file>. No migration was generated.\n",
+    );
   process.exitCode = error instanceof UsageError ? 2 : 1;
 }

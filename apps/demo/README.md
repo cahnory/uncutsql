@@ -64,3 +64,26 @@ pnpm cli format examples/schema-next.sql
 
 The demo's tests cover CLI/SQLite integration. Dialect-independent CLI tests live
 in `libs/cli`; native execution tests live in `libs/sqlite-driver`.
+
+## Resolve a column rename
+
+After the generation sequence above, try renaming `users.name` to `display_name`:
+
+```sh
+pnpm demo:cli generate examples/schema-renamed.sql .local/migrations --write-decisions .local/rename.json
+```
+
+In `.local/rename.json`, set the question's `resolution` to
+`{"_tag":"Rename","target":"display_name"}`. Choosing `{"_tag":"Drop"}` instead
+means removing the old data and treating the new column as unrelated; because
+this example's new column is NOT NULL without a default, that choice cannot
+populate existing rows successfully.
+
+```sh
+pnpm demo:cli generate examples/schema-renamed.sql .local/migrations --decisions .local/rename.json
+# Inspect the new SQL and its explicit old-to-new column copy before applying.
+pnpm demo:cli apply .local/app.sqlite .local/migrations
+```
+
+Decisions are saved inside the generated migration. Editing the schema or
+advancing the baseline invalidates an old decision file.

@@ -1,0 +1,14 @@
+-- Rename users.name to display_name; retain its NOT NULL and CHECK constraints.
+create table users (
+  id INTEGER PRIMARY KEY,
+  display_name TEXT NOT NULL CHECK (length(display_name) > 0),
+  email TEXT UNIQUE,
+  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'disabled'))
+);
+
+create table posts (
+  id INTEGER PRIMARY KEY,
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  title TEXT NOT NULL CHECK (length(title) > 0),
+  created_at TEXT DEFAULT (datetime('now'))
+);

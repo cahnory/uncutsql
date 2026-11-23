@@ -29,7 +29,13 @@ export const parseOptions = (args: readonly string[]) =>
   Effect.try({
     try: () => {
       const positional: string[] = [];
-      const options: { config?: string; dialect?: string; driver?: string } = {};
+      const options: {
+        config?: string;
+        dialect?: string;
+        driver?: string;
+        decisions?: string;
+        writeDecisions?: string;
+      } = {};
       for (let index = 0; index < args.length; index++) {
         const arg = args[index]!;
         if (arg === "--") {
@@ -37,13 +43,21 @@ export const parseOptions = (args: readonly string[]) =>
           break;
         }
         const [name, ...inline] = arg.split("=");
-        if (name !== "--config" && name !== "--dialect" && name !== "--driver") {
+        if (
+          name !== "--config" &&
+          name !== "--dialect" &&
+          name !== "--driver" &&
+          name !== "--decisions" &&
+          name !== "--write-decisions"
+        ) {
           positional.push(arg);
           continue;
         }
         const value = inline.length ? inline.join("=") : args[++index];
         if (!value || value.startsWith("--")) throw new Error(`${name} requires a value`);
-        const key = name.slice(2) as keyof typeof options;
+        const key = (
+          name === "--write-decisions" ? "writeDecisions" : name.slice(2)
+        ) as keyof typeof options;
         if (options[key] !== undefined) throw new Error(`${name} was specified more than once`);
         options[key] = value;
       }

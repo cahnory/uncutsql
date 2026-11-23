@@ -26,6 +26,12 @@ export class SchemaDiffError extends Data.TaggedError("SchemaDiffError")<{
   }
 }
 export type TableAlteration =
+  | {
+      readonly _tag: "ColumnRenamed";
+      readonly before: DatabaseColumn;
+      readonly after: DatabaseColumn;
+      readonly fields: readonly ("dataType" | "constraints")[];
+    }
   | { readonly _tag: "ColumnAdded"; readonly column: DatabaseColumn; readonly position: number }
   | { readonly _tag: "ColumnRemoved"; readonly column: DatabaseColumn; readonly position: number }
   | {

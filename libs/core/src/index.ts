@@ -4,3 +4,5 @@ export * from "./migration.ts";
 export type { Dialect } from "./dialect.ts";
 export { decodeDatabaseSchema, SchemaModelError } from "./decode.ts";
 export type { MigrationExecutor, MigrationSource, ExecutionResult } from "./executor.ts";
+
+export * from "./decisions.ts";

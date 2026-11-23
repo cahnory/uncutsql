@@ -12,9 +12,9 @@ Namespaced option keys retain dialect features without hardcoding their meaning.
 Object property order is ignored, while array order remains significant.
 
 ```ts
-import { diffDatabases, planDatabaseMigration } from "@uncutsql/core";
+import { resolveMigrationDecisions, planDatabaseMigration } from "@uncutsql/core";
 
-const diff = yield * diffDatabases(beforeDatabase, afterDatabase);
+const { diff } = yield * resolveMigrationDecisions(beforeDatabase, afterDatabase, decisions);
 const migration = planDatabaseMigration(diff);
 // migration.procedures: CreateTable | DropTable | AlterTable
 ```
@@ -47,3 +47,26 @@ full ordered MigrationSource history and a schema-verification callback, leaving
 core comparison in the application. An executor owns connections, physical
 transactions and applied-history recording. It is selected independently from the
 syntax dialect; core itself has no database driver or filesystem dependency.
+
+## Migration decisions
+
+`prepareMigrationDecisions(before, after)` returns a versioned JSON document with
+both schema snapshots and structured questions for removed tables and columns.
+Column questions list all added keys in that table as candidates; no similarity
+heuristic selects a rename. Each `resolution` starts as `null`.
+
+Consumers collect `{"_tag":"Drop"}` or, for a column,
+`{"_tag":"Rename","target":"new-column-key"}`. Then
+`resolveMigrationDecisions(before, after, document)` validates the untrusted
+answers and snapshots and returns a resolved diff and sanitized decision record.
+Missing, stale, duplicate or conflicting answers fail with MigrationDecisionError;
+its `pending` field carries the review document. Additions alone need no answers.
+
+Renames become ColumnRenamed alterations, including separate dataType/constraints
+change fields. The desired schema remains authoritative: rename decisions do not
+rewrite desired CHECK expressions or foreign-key references. Table renames,
+custom transformations, similarity ranking and automatic approval are not provided.
+
+Core has no prompts or persistence. `planDatabaseMigration` remains a low-level
+primitive for caller-approved intent; user-facing workflows should resolve
+choices before calling it. The CLI enforces this sequence for migration/generate.

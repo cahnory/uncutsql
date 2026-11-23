@@ -832,3 +832,26 @@ wrappers around direct column references when deriving table columns. FROM
 subqueries, CTE definitions and AS queries use that schema-naming context.
 Tests compare native data, column names and type affinities, and cover nested
 contexts, source comments, duplicate names and the previous CTAS fixture.
+
+## Migration decisions before planning
+
+Structural comparison does not decide whether a removal and addition represent
+a rename. Core prepares structured questions and validates a versioned decision
+document against both normalized schema snapshots. Every removed table/column
+needs an explicit Drop or column Rename resolution. Added-column keys are offered
+without ranking; a target can be mapped only once. The resolver recomputes the
+diff and converts resolved pairs into ColumnRenamed changes, retaining type and
+constraint differences. The low-level logical planner then consumes resolved
+intent; direct callers remain responsible for using this decision boundary.
+
+The CLI supports review files, not terminal prompts yet. It owns filesystem I/O,
+prepares generation questions under the existing directory lock, and rechecks the
+baseline when generating. A single JSON comment stores sanitized decisions and
+snapshots inside the SQL, preserving the existing atomic publication protocol
+and checksum protection. Apply never re-infers intent.
+
+SQLite validates rename mappings against native definitions and supplies them to
+the rebuild copy operation. Renames do not trigger removed-column data-loss
+warnings; explicit drops do. Generated columns still recompute, rowid and sequence
+handling remain in place, and incompatible data aborts the transaction. Custom
+transformations and native ALTER COLUMN RENAME optimization remain future work.

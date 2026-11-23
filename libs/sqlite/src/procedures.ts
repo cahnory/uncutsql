@@ -2,12 +2,22 @@ import { Effect } from "effect";
 import { EncodeError } from "@uncutsql/codec";
 import type { DatabaseMigration, TableAlteration } from "@uncutsql/core";
 import type { CreateTable, ColumnDefinition } from "./create-table.ts";
-import { tableIdentity, tableKey, type TableIdentity } from "./schema-identity.ts";
+import { foldIdentifier, tableIdentity, tableKey, type TableIdentity } from "./schema-identity.ts";
 
 type NativeAlteration =
+  | {
+      readonly _tag: "ColumnRenamed";
+      readonly before: ColumnDefinition;
+      readonly after: ColumnDefinition;
+    }
   | { readonly _tag: "ColumnAdded"; readonly column: ColumnDefinition; readonly position: number }
   | { readonly _tag: "ColumnRemoved"; readonly column: ColumnDefinition; readonly position: number }
-  | { readonly _tag: Exclude<TableAlteration["_tag"], "ColumnAdded" | "ColumnRemoved"> };
+  | {
+      readonly _tag: Exclude<
+        TableAlteration["_tag"],
+        "ColumnAdded" | "ColumnRemoved" | "ColumnRenamed"
+      >;
+    };
 
 type NativeProcedure =
   | {
@@ -57,7 +67,24 @@ export const resolveProcedures = (
         );
       const changes: NativeAlteration[] = [];
       for (const change of procedure.changes) {
-        if (change._tag === "ColumnAdded" || change._tag === "ColumnRemoved") {
+        if (change._tag === "ColumnRenamed") {
+          const source = old.columns.find(
+            (column) => foldIdentifier(column.name) === change.before.key,
+          );
+          const destination = target.columns.find(
+            (column) => foldIdentifier(column.name) === change.after.key,
+          );
+          if (
+            !source ||
+            !destination ||
+            source.name !== change.before.name ||
+            destination.name !== change.after.name
+          )
+            return yield* Effect.fail(
+              new EncodeError({ message: "Rename decision does not match its database context" }),
+            );
+          changes.push({ _tag: "ColumnRenamed", before: source, after: destination });
+        } else if (change._tag === "ColumnAdded" || change._tag === "ColumnRemoved") {
           const column = (change._tag === "ColumnAdded" ? target : old).columns[change.position];
           if (!column || column.name !== change.column.name)
             return yield* Effect.fail(

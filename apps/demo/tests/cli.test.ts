@@ -137,9 +137,25 @@ test("CLI migration emits complete scripts or errors without partial output", ()
     assert.equal(unsupported.stdout, "");
     assert.match(unsupported.stderr, /Cannot preserve rowids/);
     const drop = run(["migration", before, "-"], "");
-    assert.equal(drop.status, 0, drop.stderr);
-    assert.match(drop.stdout, /WARNING: Dropping table/);
-    assert.match(drop.stdout, /DROP TABLE "main"\."t";/);
+    assert.equal(drop.status, 1);
+    assert.equal(drop.stdout, "");
+    assert.match(drop.stderr, /Unresolved migration decisions/);
+    const pending = JSON.parse(run(["decisions", before, "-"], "").stdout);
+    const choices = join(directory, "choices.json");
+    writeFileSync(
+      choices,
+      JSON.stringify({
+        ...pending,
+        decisions: pending.decisions.map((item: object) => ({
+          ...item,
+          resolution: { _tag: "Drop" },
+        })),
+      }),
+    );
+    const approved = run(["migration", before, "-", "--decisions", choices], "");
+    assert.equal(approved.status, 0, approved.stderr);
+    assert.match(approved.stdout, /WARNING: Dropping table/);
+    assert.match(approved.stdout, /DROP TABLE "main"\."t";/);
     assert.equal(run(["migration", before, "-"], "CREATE TABLE t (a)").stdout, "");
     assert.equal(run(["migration", "-", "-"]).status, 2);
     assert.equal(readFileSync(before, "utf8"), "CREATE TABLE t (a)");

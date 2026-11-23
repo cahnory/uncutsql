@@ -1,4 +1,4 @@
-export { generateMigration } from "./generate.ts";
+export { generateMigration, prepareGeneratedDecisions } from "./generate.ts";
 export { applyGenerated } from "./apply.ts";
 export { hashMigration } from "./lock.ts";
 export { compareSchemas, renderMigration } from "./workflow.ts";

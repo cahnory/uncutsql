@@ -12,6 +12,7 @@ export interface RebuildTableOperation {
   readonly before: CreateTable;
   readonly after: CreateTable;
   readonly temporaryName: string;
+  readonly renames?: readonly { readonly source: string; readonly target: string }[];
 }
 
 export const qualifiedTable = (table: TableIdentity) =>
@@ -33,10 +34,31 @@ const rowidAlias = (table: CreateTable) =>
 export const rebuildCopy = (
   before: CreateTable,
   after: CreateTable,
+  renames: readonly { readonly source: string; readonly target: string }[] = [],
 ): readonly { source: string; target: string }[] | string => {
   const previous = new Map(before.columns.map((column) => [foldIdentifier(column.name), column]));
+  const next = new Set(after.columns.map((column) => foldIdentifier(column.name)));
+  const mapping = new Map<string, string>();
+  const sources = new Set<string>();
+  for (const rename of renames) {
+    const source = foldIdentifier(rename.source),
+      target = foldIdentifier(rename.target);
+    if (
+      !previous.has(source) ||
+      !next.has(target) ||
+      previous.has(target) ||
+      next.has(source) ||
+      mapping.has(target) ||
+      sources.has(source)
+    )
+      return "Invalid or conflicting column rename mapping";
+    mapping.set(target, source);
+    sources.add(source);
+  }
   const columns = after.columns.flatMap((column) => {
-    const old = previous.get(foldIdentifier(column.name));
+    const old = previous.get(
+      mapping.get(foldIdentifier(column.name)) ?? foldIdentifier(column.name),
+    );
     return old && !generated(column) ? [{ source: old.name, target: column.name }] : [];
   });
   if (hasRowid(before) && hasRowid(after)) {
@@ -58,7 +80,7 @@ export const encodeRebuild = (
   operation: RebuildTableOperation,
 ): Effect.Effect<string, EncodeError> =>
   Effect.gen(function* () {
-    const copy = rebuildCopy(operation.before, operation.after);
+    const copy = rebuildCopy(operation.before, operation.after, operation.renames);
     if (typeof copy === "string") return yield* Effect.fail(new EncodeError({ message: copy }));
     const table = yield* qualifiedTable(operation.table);
     const replacement = yield* qualifiedTable({

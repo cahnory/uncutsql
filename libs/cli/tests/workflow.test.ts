@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Effect } from "effect";
+import { prepareMigrationDecisions } from "@uncutsql/core";
 import type { DatabaseSchema, DatabaseMigration, Dialect } from "@uncutsql/core";
 import { compareSchemas, renderMigration } from "../src/workflow.ts";
 
@@ -34,7 +35,15 @@ test("consumer workflow swaps dialect adapters without changing its diff or plan
     comparison.diff.changes.map((item) => item._tag),
     ["TableRemoved", "TableAdded"],
   );
-  assert.equal(Effect.runSync(renderMigration(adapter, comparison)), "DropTable,CreateTable");
+  const pending = Effect.runSync(prepareMigrationDecisions(comparison.before, comparison.after));
+  const choices = {
+    ...pending,
+    decisions: pending.decisions.map((item) => ({ ...item, resolution: { _tag: "Drop" } })),
+  };
+  assert.match(
+    Effect.runSync(renderMigration(adapter, comparison, choices)),
+    /DropTable,CreateTable$/,
+  );
 });
 
 test("consumer workflow preserves no-op logical migrations for a non-SQLite adapter", () => {

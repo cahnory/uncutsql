@@ -185,12 +185,12 @@ The planner supports:
 - Rebuilding tables for column changes, insertion/reordering/removal, constraints,
   table options, and additions SQLite cannot perform with ADD COLUMN.
 
-Rebuilds create a replacement table, copy matching column names, drop the old
+Rebuilds create a replacement table, copy matching names and explicitly resolved rename mappings, drop the old
 table, and rename the replacement. New columns use defaults; generated columns
 are recomputed. Removed columns produce data-loss warnings. Accessible hidden
 rowids are copied when both tables support rowids; a changed INTEGER PRIMARY KEY
-can determine a different rowid. Retained AUTOINCREMENT high-water marks are preserved. Rename inference
-and custom data transformations are not implemented. Copying can fail when existing
+can determine a different rowid. Retained AUTOINCREMENT high-water marks are preserved. Column/table removals require explicit decisions in CLI workflows. Rename similarity
+heuristics and custom data transformations are not implemented. Copying can fail when existing
 rows violate the desired constraints or types; rows are never silently ignored or
 replaced to make a migration succeed.
 
@@ -210,7 +210,8 @@ The baseline must cover all table declarations involved; a live database can sti
 have drift or other semantic errors that cause execution to fail.
 
 ```ts
-const procedures = planDatabaseMigration(diff);
+const { diff: resolved } = yield * resolveMigrationDecisions(before, after, decisions);
+const procedures = planDatabaseMigration(resolved);
 const plan = yield * dialect.lowerMigration(procedures, before, after);
 // SQLite plan: { operations: [...], warnings: [...] }
 const sql = yield * dialect.encodeMigration(plan);
@@ -518,3 +519,22 @@ conflicting constraints and contextual name resolution remain SQLite's responsib
 
 See [architecture notes](docs/architecture.md) for combinator contracts, the
 relationship to the earlier experiments, and the next implementation steps.
+
+## Resolve migration intent
+
+A removed column plus an added column is ambiguous. The tool does not guess
+whether data should be dropped or copied to a renamed column. Prepare a decision
+file before generating a migration:
+
+```sh
+pnpm cli migration before.sql after.sql --write-decisions choices.json
+# Set each resolution to {"_tag":"Drop"} or {"_tag":"Rename","target":"new_key"}.
+pnpm cli migration before.sql after.sql --decisions choices.json
+```
+
+`generate desired.sql migrations` supports the same flags against its saved
+baseline. Unresolved, stale and conflicting choices stop generation. Confirmed
+renames retain separate type/constraint changes and SQLite currently implements
+them with a rebuild. Validated decisions are persisted inside the hashed SQL;
+review that concrete script before running apply. See the
+[demo rename walkthrough](apps/demo/README.md#resolve-a-column-rename).

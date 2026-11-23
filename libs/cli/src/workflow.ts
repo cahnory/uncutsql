@@ -2,6 +2,8 @@ import { Effect, Result } from "effect";
 import {
   diffDatabases,
   planDatabaseMigration,
+  resolveMigrationDecisions,
+  type MigrationDecisionError,
   SchemaDiffError,
   type DatabaseSchema,
   type DatabaseDiff,
@@ -45,9 +47,21 @@ export const compareSchemas = <Ast, Plan, E extends Error, R>(
 export const renderMigration = <Ast, Plan, E extends Error, R>(
   dialect: Dialect<Ast, Plan, E, R>,
   comparison: Comparison,
-): Effect.Effect<string, E, R> =>
+  decisions?: unknown,
+): Effect.Effect<string, E | SchemaDiffError | MigrationDecisionError, R> =>
   Effect.gen(function* () {
-    const procedures = planDatabaseMigration(comparison.diff);
+    const resolved = yield* resolveMigrationDecisions(
+      comparison.before,
+      comparison.after,
+      decisions,
+    );
+    const procedures = planDatabaseMigration(resolved.diff);
     const plan = yield* dialect.lowerMigration(procedures, comparison.before, comparison.after);
-    return yield* dialect.encodeMigration(plan);
+    const sql = yield* dialect.encodeMigration(plan);
+    if (!sql.trim()) return sql;
+    // Persist the validated choices inside the hashed migration, using a single JSON comment.
+    const metadata = resolved.decisions.decisions.length
+      ? `-- uncutsql-decisions: ${JSON.stringify(resolved.decisions).replaceAll("\u2028", "\\u2028").replaceAll("\u2029", "\\u2029")}\n`
+      : "";
+    return metadata + sql;
   });

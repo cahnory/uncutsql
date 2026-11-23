@@ -15,6 +15,7 @@ export interface DatabaseMigration {
   readonly procedures: readonly MigrationProcedure[];
 }
 
+/** Low-level logical lowering of caller-approved intent. Resolve migration decisions first in user-facing workflows. */
 export const planDatabaseMigration = (diff: DatabaseDiff): DatabaseMigration => ({
   procedures: diff.changes.map((change): MigrationProcedure => {
     switch (change._tag) {

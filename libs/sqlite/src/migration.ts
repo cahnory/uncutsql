@@ -194,7 +194,10 @@ export const lowerMigration = (
           );
         const additions = change.changes.filter((item) => item._tag === "ColumnAdded");
         if (rebuild || additions.some((item) => unsupportedColumn(item.column))) {
-          const copy = rebuildCopy(change.before, change.after);
+          const renames = change.changes
+            .filter((item) => item._tag === "ColumnRenamed")
+            .map((item) => ({ source: item.before.name, target: item.after.name }));
+          const copy = rebuildCopy(change.before, change.after, renames);
           if (typeof copy === "string") {
             diagnostics.push({ code: "UnsupportedRowCopy", table: change.table, message: copy });
             continue;
@@ -205,6 +208,7 @@ export const lowerMigration = (
             before: change.before,
             after: change.after,
             temporaryName: allocate(change.table.schema, "__uncutsql_rebuild"),
+            ...(renames.length ? { renames } : {}),
           });
           const removed = change.changes.filter((item) => item._tag === "ColumnRemoved");
           if (removed.length)

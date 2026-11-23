@@ -1,7 +1,12 @@
 import { mkdir, open, readFile, readdir, rename, link, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { decodeDatabaseSchema, diffDatabases, type Dialect } from "@uncutsql/core";
+import {
+  decodeDatabaseSchema,
+  diffDatabases,
+  prepareMigrationDecisions,
+  type Dialect,
+} from "@uncutsql/core";
 import { renderMigration } from "./workflow.ts";
 import {
   decodeLock,
@@ -170,6 +175,7 @@ export const generateMigration = <Ast, Plan, E extends Error, R>(
   dialect: Dialect<Ast, Plan, E, R>,
   ast: Ast,
   directory: string,
+  decisions?: unknown,
 ) =>
   Effect.gen(function* () {
     const after = yield* dialect.toDatabaseSchema(ast, "after");
@@ -182,17 +188,22 @@ export const generateMigration = <Ast, Plan, E extends Error, R>(
       Effect.gen(function* () {
         const baseline = yield* readBaseline(directory, dialect.name);
         const diff = yield* diffDatabases(baseline.database, after);
-        if (!diff.changes.length) return {} satisfies GenerationResult;
+        if (!diff.changes.length && decisions === undefined) return {} satisfies GenerationResult;
         const id = baseline.lastMigrationId + 1;
         if (!Number.isSafeInteger(id))
           return yield* Effect.fail(
             new GenerationError({ message: "Migration ID range exhausted" }),
           );
-        const rendered = yield* renderMigration(dialect, {
-          before: baseline.database,
-          after,
-          diff,
-        });
+        const rendered = yield* renderMigration(
+          dialect,
+          {
+            before: baseline.database,
+            after,
+            diff,
+          },
+          decisions,
+        );
+        if (!diff.changes.length) return {} satisfies GenerationResult;
         if (!rendered.trim())
           return yield* Effect.fail(
             new GenerationError({
@@ -248,3 +259,21 @@ export const withMigrationDirectoryLock = <A, E, R>(
       }),
   );
 };
+
+/** Prepare questions against the same locked baseline used by generation. */
+export const prepareGeneratedDecisions = <Ast, Plan, E extends Error, R>(
+  dialect: Dialect<Ast, Plan, E, R>,
+  ast: Ast,
+  directory: string,
+) =>
+  Effect.gen(function* () {
+    const after = yield* dialect.toDatabaseSchema(ast, "after");
+    return yield* withMigrationDirectoryLock(
+      directory,
+      true,
+      Effect.gen(function* () {
+        const baseline = yield* readBaseline(directory, dialect.name);
+        return yield* prepareMigrationDecisions(baseline.database, after);
+      }),
+    );
+  });
