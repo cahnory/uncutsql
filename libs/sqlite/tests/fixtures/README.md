@@ -66,3 +66,6 @@ WITH cases until CTE support lands. They run in `compound-query.test.ts`.
 
 The two subquery fixtures in `table-or-subquery/valid` are copied unchanged from
 the previous implementation and run in `derived-table.test.ts`.
+
+The complete `join-operator`, `join-constraint`, `join-clause` and
+`table-or-subquery` groups are now copied unchanged and run in `join-query.test.ts`.

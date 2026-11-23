@@ -1,0 +1,1 @@
+t LEFT JOIN u USING (id) JOIN v ON v.id=t.id

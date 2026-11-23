@@ -1,0 +1,1 @@
+t NATURAL JOIN u

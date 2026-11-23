@@ -723,7 +723,7 @@ clause ambiguity. A qualified-wildcard probe backtracks before ordinary expressi
 parsing so `table.column` and `table.*` remain distinct.
 
 FROM currently supports tables and table functions, including comma-separated
-sources. Joins and WITH remain pending; trailing
+sources. WITH remains pending; trailing
 unsupported clauses fail. Window declarations use the same quote-preserving name
 codec as references. All previous select-core fixtures are retained, and native
 SQLite tests cover aggregation, aliases, qualified wildcards and window inheritance.
@@ -769,7 +769,7 @@ A derived table holds a Query and an optional alias. Query construction is defer
 inside the source codec to avoid eager recursive grammar expansion. Native tests
 cover nested derived tables, VALUES, compounds, inner and outer ordering/limits,
 qualified wildcards and parameter order. The previous subquery-source fixtures
-are retained unchanged. Parenthesized source groups remain pending.
+are retained unchanged. Parenthesized source groups are supported by the FROM codec.
 
 ## Table index hints
 
@@ -777,3 +777,22 @@ Named tables accept INDEXED BY and NOT INDEXED after their optional alias.
 A separate codec preserves the hint, and source validation rejects hints on
 table functions and derived tables in both directions. Native regression tests
 compare query results and EXPLAIN QUERY PLAN output before and after encoding.
+
+## Joins and grouped sources
+
+FROM has a shared codec for comma-separated sources and explicit joins. Simple
+comma lists retain their array representation; other join chains use JoinedSource
+with a left source and ordered operator/right-source/constraint entries. The chain
+is flat, preserving SQLite's left-to-right grouping even when comma and keyword
+joins are mixed. GroupedSource preserves explicit parentheses and aliases.
+
+CommaJoin remains distinct from KeywordJoin with CROSS: CROSS JOIN constrains
+SQLite's planner, so rewriting a comma as CROSS JOIN would change behavior.
+Keyword modifiers preserve their spelling order, including SQLite's compatible
+nonstandard combinations such as LEFT RIGHT JOIN. Validation limits modifiers to
+three, rejects incompatible inner/outer combinations, and forbids ON/USING with
+NATURAL. ON remains valid on comma and CROSS joins, as SQLite permits.
+
+Native tests compare both rows and EXPLAIN QUERY PLAN, including outer joins,
+source grouping, derived tables and correlated ON expressions. All previous
+join-operator, join-constraint, join-clause and table-or-subquery fixtures are used.

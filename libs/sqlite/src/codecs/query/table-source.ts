@@ -12,9 +12,10 @@ import {
 import { parenthesized } from "../../operators/parenthesized.ts";
 import { inTableTarget } from "../expression/in-table-target.ts";
 import type { Expression } from "../expression/types.ts";
-import type { Query, TableSource } from "./types.ts";
+import type { Query, TableSource, FromClause } from "./types.ts";
 import { query } from "./query.ts";
 import { indexHint } from "./index-hint.ts";
+import { fromClause } from "./from-clause.ts";
 import { alias } from "./alias.ts";
 
 export const tableSource = (expression: Codec<Expression>): Codec<TableSource> => {
@@ -23,26 +24,47 @@ export const tableSource = (expression: Codec<Expression>): Codec<TableSource> =
     decode: (cursor) => query(expression).decode(cursor),
     encode: (value) => query(expression).encode(value),
   });
+  const nestedSources = make<FromClause>({
+    decode: (cursor) => fromClause(expression).decode(cursor),
+    encode: (value) => fromClause(expression).encode(value),
+  });
   const target = taggedUnion({
     Table: transform(inTableTarget(expression), {
       decode: (target) => ({ _tag: "Table" as const, target }),
       encode: (value) => value.target,
     }),
-    SubquerySource: transform(parenthesized(nestedQuery), {
-      decode: (query) => ({ _tag: "SubquerySource" as const, query }),
-      encode: (value) => value.query,
-    }),
+    Parenthesized: transform(
+      parenthesized(
+        taggedUnion({
+          SubquerySource: transform(nestedQuery, {
+            decode: (query) => ({ _tag: "SubquerySource" as const, query }),
+            encode: (value) => value.query,
+          }),
+          GroupedSource: transform(nestedSources, {
+            decode: (from) => ({ _tag: "GroupedSource" as const, from }),
+            encode: (value) => value.from,
+          }),
+        }),
+      ),
+      {
+        decode: (source) => ({ _tag: "Parenthesized" as const, source }),
+        encode: (value) => value.source,
+      },
+    ),
   });
   const syntax = transform(
     struct({ target, alias: optional(alias), indexHint: optional(indexHint) }, " "),
     {
       decode: ({ target, alias, indexHint }): TableSource => ({
-        ...(target._tag === "Table" ? target.target : target),
+        ...(target._tag === "Table" ? target.target : target.source),
         ...(alias === undefined ? {} : { alias }),
         ...(indexHint === undefined ? {} : { indexHint }),
       }),
       encode: (value: TableSource) => ({
-        target: "_tag" in value ? value : { _tag: "Table" as const, target: value },
+        target:
+          "_tag" in value
+            ? { _tag: "Parenthesized" as const, source: value }
+            : { _tag: "Table" as const, target: value },
         alias: value.alias,
         indexHint: "indexHint" in value ? value.indexHint : undefined,
       }),

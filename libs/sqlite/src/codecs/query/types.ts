@@ -43,7 +43,31 @@ export interface SubquerySource {
   readonly alias?: string;
 }
 
-export type TableSource = TableReferenceSource | SubquerySource;
+export interface GroupedSource {
+  readonly _tag: "GroupedSource";
+  readonly from: FromClause;
+  readonly alias?: string;
+}
+
+export type TableSource = TableReferenceSource | SubquerySource | GroupedSource;
+
+export type JoinModifier = "NATURAL" | "LEFT" | "RIGHT" | "FULL" | "OUTER" | "INNER" | "CROSS";
+export type JoinOperator =
+  | { readonly _tag: "CommaJoin" }
+  | { readonly _tag: "KeywordJoin"; readonly modifiers: readonly JoinModifier[] };
+export type JoinConstraint =
+  | { readonly _tag: "On"; readonly expression: Expression }
+  | { readonly _tag: "Using"; readonly columns: readonly string[] };
+export interface JoinedSource {
+  readonly _tag: "JoinedSource";
+  readonly head: TableSource;
+  readonly joins: readonly {
+    readonly operator: JoinOperator;
+    readonly right: TableSource;
+    readonly constraint?: JoinConstraint;
+  }[];
+}
+export type FromClause = readonly TableSource[] | JoinedSource;
 
 export type LimitClause =
   | { readonly _tag: "CountLimit"; readonly count: Expression; readonly offset?: Expression }
@@ -53,7 +77,7 @@ export interface SelectCore {
   readonly _tag: "SelectQuery";
   readonly modifier?: "ALL" | "DISTINCT";
   readonly columns: readonly ResultColumn[];
-  readonly from?: readonly TableSource[];
+  readonly from?: FromClause;
   readonly where?: Expression;
   readonly groupBy?: readonly Expression[];
   readonly having?: Expression;

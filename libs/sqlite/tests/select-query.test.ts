@@ -37,7 +37,7 @@ test("SELECT cores preserve native results, aliases and window names", () => {
   }
 });
 
-test("SELECT rejects incomplete clauses and unsupported joins", () => {
+test("SELECT rejects incomplete clauses ", () => {
   for (const source of [
     "SELECT",
     "SELECT FROM t",
@@ -49,7 +49,6 @@ test("SELECT rejects incomplete clauses and unsupported joins", () => {
     "SELECT 1 GROUP BY",
     "SELECT 1 ORDER BY",
     "SELECT 1 WINDOW w AS",
-    "SELECT * FROM t JOIN t",
   ]) {
     assert.ok(Result.isFailure(Effect.runSync(Effect.result(sqlQuery.decode(source)))), source);
   }

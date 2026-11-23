@@ -16,7 +16,7 @@ import { windowName } from "../window-name.ts";
 import type { Expression } from "../expression/types.ts";
 import type { SelectCore } from "./types.ts";
 import { resultColumn } from "./result-column.ts";
-import { tableSource } from "./table-source.ts";
+import { fromClause } from "./from-clause.ts";
 
 export const selectCore = (expression: Codec<Expression>): Codec<SelectCore> => {
   const list = <A>(codec: Codec<A>) => repeat(codec, { min: 1, separator: punctuation(",", ", ") });
@@ -31,7 +31,7 @@ export const selectCore = (expression: Codec<Expression>): Codec<SelectCore> => 
           {
             modifier: optional(keywordChoice(["DISTINCT", "ALL"])),
             columns: list(resultColumn(expression)),
-            from: clause(["FROM"], list(tableSource(expression))),
+            from: clause(["FROM"], fromClause(expression)),
             where: clause(["WHERE"], expression),
             groupBy: clause(["GROUP", "BY"], list(expression)),
             having: clause(["HAVING"], expression),
