@@ -13,7 +13,7 @@ explicit column definitions. Expression support is substantial but incomplete.
 | ---------------------- | -------------------- | ----------------------------------------------------------------------------------------------------- |
 | Lexical syntax         | Supported subset     | Comments, quoted identifiers, literals and operators; contextual keyword fallbacks remain limited     |
 | Expressions            | Partial              | Arithmetic, comparisons, calls, IN/BETWEEN, COLLATE and JSON extraction; remaining forms listed below |
-| CREATE TABLE           | Supported subset     | Columns, constraints, references, generated columns and table options; no AS SELECT                   |
+| CREATE TABLE           | Supported subset     | Columns, constraints, references, generated columns and table options; including AS queries           |
 | Schema files           | Supported subset     | Ordered CREATE TABLE statements, empty statements and optional final semicolon                        |
 | Queries                | Supported subset     | SELECT/VALUES, joins, compounds, subqueries and WITH/recursive CTEs                                   |
 | Other input statements | Not implemented      | Other DDL, DML and administrative statements                                                          |
@@ -106,12 +106,15 @@ context restrictions, including prohibiting subqueries.
 - [x] `[GENERATED ALWAYS] AS (expression) [VIRTUAL | STORED]`.
 - [x] STRICT and WITHOUT ROWID, retaining order and repeated options.
 - [x] Semicolon-separated schema statements, comments and empty statements.
-- [ ] CREATE TABLE AS SELECT.
+- [x] CREATE TABLE AS SELECT/VALUES/WITH, with schema qualification and TEMP/IF NOT EXISTS.
+      Parsing/formatting supports these statements; declarative schema comparison rejects them
+      because deriving columns and populating data requires query evaluation.
 - [ ] CREATE VIRTUAL TABLE and module-specific arguments.
 - [ ] Remaining SQLite grammar edge cases beyond this explicit subset; this is
       not a claim of exhaustive CREATE TABLE compatibility.
 
-Use `createTable` for a single declaration, `schema` for a schema file, and
+Use `createTable` for a single explicit-column declaration, `createTableStatement`
+for either explicit columns or AS queries, `schema` for a schema file, and
 `sqlExpression` for a standalone expression. `sqlQuery` accepts SELECT cores and standalone VALUES queries. Unsupported trailing input fails
 rather than being silently discarded. Parsing does not perform full schema
 validation: conflicting constraints, STRICT type restrictions, name resolution
@@ -216,3 +219,8 @@ The query checklist covers syntax, not full SQLite semantic validation. Name
 resolution, recursive-CTE restrictions, result widths and function capabilities
 remain SQLite's responsibility. Contextual keywords and legacy quoting still
 have compatibility work listed in the lexical checklist.
+
+Query parsing normalizes implicit computed result-column names into explicit
+aliases so formatting does not rename columns. Derived-table contexts (FROM
+subqueries, CTEs and CREATE TABLE AS) retain SQLite's special column-name handling
+for COLLATE and likelihood wrappers around direct column references.

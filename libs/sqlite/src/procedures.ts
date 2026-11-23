@@ -2,7 +2,6 @@ import { Effect } from "effect";
 import { EncodeError } from "@uncutsql/codec";
 import type { DatabaseMigration, TableAlteration } from "@uncutsql/core";
 import type { CreateTable, ColumnDefinition } from "./create-table.ts";
-import type { Statement } from "./schema.ts";
 import { tableIdentity, tableKey, type TableIdentity } from "./schema-identity.ts";
 
 type NativeAlteration =
@@ -28,8 +27,8 @@ type NativeProcedure =
 /** Resolve caller-supplied procedures into native definitions, without comparing schemas. */
 export const resolveProcedures = (
   migration: DatabaseMigration,
-  before: readonly Statement[],
-  after: readonly Statement[],
+  before: readonly CreateTable[],
+  after: readonly CreateTable[],
 ): Effect.Effect<readonly NativeProcedure[], EncodeError> =>
   Effect.gen(function* () {
     const previous = new Map(before.map((table) => [tableKey(tableIdentity(table)), table]));

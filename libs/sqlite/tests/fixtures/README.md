@@ -69,3 +69,6 @@ the previous implementation and run in `derived-table.test.ts`.
 
 The complete `join-operator`, `join-constraint`, `join-clause` and
 `table-or-subquery` groups are now copied unchanged and run in `join-query.test.ts`.
+
+`previous/create-table-as/29_create_as_select.sql` is copied unchanged from the
+previous CREATE TABLE valid fixtures and tested in `create-table-as.test.ts`.

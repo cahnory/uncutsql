@@ -9,16 +9,16 @@ import {
   repeat,
 } from "@uncutsql/codec";
 import {
-  createTableBodyGrammar,
-  createTableGrammar,
-  type CreateTable,
+  createTableStatementBodyGrammar,
+  createTableStatementGrammar,
+  type CreateTableStatement,
 } from "./codecs/create-table-statement.ts";
 import { trivia } from "./operators/trivia.ts";
 
 /** Supported schema statements, in source order. Extend this union with further DDL. */
-export type Statement = CreateTable;
+export type Statement = CreateTableStatement;
 
-const statementList = repeat(createTableGrammar, { join: "\n" });
+const statementList = repeat(createTableStatementGrammar, { join: "\n" });
 
 export const schemaGrammar: Codec<readonly Statement[]> = make<readonly Statement[]>({
   decode: (cursor) =>
@@ -33,7 +33,7 @@ export const schemaGrammar: Codec<readonly Statement[]> = make<readonly Statemen
           continue;
         }
         const start = next.offset;
-        const statement = yield* createTableBodyGrammar.decode(next);
+        const statement = yield* createTableStatementBodyGrammar.decode(next);
         next = (yield* trivia.decode(statement.next)).next;
         statements.push(statement.value);
         if (next.offset < next.source.length) {
@@ -42,7 +42,12 @@ export const schemaGrammar: Codec<readonly Statement[]> = make<readonly Statemen
           }
           next = { ...next, offset: next.offset + 1 };
         }
-        nodes.push({ kind: "CreateTable", start, end: next.offset, children: statement.nodes });
+        nodes.push({
+          kind: statement.value._tag,
+          start,
+          end: next.offset,
+          children: statement.nodes,
+        });
         next = (yield* trivia.decode(next)).next;
       }
       return read(statements, next, nodes);

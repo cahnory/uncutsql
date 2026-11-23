@@ -5,7 +5,7 @@ import {
   make,
   optional,
   parseError,
-  struct,
+  read,
   taggedUnion,
   transform,
   prefixed,
@@ -14,9 +14,27 @@ import { punctuation } from "../../operators/punctuation.ts";
 import { identifier } from "../identifier.ts";
 import type { Expression } from "../expression/types.ts";
 import type { ResultColumn } from "./types.ts";
+import { lexeme } from "../../operators/lexeme.ts";
 import { alias } from "./alias.ts";
 
-export const resultColumn = (expression: Codec<Expression>): Codec<ResultColumn> => {
+// SQLite's derived-table column naming ignores COLLATE and likelihood wrappers
+// around a direct column. Top-level result labels instead use their source text.
+const derivesColumnName = (expression: Expression): boolean => {
+  if (expression._tag === "ColumnReference") return true;
+  if (expression._tag === "CollateExpression") return derivesColumnName(expression.operand);
+  if (
+    expression._tag === "FunctionCall" &&
+    /^(?:likely|unlikely|likelihood)$/i.test(expression.name) &&
+    expression.arguments[0] !== undefined
+  )
+    return derivesColumnName(expression.arguments[0]);
+  return false;
+};
+
+export const resultColumn = (
+  expression: Codec<Expression>,
+  schemaNames = false,
+): Codec<ResultColumn> => {
   const qualifiedStar = followedBy(identifier, prefixed(punctuation("."), punctuation("*")));
   // A failed qualified wildcard must leave ordinary column references available.
   const tableStar = make<string>({
@@ -33,13 +51,37 @@ export const resultColumn = (expression: Codec<Expression>): Codec<ResultColumn>
       decode: (table) => ({ _tag: "TableStarColumn" as const, table }),
       encode: (value) => value.table,
     }),
-    ExpressionColumn: transform(struct({ expression, alias: optional(alias) }, " "), {
-      decode: ({ expression, alias }) => ({
-        _tag: "ExpressionColumn" as const,
-        expression,
-        ...(alias === undefined ? {} : { alias }),
+    ExpressionColumn: lexeme(
+      make<Extract<ResultColumn, { _tag: "ExpressionColumn" }>>({
+        decode: (cursor) =>
+          Effect.gen(function* () {
+            const value = yield* expression.decode(cursor);
+            const name = yield* optional(alias).decode(value.next);
+            const resultName =
+              name.value ??
+              ((
+                schemaNames
+                  ? derivesColumnName(value.value)
+                  : value.value._tag === "ColumnReference"
+              )
+                ? undefined
+                : cursor.source.slice(cursor.offset, value.next.offset));
+            return read(
+              {
+                _tag: "ExpressionColumn",
+                expression: value.value,
+                ...(resultName === undefined ? {} : { alias: resultName }),
+              },
+              name.next,
+              [...value.nodes, ...name.nodes],
+            );
+          }),
+        encode: (value) =>
+          Effect.gen(function* () {
+            const sql = yield* expression.encode(value.expression);
+            return value.alias === undefined ? sql : `${sql} ${yield* alias.encode(value.alias)}`;
+          }),
       }),
-      encode: (value) => ({ expression: value.expression, alias: value.alias }),
-    }),
+    ),
   });
 };

@@ -152,6 +152,8 @@ test("ambiguous identities return structured diagnostics for both schema sides",
 test("diff validates added ASTs and compares constraints without object-property order dependence", () => {
   const after = parse("CREATE TABLE t (a DEFAULT 1)");
   const table = after[0]!;
+  assert.equal(table._tag, "CreateTable");
+  if (table._tag !== "CreateTable") throw new Error("Expected explicit table");
   const reordered: readonly Statement[] = [
     {
       ...table,
@@ -169,5 +171,5 @@ test("diff validates added ASTs and compares constraints without object-property
   const result = Effect.runSync(Effect.result(diffSchemas([], invalid)));
   assert.ok(Result.isFailure(result));
   assert.ok(result.failure instanceof EncodeError);
-  assert.equal(after[0]!.columns[0]!.constraints.length, 1);
+  assert.equal(table.columns[0]!.constraints.length, 1);
 });

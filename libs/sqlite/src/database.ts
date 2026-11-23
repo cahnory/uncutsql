@@ -8,7 +8,7 @@ import {
   type DiffDiagnostic,
   type SchemaValue,
 } from "@uncutsql/core";
-import { createTable } from "./create-table.ts";
+import { createTable, type CreateTable } from "./create-table.ts";
 import type { Statement } from "./schema.ts";
 import { foldIdentifier, tableIdentity } from "./schema-identity.ts";
 
@@ -45,8 +45,25 @@ export const toDatabaseSchema = (
   side: DiffDiagnostic["side"] = "after",
 ) =>
   Effect.gen(function* () {
+    const unsupported = statements.filter((statement) => statement._tag !== "CreateTable");
+    if (unsupported.length)
+      return yield* Effect.fail(
+        new SchemaDiffError({
+          diagnostics: unsupported.map((statement) => ({
+            code: "UnsupportedSchemaStatement",
+            side,
+            table: {
+              catalog: statement.schema ?? (statement.temporary ? "temp" : "main"),
+              name: statement.name,
+            },
+            message:
+              "CREATE TABLE AS queries require SQLite evaluation to determine columns and populate data; use an explicit table definition for declarative schema comparison",
+          })),
+        }),
+      );
+    const tables = statements.filter((statement) => statement._tag === "CreateTable");
     const database: DatabaseSchema = {
-      tables: statements.map((table) => {
+      tables: tables.map((table) => {
         const identity = tableIdentity(table);
         return {
           identity: { catalog: identity.schema, name: identity.name },
@@ -67,7 +84,7 @@ export const toDatabaseSchema = (
       }),
     };
     const diagnostics = [...validateDatabase(database, side)];
-    for (const table of statements) {
+    for (const table of tables) {
       const id = tableIdentity(table);
       if (table.temporary && id.schema !== "temp")
         diagnostics.push({
@@ -78,7 +95,7 @@ export const toDatabaseSchema = (
         });
     }
     if (diagnostics.length) return yield* Effect.fail(new SchemaDiffError({ diagnostics }));
-    yield* Effect.forEach(statements, createTable.encode, { discard: true });
+    yield* Effect.forEach(tables, createTable.encode, { discard: true });
     return database;
   });
 
@@ -103,7 +120,7 @@ const syntaxConstraint = (value: Constraint) => ({
 /** Materialize SQLite-supported semantic models, including a JSON-restored baseline. */
 export const fromDatabaseSchema = (
   database: DatabaseSchema,
-): Effect.Effect<readonly Statement[], SchemaDiffError | EncodeError> =>
+): Effect.Effect<readonly CreateTable[], SchemaDiffError | EncodeError> =>
   Effect.gen(function* () {
     const diagnostics = validateDatabase(database, "after");
     if (diagnostics.length) return yield* Effect.fail(new SchemaDiffError({ diagnostics }));
@@ -150,7 +167,7 @@ export const fromDatabaseSchema = (
                 ),
               }
             : {}),
-        } as unknown as Statement;
+        } as unknown as CreateTable;
         const encoded = yield* createTable.encode(ast).pipe(
           Effect.catchDefect(() =>
             Effect.fail(

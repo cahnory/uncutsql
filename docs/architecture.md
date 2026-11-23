@@ -809,3 +809,26 @@ and an absent materialization hint stays absent rather than defaulting to
 MATERIALIZED. Native tests compare results and query plans for both hints,
 recursion, nesting, VALUES bodies and anonymous parameters. All previous WITH
 fixtures are now exercised.
+
+## CREATE TABLE AS and inferred result names
+
+The shared CREATE TABLE header feeds either an explicit column definition or an
+AS query. `createTableStatement` and `schema` accept both CreateTable and
+CreateTableAs. The existing `createTable` API retains its explicit-column type for
+migration rendering. CREATE TABLE with both a column definition and AS is rejected,
+correcting an over-permissive path in the previous implementation.
+
+Schema comparison returns UnsupportedSchemaStatement for CREATE TABLE AS rather
+than guessing result columns or executing data queries. Reverse conversion from
+core models therefore still produces only explicit CreateTable declarations.
+The dialect remains independent of any driver.
+
+Formatting query expressions can change their implicit result names, which would
+change CTAS schemas and references from outer queries. Result-column parsing
+normalizes computed names to explicit aliases based on their original expression
+spans. Column references retain native name resolution. Query factories distinguish
+result-label and derived-schema naming: SQLite ignores COLLATE and likelihood
+wrappers around direct column references when deriving table columns. FROM
+subqueries, CTE definitions and AS queries use that schema-naming context.
+Tests compare native data, column names and type affinities, and cover nested
+contexts, source comments, duplicate names and the previous CTAS fixture.

@@ -18,7 +18,10 @@ import type { SelectCore } from "./types.ts";
 import { resultColumn } from "./result-column.ts";
 import { fromClause } from "./from-clause.ts";
 
-export const selectCore = (expression: Codec<Expression>): Codec<SelectCore> => {
+export const selectCore = (
+  expression: Codec<Expression>,
+  schemaNames = false,
+): Codec<SelectCore> => {
   const list = <A>(codec: Codec<A>) => repeat(codec, { min: 1, separator: punctuation(",", ", ") });
   const clause = <A>(words: readonly string[], codec: Codec<A>) =>
     optional(prefixed(keywordSequence(words), codec, " "));
@@ -30,7 +33,7 @@ export const selectCore = (expression: Codec<Expression>): Codec<SelectCore> => 
         struct(
           {
             modifier: optional(keywordChoice(["DISTINCT", "ALL"])),
-            columns: list(resultColumn(expression)),
+            columns: list(resultColumn(expression, schemaNames)),
             from: clause(["FROM"], fromClause(expression)),
             where: clause(["WHERE"], expression),
             groupBy: clause(["GROUP", "BY"], list(expression)),

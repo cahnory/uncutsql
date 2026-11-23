@@ -24,14 +24,14 @@ import { withClause } from "./with-clause.ts";
 import { limitClause } from "./limit-clause.ts";
 import type { Query } from "./types.ts";
 
-export const query = (expression: Codec<Expression>): Codec<Query> => {
+export const query = (expression: Codec<Expression>, schemaNames = false): Codec<Query> => {
   const core = taggedUnion({
-    SelectQuery: selectCore(expression),
+    SelectQuery: selectCore(expression, schemaNames),
     ValuesQuery: valuesQuery(expression),
   });
   const nested = make<Query>({
-    decode: (cursor) => query(expression).decode(cursor),
-    encode: (value) => query(expression).encode(value),
+    decode: (cursor) => query(expression, true).decode(cursor),
+    encode: (value) => query(expression, true).encode(value),
   });
   const syntax = struct(
     {

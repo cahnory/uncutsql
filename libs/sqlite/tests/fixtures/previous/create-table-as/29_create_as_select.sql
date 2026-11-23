@@ -1,0 +1,1 @@
+CREATE TABLE t AS SELECT 1 AS a,'x' AS b
