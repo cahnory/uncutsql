@@ -119,13 +119,13 @@ and generated-column dependencies remain SQLite's responsibility.
 
 ## Other statement families still to implement
 
-| Family                  | Remaining input syntax                                                  |
-| ----------------------- | ----------------------------------------------------------------------- |
-| Queries                 | WITH/recursive CTEs, joins, index hints and parenthesized source groups |
-| Schema DDL              | ALTER TABLE, DROP TABLE, CREATE/DROP INDEX, VIEW and TRIGGER            |
-| Data changes            | INSERT/REPLACE, UPSERT, UPDATE, DELETE and RETURNING                    |
-| Transactions            | BEGIN, COMMIT/END, ROLLBACK, SAVEPOINT and RELEASE                      |
-| Database administration | ATTACH/DETACH, PRAGMA, VACUUM, ANALYZE, REINDEX and EXPLAIN             |
+| Family                  | Remaining input syntax                                       |
+| ----------------------- | ------------------------------------------------------------ |
+| Queries                 | WITH/recursive CTEs, joins and parenthesized source groups   |
+| Schema DDL              | ALTER TABLE, DROP TABLE, CREATE/DROP INDEX, VIEW and TRIGGER |
+| Data changes            | INSERT/REPLACE, UPSERT, UPDATE, DELETE and RETURNING         |
+| Transactions            | BEGIN, COMMIT/END, ROLLBACK, SAVEPOINT and RELEASE           |
+| Database administration | ATTACH/DETACH, PRAGMA, VACUUM, ANALYZE, REINDEX and EXPLAIN  |
 
 The migration renderer can emit some of these statements without exposing parsers
 for them. For example, generating ALTER TABLE ADD COLUMN does **not** mean that
@@ -180,7 +180,8 @@ are documented in the [workspace README](../../README.md).
 - [x] SELECT cores, DISTINCT/ALL, wildcards and explicit/implicit aliases.
 - [x] FROM tables and table functions, with schema qualifiers and comma-separated sources.
 - [x] FROM subqueries, with aliases and recursively nested derived tables.
-- [ ] INDEXED BY/NOT INDEXED hints and parenthesized source groups.
+- [x] INDEXED BY/NOT INDEXED on named table sources.
+- [ ] Parenthesized source groups.
 - [x] WHERE, GROUP BY/HAVING, WINDOW declarations and ORDER BY.
 - [x] LIMIT and OFFSET, including comma syntax with its original expression/binding order.
 - [x] UNION, UNION ALL, INTERSECT and EXCEPT, with query-level ORDER BY/LIMIT.

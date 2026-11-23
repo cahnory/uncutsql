@@ -18,6 +18,7 @@ export type {
   ResultColumn,
   TableSource,
   TableReferenceSource,
+  IndexHint,
   SubquerySource,
   LimitClause,
 } from "./codecs/query/types.ts";

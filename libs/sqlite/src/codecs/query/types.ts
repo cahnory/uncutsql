@@ -28,7 +28,12 @@ export type ResultColumn =
   | { readonly _tag: "TableStarColumn"; readonly table: string }
   | { readonly _tag: "ExpressionColumn"; readonly expression: Expression; readonly alias?: string };
 
+export type IndexHint =
+  | { readonly _tag: "IndexedBy"; readonly name: string }
+  | { readonly _tag: "NotIndexed" };
+
 export interface TableReferenceSource extends InTableTarget {
+  readonly indexHint?: IndexHint;
   readonly alias?: string;
 }
 

@@ -74,6 +74,7 @@ export {
   type ResultColumn,
   type TableSource,
   type TableReferenceSource,
+  type IndexHint,
   type SubquerySource,
   type LimitClause,
 } from "./query.ts";

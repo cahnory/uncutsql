@@ -769,4 +769,11 @@ A derived table holds a Query and an optional alias. Query construction is defer
 inside the source codec to avoid eager recursive grammar expansion. Native tests
 cover nested derived tables, VALUES, compounds, inner and outer ordering/limits,
 qualified wildcards and parameter order. The previous subquery-source fixtures
-are retained unchanged. Parenthesized source groups and index hints remain pending.
+are retained unchanged. Parenthesized source groups remain pending.
+
+## Table index hints
+
+Named tables accept INDEXED BY and NOT INDEXED after their optional alias.
+A separate codec preserves the hint, and source validation rejects hints on
+table functions and derived tables in both directions. Native regression tests
+compare query results and EXPLAIN QUERY PLAN output before and after encoding.
