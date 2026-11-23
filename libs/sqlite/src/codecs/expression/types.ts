@@ -101,6 +101,38 @@ export interface OrderingTerm {
   readonly nulls?: "FIRST" | "LAST";
 }
 
+export type FrameBoundary =
+  | {
+      readonly _tag: "SpecialBoundary";
+      readonly value: "UNBOUNDED PRECEDING" | "UNBOUNDED FOLLOWING" | "CURRENT ROW";
+    }
+  | {
+      readonly _tag: "OffsetBoundary";
+      readonly value: Expression;
+      readonly direction: "PRECEDING" | "FOLLOWING";
+    };
+
+export interface WindowFrame {
+  readonly unit: "ROWS" | "RANGE" | "GROUPS";
+  readonly start: FrameBoundary;
+  readonly end?: FrameBoundary;
+  readonly exclude?: "NO OTHERS" | "CURRENT ROW" | "GROUP" | "TIES";
+}
+
+export interface WindowDefinition {
+  readonly _tag: "WindowDefinition";
+  /** Original identifier token, including quotes: SQLite window lookup preserves them. */
+  readonly base?: string;
+  readonly partitionBy?: readonly Expression[];
+  readonly orderBy?: readonly OrderingTerm[];
+  readonly frame?: WindowFrame;
+}
+
+/** Named-window names retain their original identifier token, including quotes. */
+export type WindowReference =
+  | WindowDefinition
+  | { readonly _tag: "NamedWindow"; readonly name: string };
+
 export interface FunctionCall {
   readonly _tag: "FunctionCall";
   readonly name: string;
@@ -109,6 +141,7 @@ export interface FunctionCall {
   readonly modifier?: "DISTINCT" | "ALL";
   readonly orderBy?: readonly OrderingTerm[];
   readonly filter?: Expression;
+  readonly over?: WindowReference;
 }
 
 /** Parentheses affect tree shape and source spans, not semantic node kinds. */

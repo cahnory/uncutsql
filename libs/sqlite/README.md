@@ -73,7 +73,9 @@ recognizing a keyword does not imply support for the construct it introduces.
 - [x] Aggregate syntax: `*`, DISTINCT/ALL and argument ORDER BY, with ASC/DESC
       and NULLS FIRST/LAST retained explicitly.
 - [x] FILTER (WHERE expression).
-- [ ] OVER, named windows and frame specifications.
+- [x] OVER with named/inline windows, PARTITION BY, ORDER BY, ROWS/RANGE/GROUPS
+      frames and EXCLUDE. Window-name tokens preserve significant quoting.
+      Query-level WINDOW declarations remain part of the pending SELECT grammar.
 - [ ] Scalar subqueries, EXISTS and IN targets that are queries, tables or table functions.
 - [x] Row-value expressions and comparisons, including row-list IN and BETWEEN.
       SQLite validates row cardinality and use in scalar contexts.

@@ -13,6 +13,7 @@ import {
   tuple,
 } from "@uncutsql/codec";
 import { identifier } from "../identifier.ts";
+import { overClause } from "../over-clause.ts";
 import { orderingTerm } from "../ordering-term.ts";
 import { punctuation } from "../../operators/punctuation.ts";
 import { keyword } from "../../operators/keyword.ts";
@@ -56,11 +57,12 @@ export const functionCall = (expression: Codec<Expression>): Codec<FunctionCall>
           " ",
         ),
       ),
+      optional(overClause(expression)),
     ],
     " ",
   );
   const mapped = transform(syntax, {
-    decode: ([[name, args], filter]): FunctionCall => ({
+    decode: ([[name, args], filter, over]): FunctionCall => ({
       _tag: "FunctionCall",
       name,
       arguments: args._tag === "Star" ? [] : args.values,
@@ -71,6 +73,7 @@ export const functionCall = (expression: Codec<Expression>): Codec<FunctionCall>
             ...(args.orderBy === undefined ? {} : { orderBy: args.orderBy }),
           }),
       ...(filter === undefined ? {} : { filter }),
+      ...(over === undefined ? {} : { over }),
     }),
     encode: (value: FunctionCall) =>
       [
@@ -86,6 +89,7 @@ export const functionCall = (expression: Codec<Expression>): Codec<FunctionCall>
               },
         ] as const,
         value.filter,
+        value.over,
       ] as const,
   });
   return located(

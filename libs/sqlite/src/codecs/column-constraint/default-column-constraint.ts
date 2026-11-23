@@ -36,6 +36,7 @@ const isConstant = (value: Expression): boolean => {
       return isConstant(value.operand) && isConstant(value.lower) && isConstant(value.upper);
     case "FunctionCall":
       return (
+        value.over === undefined &&
         value.arguments.every(isConstant) &&
         (value.orderBy === undefined ||
           value.orderBy.every((term) => isConstant(term.expression))) &&

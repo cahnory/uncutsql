@@ -274,7 +274,7 @@ column reference. Calls share the existing expression grammar for arguments,
 including nested calls and source spans. Names encode as quoted identifiers.
 DEFAULT validation recursively checks arguments for column references and wraps
 calls in parentheses. Function lookup, arity and context restrictions remain
-SQLite's responsibility. Aggregate modifiers, FILTER and OVER are not implemented.
+SQLite's responsibility. Aggregate modifiers, FILTER and OVER are supported (see the later aggregate and window sections).
 
 ## BETWEEN expressions
 
@@ -674,3 +674,19 @@ collation remains part of its expression. This corrects the previous rule's
 normalization that discarded explicitly selected null ordering. Tests import the
 old ordering/filter fixtures and compare aggregate results against SQLite.
 Default validation traverses ordering and filter expressions as well as arguments.
+
+## Window expressions
+
+Function calls can carry an OVER clause, with either a named reference or an
+inline window definition. Separate codecs handle window names, definitions and
+frame bounds; ordering terms are shared with aggregate argument ordering.
+ROWS, RANGE and GROUPS support single bounds, BETWEEN bounds and EXCLUDE.
+The codec rejects UNBOUNDED FOLLOWING as a start and UNBOUNDED PRECEDING as an
+end. Offset values, relative boundary ordering, function capabilities and window
+inheritance are validated by SQLite. Window expressions are rejected in DEFAULT.
+
+Window names retain the original identifier token, including quote delimiters:
+native SQLite treats `w` and `"w"` as different window names. Normal identifier
+quoting would silently change name resolution. Regression tests cover quoted
+names, the previous frame/OVER fixtures and native SQLite query results.
+Query-level WINDOW declarations await the SELECT grammar.

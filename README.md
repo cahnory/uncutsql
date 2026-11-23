@@ -457,7 +457,8 @@ Signs are unary-expression nodes. Blob values contain hexadecimal byte pairs.
   parameter-number limits and whether bindings are permitted in a statement context.
 - Ordinary function calls with zero or more expression arguments, including nested calls.
   Function names use identifier syntax and are quoted on output. Calls support `*`,
-  DISTINCT/ALL, argument ORDER BY and FILTER. OVER is not yet supported.
+  DISTINCT/ALL, argument ORDER BY, FILTER and OVER with named windows, partitioning,
+  ordering and frame specifications.
 - Unary `+`, `-`, `~`, `NOT`; arithmetic `+`, `-`, `*`, `/`, `%`; concatenation `||`;
   bitwise `&`, `|`, `<<`, `>>`; comparisons `<`, `>`, `<=`, `>=`, `=`, `!=`, `IS`,
   `IS NOT`; postfix `ISNULL`, `NOTNULL`, `NOT NULL`; and logical `AND`, `OR`.
