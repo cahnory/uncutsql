@@ -199,6 +199,7 @@ export const sqlExpression = document(expression, trivia);
 export type {
   Expression,
   FunctionCall,
+  OrderingTerm,
   BetweenExpression,
   InExpression,
   ColumnReference,

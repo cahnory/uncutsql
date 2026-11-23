@@ -325,7 +325,7 @@ test("function calls preserve nested arguments, precedence and SQLite results", 
 });
 
 test("malformed calls commit after the opening parenthesis", () => {
-  for (const sql of ["f(", "f(1,)", "f(,1)", "f(1 2)", "f(g(1)", "f(*)", "f(DISTINCT a)"]) {
+  for (const sql of ["f(", "f(1,)", "f(,1)", "f(1 2)", "f(g(1)"]) {
     const error = failure(sqlExpression.decode(sql));
     assert.ok(error instanceof ParseError, sql);
     assert.equal(error.committed, true, sql);

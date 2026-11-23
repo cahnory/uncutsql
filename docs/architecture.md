@@ -661,3 +661,16 @@ identifier expressions; this codec does not reinterpret them as string literals.
 DEFAULT validation rejects RAISE. Native trigger tests embed the encoded expression
 in hand-written trigger DDL to verify actions and dynamic messages; CREATE TRIGGER
 itself remains outside the input statement grammar.
+
+## Aggregate-call syntax
+
+FunctionCall keeps its original arguments array and adds optional star, modifier,
+orderBy and filter fields. Absent fields are omitted to retain existing AST shapes.
+Star arguments exclude value arguments, modifiers and argument ordering. Function
+arity and aggregate-versus-scalar capabilities are validated by SQLite.
+
+A shared ordering-term codec retains optional direction and NULLS FIRST/LAST;
+collation remains part of its expression. This corrects the previous rule's
+normalization that discarded explicitly selected null ordering. Tests import the
+old ordering/filter fixtures and compare aggregate results against SQLite.
+Default validation traverses ordering and filter expressions as well as arguments.

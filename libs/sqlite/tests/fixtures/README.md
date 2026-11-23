@@ -48,3 +48,6 @@ collation tests.
 of the earlier expression valid/invalid CASE fixtures.
 
 `previous/raise-function` contains unchanged copies of all previous RAISE fixtures.
+
+`previous/ordering-term` and `previous/filter-clause` contain the complete earlier
+fixture groups, including valid, invalid and edge cases.

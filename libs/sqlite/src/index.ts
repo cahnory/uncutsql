@@ -12,6 +12,7 @@ export { expression, sqlExpression } from "./codecs/expression.ts";
 export type {
   Expression,
   FunctionCall,
+  OrderingTerm,
   BetweenExpression,
   InExpression,
   ColumnReference,

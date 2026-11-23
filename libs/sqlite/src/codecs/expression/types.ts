@@ -95,10 +95,20 @@ export interface BetweenExpression {
   readonly upper: Expression;
 }
 
+export interface OrderingTerm {
+  readonly expression: Expression;
+  readonly direction?: "ASC" | "DESC";
+  readonly nulls?: "FIRST" | "LAST";
+}
+
 export interface FunctionCall {
   readonly _tag: "FunctionCall";
   readonly name: string;
   readonly arguments: readonly Expression[];
+  readonly star?: true;
+  readonly modifier?: "DISTINCT" | "ALL";
+  readonly orderBy?: readonly OrderingTerm[];
+  readonly filter?: Expression;
 }
 
 /** Parentheses affect tree shape and source spans, not semantic node kinds. */

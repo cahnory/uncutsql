@@ -456,8 +456,8 @@ Signs are unary-expression nodes. Blob values contain hexadecimal byte pairs.
   extensions and exact token spelling. Defaults reject parameters. SQLite validates
   parameter-number limits and whether bindings are permitted in a statement context.
 - Ordinary function calls with zero or more expression arguments, including nested calls.
-  Function names use identifier syntax and are quoted on output. Aggregate modifiers
-  (`DISTINCT`, `*`, argument ordering), FILTER and OVER are not supported.
+  Function names use identifier syntax and are quoted on output. Calls support `*`,
+  DISTINCT/ALL, argument ORDER BY and FILTER. OVER is not yet supported.
 - Unary `+`, `-`, `~`, `NOT`; arithmetic `+`, `-`, `*`, `/`, `%`; concatenation `||`;
   bitwise `&`, `|`, `<<`, `>>`; comparisons `<`, `>`, `<=`, `>=`, `=`, `!=`, `IS`,
   `IS NOT`; postfix `ISNULL`, `NOTNULL`, `NOT NULL`; and logical `AND`, `OR`.

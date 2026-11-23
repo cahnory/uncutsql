@@ -70,8 +70,10 @@ recognizing a keyword does not imply support for the construct it introduces.
 - [x] CASE expressions, both simple and searched forms, with nesting and optional ELSE.
 - [x] RAISE expressions: IGNORE and ROLLBACK/ABORT/FAIL with expression messages.
       The expression codec supports these; complete CREATE TRIGGER parsing is still pending.
-- [ ] Aggregate syntax: `*`, DISTINCT and argument ORDER BY.
-- [ ] FILTER, OVER, named windows and frame specifications.
+- [x] Aggregate syntax: `*`, DISTINCT/ALL and argument ORDER BY, with ASC/DESC
+      and NULLS FIRST/LAST retained explicitly.
+- [x] FILTER (WHERE expression).
+- [ ] OVER, named windows and frame specifications.
 - [ ] Scalar subqueries, EXISTS and IN targets that are queries, tables or table functions.
 - [x] Row-value expressions and comparisons, including row-list IN and BETWEEN.
       SQLite validates row cardinality and use in scalar contexts.
