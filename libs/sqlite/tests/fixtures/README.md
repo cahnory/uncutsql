@@ -57,3 +57,6 @@ implementation and exercised by `window-expression.test.ts`.
 
 `select-values/valid.sql` is copied unchanged from the previous
 `select-core/valid/06_select_values.sql` and exercised by `query.test.ts`.
+
+The full `select-core` group is copied unchanged from the previous rules and
+exercised by `select-query.test.ts`, including its VALUES fixture.

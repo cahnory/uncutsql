@@ -58,4 +58,12 @@ export { toDatabaseSchema, fromDatabaseSchema } from "./database.ts";
 
 export { dialect } from "./dialect.ts";
 
-export { sqlQuery, queryGrammar, type Query, type ValuesQuery } from "./query.ts";
+export {
+  sqlQuery,
+  queryGrammar,
+  type Query,
+  type ValuesQuery,
+  type SelectQuery,
+  type ResultColumn,
+  type TableSource,
+} from "./query.ts";

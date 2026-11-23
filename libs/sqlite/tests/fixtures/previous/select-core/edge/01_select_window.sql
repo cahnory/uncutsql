@@ -1,0 +1,1 @@
+SELECT a,ROW_NUMBER() OVER () FROM t

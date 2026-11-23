@@ -1,0 +1,91 @@
+import {
+  type Codec,
+  located,
+  optional,
+  prefixed,
+  repeat,
+  struct,
+  transform,
+} from "@uncutsql/codec";
+import { keyword } from "../../operators/keyword.ts";
+import { keywordChoice } from "../../operators/keyword-choice.ts";
+import { keywordSequence } from "../../operators/keyword-sequence.ts";
+import { punctuation } from "../../operators/punctuation.ts";
+import { windowDefinition } from "../over-clause.ts";
+import { windowName } from "../window-name.ts";
+import { orderingTerm } from "../ordering-term.ts";
+import type { Expression } from "../expression/types.ts";
+import type { SelectQuery } from "./types.ts";
+import { resultColumn } from "./result-column.ts";
+import { tableSource } from "./table-source.ts";
+
+export const selectQuery = (expression: Codec<Expression>): Codec<SelectQuery> => {
+  const list = <A>(codec: Codec<A>) => repeat(codec, { min: 1, separator: punctuation(",", ", ") });
+  const clause = <A>(words: readonly string[], codec: Codec<A>) =>
+    optional(prefixed(keywordSequence(words), codec, " "));
+  return located(
+    "SelectQuery",
+    transform(
+      prefixed(
+        keyword("SELECT"),
+        struct(
+          {
+            modifier: optional(keywordChoice(["DISTINCT", "ALL"])),
+            columns: list(resultColumn(expression)),
+            from: clause(["FROM"], list(tableSource(expression))),
+            where: clause(["WHERE"], expression),
+            groupBy: clause(["GROUP", "BY"], list(expression)),
+            having: clause(["HAVING"], expression),
+            windows: clause(
+              ["WINDOW"],
+              list(
+                struct(
+                  {
+                    name: windowName,
+                    definition: prefixed(keyword("AS"), windowDefinition(expression), " "),
+                  },
+                  " ",
+                ),
+              ),
+            ),
+            orderBy: clause(["ORDER", "BY"], list(orderingTerm(expression))),
+          },
+          " ",
+        ),
+        " ",
+      ),
+      {
+        decode: ({
+          columns,
+          modifier,
+          from,
+          where,
+          groupBy,
+          having,
+          windows,
+          orderBy,
+        }): SelectQuery => ({
+          _tag: "SelectQuery",
+          columns,
+          ...(modifier === undefined ? {} : { modifier }),
+          ...(from === undefined ? {} : { from }),
+          ...(where === undefined ? {} : { where }),
+          ...(groupBy === undefined ? {} : { groupBy }),
+          ...(having === undefined ? {} : { having }),
+          ...(windows === undefined ? {} : { windows }),
+          ...(orderBy === undefined ? {} : { orderBy }),
+        }),
+        encode: (value: SelectQuery) => ({
+          columns: value.columns,
+          modifier: value.modifier,
+          from: value.from,
+          where: value.where,
+          groupBy: value.groupBy,
+          having: value.having,
+          windows: value.windows,
+          orderBy: value.orderBy,
+        }),
+      },
+    ),
+  );
+};

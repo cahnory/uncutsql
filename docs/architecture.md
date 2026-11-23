@@ -690,7 +690,7 @@ Window names retain the original identifier token, including quote delimiters:
 native SQLite treats `w` and `"w"` as different window names. Normal identifier
 quoting would silently change name resolution. Regression tests cover quoted
 names, the previous frame/OVER fixtures and native SQLite query results.
-Query-level WINDOW declarations await the SELECT grammar.
+Query-level WINDOW declarations are supported by the SELECT core codec.
 
 ## IN table targets
 
@@ -713,3 +713,18 @@ and expression grammars can later compose for subqueries. Query types live in a
 separate module from schema statements; data queries do not enter schema lowering.
 Native tests compare rows, mixed expression values and parameter bindings, with
 an unchanged VALUES fixture from the previous select-core tests.
+
+## SELECT cores
+
+The query entry point accepts SELECT and VALUES. SELECT is split into result
+column, alias, table-source and core codecs. It preserves explicit ALL/DISTINCT,
+qualifiers, wildcard columns, expression aliases, filtering, grouping, HAVING,
+window declarations and ordering. Aliases serialize with AS, avoiding accidental
+clause ambiguity. A qualified-wildcard probe backtracks before ordinary expression
+parsing so `table.column` and `table.*` remain distinct.
+
+FROM currently supports tables and table functions, including comma-separated
+sources. Joins, subquery sources, compounds, LIMIT and WITH remain pending; trailing
+unsupported clauses fail. Window declarations use the same quote-preserving name
+codec as references. All previous select-core fixtures are retained, and native
+SQLite tests cover aggregation, aliases, qualified wildcards and window inheritance.

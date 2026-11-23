@@ -15,7 +15,8 @@ explicit column definitions. Expression support is substantial but incomplete.
 | Expressions            | Partial              | Arithmetic, comparisons, calls, IN/BETWEEN, COLLATE and JSON extraction; remaining forms listed below |
 | CREATE TABLE           | Supported subset     | Columns, constraints, references, generated columns and table options; no AS SELECT                   |
 | Schema files           | Supported subset     | Ordered CREATE TABLE statements, empty statements and optional final semicolon                        |
-| Other input statements | Not implemented      | SELECT, other DDL, DML and administrative statements                                                  |
+| Queries                | Supported subset     | SELECT cores and VALUES; joins, subqueries, compounds, WITH and LIMIT pending                         |
+| Other input statements | Not implemented      | Other DDL, DML and administrative statements                                                          |
 | AST ↔ database model   | Supported for tables | Columns, constraints, options and schema identity; no standalone indexes/views/triggers               |
 | Migration output       | Supported subset     | Create, drop, add column and rebuild; this is separate from input parsing                             |
 | Database execution     | Separate package     | `@uncutsql/sqlite-driver` owns native SQLite access                                                   |
@@ -75,7 +76,7 @@ recognizing a keyword does not imply support for the construct it introduces.
 - [x] FILTER (WHERE expression).
 - [x] OVER with named/inline windows, PARTITION BY, ORDER BY, ROWS/RANGE/GROUPS
       frames and EXCLUDE. Window-name tokens preserve significant quoting.
-      Query-level WINDOW declarations remain part of the pending SELECT grammar.
+      Query-level WINDOW declarations are supported by `sqlQuery`.
 - [x] IN/NOT IN with tables and table-valued functions, including schema qualifiers
       and empty argument lists.
 - [ ] Scalar subqueries, EXISTS and IN targets that are queries.
@@ -109,21 +110,20 @@ CHECK and generated expressions can reference columns.
       not a claim of exhaustive CREATE TABLE compatibility.
 
 Use `createTable` for a single declaration, `schema` for a schema file, and
-`sqlExpression` for a standalone expression. `sqlQuery` currently accepts standalone
-VALUES queries, including multiple rows and expression-valued cells. Unsupported trailing input fails
+`sqlExpression` for a standalone expression. `sqlQuery` accepts SELECT cores and standalone VALUES queries. Unsupported trailing input fails
 rather than being silently discarded. Parsing does not perform full schema
 validation: conflicting constraints, STRICT type restrictions, name resolution
 and generated-column dependencies remain SQLite's responsibility.
 
 ## Other statement families still to implement
 
-| Family                  | Remaining input syntax                                                       |
-| ----------------------- | ---------------------------------------------------------------------------- |
-| Queries                 | SELECT, WITH/recursive CTEs, joins, compounds, grouping, ordering and limits |
-| Schema DDL              | ALTER TABLE, DROP TABLE, CREATE/DROP INDEX, VIEW and TRIGGER                 |
-| Data changes            | INSERT/REPLACE, UPSERT, UPDATE, DELETE and RETURNING                         |
-| Transactions            | BEGIN, COMMIT/END, ROLLBACK, SAVEPOINT and RELEASE                           |
-| Database administration | ATTACH/DETACH, PRAGMA, VACUUM, ANALYZE, REINDEX and EXPLAIN                  |
+| Family                  | Remaining input syntax                                                   |
+| ----------------------- | ------------------------------------------------------------------------ |
+| Queries                 | WITH/recursive CTEs, joins, compound queries, subquery sources and LIMIT |
+| Schema DDL              | ALTER TABLE, DROP TABLE, CREATE/DROP INDEX, VIEW and TRIGGER             |
+| Data changes            | INSERT/REPLACE, UPSERT, UPDATE, DELETE and RETURNING                     |
+| Transactions            | BEGIN, COMMIT/END, ROLLBACK, SAVEPOINT and RELEASE                       |
+| Database administration | ATTACH/DETACH, PRAGMA, VACUUM, ANALYZE, REINDEX and EXPLAIN              |
 
 The migration renderer can emit some of these statements without exposing parsers
 for them. For example, generating ALTER TABLE ADD COLUMN does **not** mean that
@@ -175,8 +175,10 @@ are documented in the [workspace README](../../README.md).
 
 - [x] Standalone VALUES queries, with one or more nonempty rows.
 - [x] Reuse expression codecs for each cell, including bind parameters.
-- [ ] SELECT cores and FROM sources.
-- [ ] WHERE, GROUP BY/HAVING, WINDOW declarations, ORDER BY and LIMIT.
+- [x] SELECT cores, DISTINCT/ALL, wildcards and explicit/implicit aliases.
+- [x] FROM tables and table functions, with schema qualifiers and comma-separated sources.
+- [x] WHERE, GROUP BY/HAVING, WINDOW declarations and ORDER BY.
+- [ ] LIMIT and OFFSET.
 - [ ] Joins, compound queries and WITH/recursive CTEs.
 
 `sqlQuery` parses one query with an optional final semicolon and emits a canonical
