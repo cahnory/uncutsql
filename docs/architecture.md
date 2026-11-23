@@ -723,8 +723,7 @@ clause ambiguity. A qualified-wildcard probe backtracks before ordinary expressi
 parsing so `table.column` and `table.*` remain distinct.
 
 FROM currently supports tables and table functions, including comma-separated
-sources. WITH remains pending; trailing
-unsupported clauses fail. Window declarations use the same quote-preserving name
+sources. Unsupported trailing clauses fail. Window declarations use the same quote-preserving name
 codec as references. All previous select-core fixtures are retained, and native
 SQLite tests cover aggregation, aliases, qualified wildcards and window inheritance.
 
@@ -747,8 +746,7 @@ left-to-right grouping across UNION, UNION ALL, INTERSECT and EXCEPT. SELECT and
 VALUES can participate as cores. A final VALUES core disallows ORDER BY/LIMIT;
 parsing and encoding enforce this. Encoding also rejects misplaced core-level
 tails instead of silently dropping them. Existing standalone SELECT ASTs keep
-their shape. Previous select-statement fixtures are reused except WITH cases,
-which remain pending.
+their shape. All previous select-statement fixtures are reused, including WITH cases.
 
 ## Query expressions
 
@@ -796,3 +794,18 @@ NATURAL. ON remains valid on comma and CROSS joins, as SQLite permits.
 Native tests compare both rows and EXPLAIN QUERY PLAN, including outer joins,
 source grouping, derived tables and correlated ON expressions. All previous
 join-operator, join-constraint, join-clause and table-or-subquery fixtures are used.
+
+## Common table expressions
+
+Query is a query body with an optional WithClause. CTE definitions are ordered,
+with optional result-column names and an optional materialization hint. The WITH
+codec takes a deferred query codec, permitting nested and recursive syntax without
+eager grammar expansion. WITH belongs to the complete compound query, not to an
+individual core. Both explicit RECURSIVE and SQLite's recursive queries without
+the keyword are preserved as written; SQLite validates recursive dependencies.
+
+Unlike the previous implementation, WITH accepts multiple comma-separated CTEs,
+and an absent materialization hint stays absent rather than defaulting to
+MATERIALIZED. Native tests compare results and query plans for both hints,
+recursion, nesting, VALUES bodies and anonymous parameters. All previous WITH
+fixtures are now exercised.

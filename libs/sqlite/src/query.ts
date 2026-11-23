@@ -9,6 +9,9 @@ export const queryGrammar = query(expression);
 export const sqlQuery = document(followedBy(queryGrammar, terminator), trivia);
 export type {
   Query,
+  QueryBody,
+  WithClause,
+  CommonTableExpression,
   QueryCore,
   SelectCore,
   CompoundQuery,

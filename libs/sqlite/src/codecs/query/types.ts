@@ -11,7 +11,20 @@ export interface ValuesQuery {
 }
 
 /** Query syntax is separate from schema declarations and schema lowering. */
-export type Query = ValuesQuery | SelectQuery | CompoundQuery;
+export type QueryBody = ValuesQuery | SelectQuery | CompoundQuery;
+export type Query = QueryBody & { readonly with?: WithClause };
+
+export interface WithClause {
+  readonly recursive: boolean;
+  readonly expressions: readonly CommonTableExpression[];
+}
+
+export interface CommonTableExpression {
+  readonly name: string;
+  readonly columns?: readonly string[];
+  readonly materialization?: "MATERIALIZED" | "NOT MATERIALIZED";
+  readonly query: Query;
+}
 export type QueryCore = ValuesQuery | SelectCore;
 export type CompoundOperator = "UNION" | "UNION ALL" | "INTERSECT" | "EXCEPT";
 

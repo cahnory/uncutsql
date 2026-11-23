@@ -15,7 +15,7 @@ explicit column definitions. Expression support is substantial but incomplete.
 | Expressions            | Partial              | Arithmetic, comparisons, calls, IN/BETWEEN, COLLATE and JSON extraction; remaining forms listed below |
 | CREATE TABLE           | Supported subset     | Columns, constraints, references, generated columns and table options; no AS SELECT                   |
 | Schema files           | Supported subset     | Ordered CREATE TABLE statements, empty statements and optional final semicolon                        |
-| Queries                | Supported subset     | SELECT cores and VALUES; WITH pending                                                                 |
+| Queries                | Supported subset     | SELECT/VALUES, joins, compounds, subqueries and WITH/recursive CTEs                                   |
 | Other input statements | Not implemented      | Other DDL, DML and administrative statements                                                          |
 | AST ↔ database model   | Supported for tables | Columns, constraints, options and schema identity; no standalone indexes/views/triggers               |
 | Migration output       | Supported subset     | Create, drop, add column and rebuild; this is separate from input parsing                             |
@@ -80,7 +80,7 @@ recognizing a keyword does not imply support for the construct it introduces.
 - [x] IN/NOT IN with tables and table-valued functions, including schema qualifiers
       and empty argument lists.
 - [x] Scalar/row subqueries, EXISTS/NOT EXISTS and IN/NOT IN query targets,
-      including correlated SELECT and VALUES queries. WITH remains pending.
+      including correlated SELECT, VALUES and WITH queries.
 - [x] Row-value expressions and comparisons, including row-list IN and BETWEEN.
       SQLite validates row cardinality and use in scalar contexts.
 
@@ -119,13 +119,13 @@ and generated-column dependencies remain SQLite's responsibility.
 
 ## Other statement families still to implement
 
-| Family                  | Remaining input syntax                                       |
-| ----------------------- | ------------------------------------------------------------ |
-| Queries                 | WITH/recursive CTEs                                          |
-| Schema DDL              | ALTER TABLE, DROP TABLE, CREATE/DROP INDEX, VIEW and TRIGGER |
-| Data changes            | INSERT/REPLACE, UPSERT, UPDATE, DELETE and RETURNING         |
-| Transactions            | BEGIN, COMMIT/END, ROLLBACK, SAVEPOINT and RELEASE           |
-| Database administration | ATTACH/DETACH, PRAGMA, VACUUM, ANALYZE, REINDEX and EXPLAIN  |
+| Family                  | Remaining input syntax                                                 |
+| ----------------------- | ---------------------------------------------------------------------- |
+| Queries                 | Contextual-keyword/legacy-quoting compatibility and further edge cases |
+| Schema DDL              | ALTER TABLE, DROP TABLE, CREATE/DROP INDEX, VIEW and TRIGGER           |
+| Data changes            | INSERT/REPLACE, UPSERT, UPDATE, DELETE and RETURNING                   |
+| Transactions            | BEGIN, COMMIT/END, ROLLBACK, SAVEPOINT and RELEASE                     |
+| Database administration | ATTACH/DETACH, PRAGMA, VACUUM, ANALYZE, REINDEX and EXPLAIN            |
 
 The migration renderer can emit some of these statements without exposing parsers
 for them. For example, generating ALTER TABLE ADD COLUMN does **not** mean that
@@ -187,10 +187,32 @@ are documented in the [workspace README](../../README.md).
 - [x] UNION, UNION ALL, INTERSECT and EXCEPT, with query-level ORDER BY/LIMIT.
 - [x] Comma, INNER, CROSS, LEFT/RIGHT/FULL OUTER and NATURAL joins, with ON/USING.
       SQLite modifier order and compatible combinations are preserved, including LEFT RIGHT JOIN.
-- [ ] WITH/recursive CTEs.
+- [x] WITH/recursive CTEs, multiple definitions, column lists and MATERIALIZED/NOT MATERIALIZED hints.
 
 `sqlQuery` parses one query with an optional final semicolon and emits a canonical
 semicolon. `queryGrammar` exposes the body for future composition in subqueries.
 Query ASTs stay separate from `schema`, which represents declarations used for
 schema comparison and migrations. SQLite validates row widths and execution
 context. Standalone VALUES does not permit ORDER BY or LIMIT.
+
+For example, the query API works without a database driver:
+
+```ts
+import { Effect } from "effect";
+import { sqlQuery } from "@uncutsql/sqlite";
+
+const ast = Effect.runSync(
+  sqlQuery.decode(`
+  WITH RECURSIVE numbers(n) AS (
+    VALUES (1) UNION ALL SELECT n + 1 FROM numbers WHERE n < 3
+  )
+  SELECT n FROM numbers ORDER BY n
+`),
+);
+const sql = Effect.runSync(sqlQuery.encode(ast));
+```
+
+The query checklist covers syntax, not full SQLite semantic validation. Name
+resolution, recursive-CTE restrictions, result widths and function capabilities
+remain SQLite's responsibility. Contextual keywords and legacy quoting still
+have compatibility work listed in the lexical checklist.

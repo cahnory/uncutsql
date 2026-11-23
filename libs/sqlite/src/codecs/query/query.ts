@@ -20,6 +20,7 @@ import { orderingTerm } from "../ordering-term.ts";
 import type { Expression } from "../expression/types.ts";
 import { selectCore } from "./select-query.ts";
 import { valuesQuery } from "./values-query.ts";
+import { withClause } from "./with-clause.ts";
 import { limitClause } from "./limit-clause.ts";
 import type { Query } from "./types.ts";
 
@@ -28,8 +29,13 @@ export const query = (expression: Codec<Expression>): Codec<Query> => {
     SelectQuery: selectCore(expression),
     ValuesQuery: valuesQuery(expression),
   });
+  const nested = make<Query>({
+    decode: (cursor) => query(expression).decode(cursor),
+    encode: (value) => query(expression).encode(value),
+  });
   const syntax = struct(
     {
+      with: optional(withClause(nested)),
       head: core,
       rest: repeat(
         struct(
@@ -49,15 +55,23 @@ export const query = (expression: Codec<Expression>): Codec<Query> => {
     },
     " ",
   );
-  const toQuery = ({ head, rest, orderBy, limit }: Value<typeof syntax>): Query =>
+  const toQuery = ({
+    head,
+    rest,
+    orderBy,
+    limit,
+    with: withDefinition,
+  }: Value<typeof syntax>): Query =>
     rest.length === 0
       ? {
           ...head,
+          ...(withDefinition === undefined ? {} : { with: withDefinition }),
           ...(orderBy === undefined ? {} : { orderBy }),
           ...(limit === undefined ? {} : { limit }),
         }
       : {
           _tag: "CompoundQuery",
+          ...(withDefinition === undefined ? {} : { with: withDefinition }),
           head,
           rest,
           ...(orderBy === undefined ? {} : { orderBy }),
@@ -66,6 +80,7 @@ export const query = (expression: Codec<Expression>): Codec<Query> => {
   const mapped = transform(syntax, {
     decode: toQuery,
     encode: (value: Query) => ({
+      with: value.with,
       head: value._tag === "CompoundQuery" ? value.head : value,
       rest: value._tag === "CompoundQuery" ? value.rest : [],
       orderBy: value._tag === "ValuesQuery" ? undefined : value.orderBy,
@@ -93,12 +108,13 @@ export const query = (expression: Codec<Expression>): Codec<Query> => {
           [value.head, ...value.rest.map((part) => part.query)].some(
             (core) =>
               ("orderBy" in core && core.orderBy !== undefined) ||
-              ("limit" in core && core.limit !== undefined),
+              ("limit" in core && core.limit !== undefined) ||
+              ("with" in core && core.with !== undefined),
           )
         ) {
           return Effect.fail(
             new EncodeError({
-              message: "Compound ORDER BY and LIMIT belong to the complete query",
+              message: "Compound WITH, ORDER BY and LIMIT belong to the complete query",
             }),
           );
         }
