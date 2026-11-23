@@ -57,3 +57,5 @@ export type { RebuildTableOperation } from "./rebuild.ts";
 export { toDatabaseSchema, fromDatabaseSchema } from "./database.ts";
 
 export { dialect } from "./dialect.ts";
+
+export { sqlQuery, queryGrammar, type Query, type ValuesQuery } from "./query.ts";

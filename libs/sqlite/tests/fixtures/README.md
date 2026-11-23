@@ -54,3 +54,6 @@ fixture groups, including valid, invalid and edge cases.
 
 The `frame-spec` and `over-clause` groups are copied unchanged from the previous
 implementation and exercised by `window-expression.test.ts`.
+
+`select-values/valid.sql` is copied unchanged from the previous
+`select-core/valid/06_select_values.sql` and exercised by `query.test.ts`.

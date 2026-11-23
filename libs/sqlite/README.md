@@ -109,20 +109,21 @@ CHECK and generated expressions can reference columns.
       not a claim of exhaustive CREATE TABLE compatibility.
 
 Use `createTable` for a single declaration, `schema` for a schema file, and
-`sqlExpression` for a standalone expression. Unsupported trailing input fails
+`sqlExpression` for a standalone expression. `sqlQuery` currently accepts standalone
+VALUES queries, including multiple rows and expression-valued cells. Unsupported trailing input fails
 rather than being silently discarded. Parsing does not perform full schema
 validation: conflicting constraints, STRICT type restrictions, name resolution
 and generated-column dependencies remain SQLite's responsibility.
 
 ## Other statement families still to implement
 
-| Family                  | Remaining input syntax                                                               |
-| ----------------------- | ------------------------------------------------------------------------------------ |
-| Queries                 | SELECT, VALUES, WITH/recursive CTEs, joins, compounds, grouping, ordering and limits |
-| Schema DDL              | ALTER TABLE, DROP TABLE, CREATE/DROP INDEX, VIEW and TRIGGER                         |
-| Data changes            | INSERT/REPLACE, UPSERT, UPDATE, DELETE and RETURNING                                 |
-| Transactions            | BEGIN, COMMIT/END, ROLLBACK, SAVEPOINT and RELEASE                                   |
-| Database administration | ATTACH/DETACH, PRAGMA, VACUUM, ANALYZE, REINDEX and EXPLAIN                          |
+| Family                  | Remaining input syntax                                                       |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| Queries                 | SELECT, WITH/recursive CTEs, joins, compounds, grouping, ordering and limits |
+| Schema DDL              | ALTER TABLE, DROP TABLE, CREATE/DROP INDEX, VIEW and TRIGGER                 |
+| Data changes            | INSERT/REPLACE, UPSERT, UPDATE, DELETE and RETURNING                         |
+| Transactions            | BEGIN, COMMIT/END, ROLLBACK, SAVEPOINT and RELEASE                           |
+| Database administration | ATTACH/DETACH, PRAGMA, VACUUM, ANALYZE, REINDEX and EXPLAIN                  |
 
 The migration renderer can emit some of these statements without exposing parsers
 for them. For example, generating ALTER TABLE ADD COLUMN does **not** mean that
@@ -169,3 +170,17 @@ pnpm --filter @uncutsql/sqlite build
 For runnable examples and plugin configuration, see the
 [demo walkthrough](../../apps/demo/README.md). API examples and package boundaries
 are documented in the [workspace README](../../README.md).
+
+## Query progress
+
+- [x] Standalone VALUES queries, with one or more nonempty rows.
+- [x] Reuse expression codecs for each cell, including bind parameters.
+- [ ] SELECT cores and FROM sources.
+- [ ] WHERE, GROUP BY/HAVING, WINDOW declarations, ORDER BY and LIMIT.
+- [ ] Joins, compound queries and WITH/recursive CTEs.
+
+`sqlQuery` parses one query with an optional final semicolon and emits a canonical
+semicolon. `queryGrammar` exposes the body for future composition in subqueries.
+Query ASTs stay separate from `schema`, which represents declarations used for
+schema comparison and migrations. SQLite validates row widths and execution
+context. Standalone VALUES does not permit ORDER BY or LIMIT.

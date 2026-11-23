@@ -703,3 +703,13 @@ nested inside another expression. Native tests cover NULL behavior, row-valued
 membership, TEMP qualification and pragma table functions. This follows the
 previous implementation's separate Table/TableFunction targets; query targets
 still require the SELECT grammar.
+
+## Query grammar foundation
+
+`sqlQuery` is a separate query-document API. Its first core is `ValuesQuery`,
+which holds nonempty rows of expressions. The VALUES codec takes an expression
+codec rather than importing the recursive expression entry point, so the query
+and expression grammars can later compose for subqueries. Query types live in a
+separate module from schema statements; data queries do not enter schema lowering.
+Native tests compare rows, mixed expression values and parameter bindings, with
+an unchanged VALUES fixture from the previous select-core tests.
