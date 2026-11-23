@@ -1,0 +1,1 @@
+RAISE(ABORT,'err')

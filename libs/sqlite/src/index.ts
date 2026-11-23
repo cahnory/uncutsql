@@ -24,6 +24,7 @@ export type {
   PatternExpression,
   BindParameter,
   RowValueExpression,
+  RaiseExpression,
   BinaryOperator,
   UnaryOperator,
 } from "./codecs/expression.ts";

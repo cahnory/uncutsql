@@ -651,3 +651,13 @@ cover lexicographic ordering, NULL/IS behavior and collation. Default validation
 recurses through all row elements, so scalar comparisons of constant rows work
 without allowing hidden column references or parameters. SQLite validates row
 cardinality and whether a context accepts a row rather than a scalar.
+
+## RAISE expressions
+
+The dedicated RAISE codec preserves the action and requires a message expression
+for ROLLBACK/ABORT/FAIL while forbidding one for IGNORE. It follows the previous
+rule and imports its valid/invalid/edge fixtures. Double-quoted messages remain
+identifier expressions; this codec does not reinterpret them as string literals.
+DEFAULT validation rejects RAISE. Native trigger tests embed the encoded expression
+in hand-written trigger DDL to verify actions and dynamic messages; CREATE TRIGGER
+itself remains outside the input statement grammar.

@@ -68,7 +68,8 @@ recognizing a keyword does not imply support for the construct it introduces.
 - [x] CAST expressions, including nested operands and custom/parameterized types.
       Type spelling is preserved; SQLite performs the conversion.
 - [x] CASE expressions, both simple and searched forms, with nesting and optional ELSE.
-- [ ] RAISE expressions in trigger contexts.
+- [x] RAISE expressions: IGNORE and ROLLBACK/ABORT/FAIL with expression messages.
+      The expression codec supports these; complete CREATE TRIGGER parsing is still pending.
 - [ ] Aggregate syntax: `*`, DISTINCT and argument ORDER BY.
 - [ ] FILTER, OVER, named windows and frame specifications.
 - [ ] Scalar subqueries, EXISTS and IN targets that are queries, tables or table functions.

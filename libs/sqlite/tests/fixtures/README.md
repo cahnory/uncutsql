@@ -46,3 +46,5 @@ collation tests.
 
 `expression/06_case.sql` and `expression/03_bad_case.sql` are unchanged copies
 of the earlier expression valid/invalid CASE fixtures.
+
+`previous/raise-function` contains unchanged copies of all previous RAISE fixtures.

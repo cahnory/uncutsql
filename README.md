@@ -470,6 +470,8 @@ Signs are unary-expression nodes. Blob values contain hexadecimal byte pairs.
 - `BETWEEN` and `NOT BETWEEN` range expressions, including nested bounds.
 - `IN` and `NOT IN` with parenthesized expression lists, including empty lists.
   Subquery, table-name and table-function targets are not implemented.
+- `RAISE(IGNORE)` and `RAISE(ROLLBACK | ABORT | FAIL, expression)`; SQLite enforces
+  trigger context, and the schema parser does not yet accept CREATE TRIGGER.
 - Simple and searched `CASE` expressions with ordered branches, optional ELSE and nesting.
 - `CAST(expression AS type)` with nested expressions and validated type declarations.
 - Expression-level `COLLATE name`, including nested clauses and quoted/custom
