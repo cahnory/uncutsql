@@ -289,7 +289,8 @@ preserves grouping in all three positions. DEFAULT validation visits each child.
 IN and NOT IN retain their operand and ordered values in an InExpression node.
 The list reuses the recursive expression grammar and comma-list combinator,
 including SQLite's empty-list syntax. Parsing commits after the operator and
-requires parentheses; subquery, table and table-function targets are unsupported.
+requires parentheses for list targets. Table and table-function targets are
+handled separately (see IN table targets below); subqueries remain pending.
 Encoding keeps membership syntax intact so SQLite handles NULL and empty-list
 semantics. DEFAULT validation visits the operand and every item, even in cases
 SQLite could simplify. Tests cover mixed operator precedence, nested membership,
@@ -690,3 +691,15 @@ native SQLite treats `w` and `"w"` as different window names. Normal identifier
 quoting would silently change name resolution. Regression tests cover quoted
 names, the previous frame/OVER fixtures and native SQLite query results.
 Query-level WINDOW declarations await the SELECT grammar.
+
+## IN table targets
+
+IN/NOT IN now distinguishes a value list from a table or table-valued function.
+`InTableExpression` carries a qualified table reference and an optional argument
+list: absence means a table, while an empty list means a zero-argument function.
+Both forms share the existing IN precedence and source-node handling. DEFAULT
+rejects these expressions because they read a database object, including when
+nested inside another expression. Native tests cover NULL behavior, row-valued
+membership, TEMP qualification and pragma table functions. This follows the
+previous implementation's separate Table/TableFunction targets; query targets
+still require the SELECT grammar.

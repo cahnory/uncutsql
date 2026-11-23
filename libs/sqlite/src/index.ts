@@ -19,6 +19,8 @@ export type {
   WindowReference,
   BetweenExpression,
   InExpression,
+  InTableExpression,
+  InTableTarget,
   ColumnReference,
   UnaryExpression,
   BinaryExpression,

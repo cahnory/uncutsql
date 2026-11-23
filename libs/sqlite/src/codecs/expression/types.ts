@@ -1,4 +1,5 @@
 import type { Codec } from "@uncutsql/codec";
+import type { TableReference } from "../table-reference.ts";
 import type { LiteralValue } from "../literal-value.ts";
 import type { BinaryOperator, UnaryOperator } from "./operators.ts";
 
@@ -80,6 +81,19 @@ export interface NullTestExpression {
   readonly operand: Expression;
 }
 
+export interface InTableTarget {
+  readonly table: TableReference;
+  /** Absent for a table, present (possibly empty) for a table-valued function. */
+  readonly arguments?: readonly Expression[];
+}
+
+export interface InTableExpression {
+  readonly _tag: "InTableExpression";
+  readonly operator: "IN" | "NOT IN";
+  readonly operand: Expression;
+  readonly target: InTableTarget;
+}
+
 export interface InExpression {
   readonly _tag: "InExpression";
   readonly operator: "IN" | "NOT IN";
@@ -154,6 +168,7 @@ export type Expression =
   | CastExpression
   | CollateExpression
   | InExpression
+  | InTableExpression
   | BetweenExpression
   | FunctionCall
   | LiteralValue

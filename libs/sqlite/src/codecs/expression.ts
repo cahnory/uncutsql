@@ -84,7 +84,7 @@ const readPrimary = (cursor: Cursor): Effect.Effect<Read<Expression>, ParseError
 const precedenceOf = (value: Expression): number => {
   if (value._tag === "PatternExpression") return patternPrecedence;
   if (value._tag === "CollateExpression") return collatePrecedence;
-  if (value._tag === "InExpression") return inPrecedence;
+  if (value._tag === "InExpression" || value._tag === "InTableExpression") return inPrecedence;
   if (value._tag === "BetweenExpression") return betweenPrecedence;
   if (value._tag === "BinaryExpression") return binaryPrecedence[value.operator];
   if (value._tag === "UnaryExpression") return unaryPrecedence[value.operator];
@@ -98,6 +98,7 @@ const encodeExpression = (value: Expression): Effect.Effect<string, EncodeError>
       return encodePattern(value, at);
     case "CollateExpression":
       return encodeCollate(value, at);
+    case "InTableExpression":
     case "InExpression":
       return encodeIn(value, at);
     case "BetweenExpression":
@@ -206,6 +207,8 @@ export type {
   WindowReference,
   BetweenExpression,
   InExpression,
+  InTableExpression,
+  InTableTarget,
   ColumnReference,
   UnaryExpression,
   BinaryExpression,

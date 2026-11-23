@@ -89,8 +89,6 @@ test("malformed and unsupported IN targets fail with committed errors", () => {
     "1 IN (,1)",
     "1 IN (1 2)",
     "1 IN (SELECT 1)",
-    "1 IN t",
-    "1 IN f()",
   ]) {
     const result = Effect.runSync(Effect.result(sqlExpression.decode(source)));
     assert.ok(Result.isFailure(result), source);

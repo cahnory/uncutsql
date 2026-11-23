@@ -42,6 +42,7 @@ const isConstant = (value: Expression): boolean => {
           value.orderBy.every((term) => isConstant(term.expression))) &&
         (value.filter === undefined || isConstant(value.filter))
       );
+    case "InTableExpression":
     case "RaiseExpression":
     case "BindParameter":
     case "ColumnReference":
