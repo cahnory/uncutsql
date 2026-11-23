@@ -1,3 +1,4 @@
+import type { Query } from "../query/types.ts";
 import type { Codec } from "@uncutsql/codec";
 import type { TableReference } from "../table-reference.ts";
 import type { LiteralValue } from "../literal-value.ts";
@@ -79,6 +80,23 @@ export interface NullTestExpression {
   readonly _tag: "NullTestExpression";
   readonly operator: "ISNULL" | "NOTNULL";
   readonly operand: Expression;
+}
+
+export interface SubqueryExpression {
+  readonly _tag: "SubqueryExpression";
+  readonly query: Query;
+}
+
+export interface ExistsExpression {
+  readonly _tag: "ExistsExpression";
+  readonly query: Query;
+}
+
+export interface InQueryExpression {
+  readonly _tag: "InQueryExpression";
+  readonly operator: "IN" | "NOT IN";
+  readonly operand: Expression;
+  readonly query: Query;
 }
 
 export interface InTableTarget {
@@ -169,6 +187,9 @@ export type Expression =
   | CollateExpression
   | InExpression
   | InTableExpression
+  | InQueryExpression
+  | SubqueryExpression
+  | ExistsExpression
   | BetweenExpression
   | FunctionCall
   | LiteralValue

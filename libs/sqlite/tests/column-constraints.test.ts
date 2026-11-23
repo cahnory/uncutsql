@@ -99,7 +99,6 @@ for (const source of [
   "CREATE TABLE t (a CHECK a > 0)",
   "CREATE TABLE t (a CHECK ())",
   "CREATE TABLE t (a CHECK (a >))",
-  "CREATE TABLE t (a CHECK ((SELECT 1)))",
 ]) {
   test(`rejects invalid DEFAULT/CHECK syntax: ${source}`, () => {
     assert.ok(failure(createTable.decode(source)) instanceof ParseError);

@@ -81,15 +81,7 @@ test("IN retains its semantic tree and nested source spans", () => {
 });
 
 test("malformed and unsupported IN targets fail with committed errors", () => {
-  for (const source of [
-    "1 IN",
-    "1 NOT IN",
-    "1 IN (",
-    "1 IN (1,)",
-    "1 IN (,1)",
-    "1 IN (1 2)",
-    "1 IN (SELECT 1)",
-  ]) {
+  for (const source of ["1 IN", "1 NOT IN", "1 IN (", "1 IN (1,)", "1 IN (,1)", "1 IN (1 2)"]) {
     const result = Effect.runSync(Effect.result(sqlExpression.decode(source)));
     assert.ok(Result.isFailure(result), source);
     assert.ok(result.failure instanceof ParseError, source);

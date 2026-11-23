@@ -290,7 +290,7 @@ IN and NOT IN retain their operand and ordered values in an InExpression node.
 The list reuses the recursive expression grammar and comma-list combinator,
 including SQLite's empty-list syntax. Parsing commits after the operator and
 requires parentheses for list targets. Table and table-function targets are
-handled separately (see IN table targets below); subqueries remain pending.
+handled separately (see IN table targets below); query targets use the shared query codec.
 Encoding keeps membership syntax intact so SQLite handles NULL and empty-list
 semantics. DEFAULT validation visits the operand and every item, even in cases
 SQLite could simplify. Tests cover mixed operator precedence, nested membership,
@@ -701,8 +701,7 @@ Both forms share the existing IN precedence and source-node handling. DEFAULT
 rejects these expressions because they read a database object, including when
 nested inside another expression. Native tests cover NULL behavior, row-valued
 membership, TEMP qualification and pragma table functions. This follows the
-previous implementation's separate Table/TableFunction targets; query targets
-still require the SELECT grammar.
+previous implementation's separate Table/TableFunction targets; query targets now use the shared query grammar.
 
 ## Query grammar foundation
 
@@ -750,3 +749,15 @@ parsing and encoding enforce this. Encoding also rejects misplaced core-level
 tails instead of silently dropping them. Existing standalone SELECT ASTs keep
 their shape. Previous select-statement fixtures are reused except WITH cases,
 which remain pending.
+
+## Query expressions
+
+Parenthesized SELECT/VALUES queries produce SubqueryExpression nodes; EXISTS has
+its own node and NOT EXISTS uses ordinary unary NOT precedence. IN distinguishes
+query targets from expression lists, including the meaningful difference between
+`IN (SELECT 1)` and `IN ((SELECT 1))`. Expression and query factories compose
+recursively without parsing SQL fragments as strings. Native tests exercise
+correlation, empty-result NULL behavior, row subqueries, compounds and anonymous
+binding order. DEFAULT rejects all query expressions recursively. CHECK and
+generated-column codecs accept the syntax, with SQLite enforcing their context
+restrictions; tests confirm native rejection before and after serialization.

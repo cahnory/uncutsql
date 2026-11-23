@@ -1,3 +1,4 @@
+import { subqueryExpression, existsExpression } from "./expression/subquery-expression.ts";
 import { raiseExpression } from "./expression/raise-expression.ts";
 import { rowValueExpression } from "./expression/row-value-expression.ts";
 import { bindParameter } from "./expression/bind-parameter.ts";
@@ -64,6 +65,7 @@ const readPrimary = (cursor: Cursor): Effect.Effect<Read<Expression>, ParseError
       parenthesizedExpression(at(0)),
       unaryExpression(at),
       raiseExpression(at(0)),
+      existsExpression(at(0)),
       caseExpression(at(0)),
       castExpression(at(0)),
       functionCall(at(0)),
@@ -84,7 +86,12 @@ const readPrimary = (cursor: Cursor): Effect.Effect<Read<Expression>, ParseError
 const precedenceOf = (value: Expression): number => {
   if (value._tag === "PatternExpression") return patternPrecedence;
   if (value._tag === "CollateExpression") return collatePrecedence;
-  if (value._tag === "InExpression" || value._tag === "InTableExpression") return inPrecedence;
+  if (
+    value._tag === "InExpression" ||
+    value._tag === "InTableExpression" ||
+    value._tag === "InQueryExpression"
+  )
+    return inPrecedence;
   if (value._tag === "BetweenExpression") return betweenPrecedence;
   if (value._tag === "BinaryExpression") return binaryPrecedence[value.operator];
   if (value._tag === "UnaryExpression") return unaryPrecedence[value.operator];
@@ -98,6 +105,7 @@ const encodeExpression = (value: Expression): Effect.Effect<string, EncodeError>
       return encodePattern(value, at);
     case "CollateExpression":
       return encodeCollate(value, at);
+    case "InQueryExpression":
     case "InTableExpression":
     case "InExpression":
       return encodeIn(value, at);
@@ -113,6 +121,10 @@ const encodeExpression = (value: Expression): Effect.Effect<string, EncodeError>
       return castExpression(at(0)).encode(value);
     case "FunctionCall":
       return functionCall(at(0)).encode(value);
+    case "SubqueryExpression":
+      return subqueryExpression(at(0)).encode(value);
+    case "ExistsExpression":
+      return existsExpression(at(0)).encode(value);
     case "RaiseExpression":
       return raiseExpression(at(0)).encode(value);
     case "RowValueExpression":
@@ -208,6 +220,9 @@ export type {
   BetweenExpression,
   InExpression,
   InTableExpression,
+  InQueryExpression,
+  SubqueryExpression,
+  ExistsExpression,
   InTableTarget,
   ColumnReference,
   UnaryExpression,

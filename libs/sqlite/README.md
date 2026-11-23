@@ -15,7 +15,7 @@ explicit column definitions. Expression support is substantial but incomplete.
 | Expressions            | Partial              | Arithmetic, comparisons, calls, IN/BETWEEN, COLLATE and JSON extraction; remaining forms listed below |
 | CREATE TABLE           | Supported subset     | Columns, constraints, references, generated columns and table options; no AS SELECT                   |
 | Schema files           | Supported subset     | Ordered CREATE TABLE statements, empty statements and optional final semicolon                        |
-| Queries                | Supported subset     | SELECT cores and VALUES; joins, subqueries and WITH pending                                           |
+| Queries                | Supported subset     | SELECT cores and VALUES; joins, FROM subqueries and WITH pending                                      |
 | Other input statements | Not implemented      | Other DDL, DML and administrative statements                                                          |
 | AST ↔ database model   | Supported for tables | Columns, constraints, options and schema identity; no standalone indexes/views/triggers               |
 | Migration output       | Supported subset     | Create, drop, add column and rebuild; this is separate from input parsing                             |
@@ -79,7 +79,8 @@ recognizing a keyword does not imply support for the construct it introduces.
       Query-level WINDOW declarations are supported by `sqlQuery`.
 - [x] IN/NOT IN with tables and table-valued functions, including schema qualifiers
       and empty argument lists.
-- [ ] Scalar subqueries, EXISTS and IN targets that are queries.
+- [x] Scalar/row subqueries, EXISTS/NOT EXISTS and IN/NOT IN query targets,
+      including correlated SELECT and VALUES queries. WITH remains pending.
 - [x] Row-value expressions and comparisons, including row-list IN and BETWEEN.
       SQLite validates row cardinality and use in scalar contexts.
 
@@ -87,7 +88,8 @@ Parsing and encoding share precedence rules. Encoding inserts parentheses to
 retain tree shape, including right-nested expressions; it does not algebraically
 simplify or evaluate expressions. DEFAULT accepts literals, signed numbers or
 parenthesized constant expressions and rejects column references and bind parameters in both directions.
-CHECK and generated expressions can reference columns.
+CHECK and generated expressions can reference columns. SQLite validates their
+context restrictions, including prohibiting subqueries.
 
 ## CREATE TABLE and schema files
 

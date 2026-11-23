@@ -256,15 +256,7 @@ test("malformed numeric/blob tokens and missing operands are committed failures"
   }
 });
 
-for (const source of [
-  "",
-  "()",
-  "1 2",
-  "a.b.c.d",
-  "1;",
-
-  "(SELECT 1)",
-]) {
+for (const source of ["", "()", "1 2", "a.b.c.d", "1;"]) {
   test(`unsupported or incomplete expression fails: ${source}`, () => {
     assert.ok(failure(sqlExpression.decode(source)) instanceof ParseError);
   });
