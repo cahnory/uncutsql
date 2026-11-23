@@ -23,6 +23,7 @@ export type {
   CaseExpression,
   PatternExpression,
   BindParameter,
+  RowValueExpression,
   BinaryOperator,
   UnaryOperator,
 } from "./codecs/expression.ts";

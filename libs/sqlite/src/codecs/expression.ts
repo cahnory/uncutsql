@@ -1,3 +1,4 @@
+import { rowValueExpression } from "./expression/row-value-expression.ts";
 import { bindParameter } from "./expression/bind-parameter.ts";
 import {
   patternOperator,
@@ -109,6 +110,8 @@ const encodeExpression = (value: Expression): Effect.Effect<string, EncodeError>
       return castExpression(at(0)).encode(value);
     case "FunctionCall":
       return functionCall(at(0)).encode(value);
+    case "RowValueExpression":
+      return rowValueExpression(at(0)).encode(value);
     case "BindParameter":
       return bindParameter.encode(value);
     case "ColumnReference":
@@ -203,5 +206,6 @@ export type {
   CaseExpression,
   PatternExpression,
   BindParameter,
+  RowValueExpression,
 } from "./expression/types.ts";
 export type { BinaryOperator, UnaryOperator } from "./expression/operators.ts";

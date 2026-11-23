@@ -21,6 +21,11 @@ export interface BinaryExpression {
   readonly right: Expression;
 }
 
+export interface RowValueExpression {
+  readonly _tag: "RowValueExpression";
+  readonly values: readonly Expression[];
+}
+
 export interface BindParameter {
   readonly _tag: "BindParameter";
   readonly value: string;
@@ -90,6 +95,7 @@ export interface FunctionCall {
 
 /** Parentheses affect tree shape and source spans, not semantic node kinds. */
 export type Expression =
+  | RowValueExpression
   | BindParameter
   | PatternExpression
   | CaseExpression

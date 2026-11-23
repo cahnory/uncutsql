@@ -637,3 +637,17 @@ Native binding tests cover repeated indices, distinct names with the same suffix
 anonymous ordering and nested expressions. DEFAULT validation rejects parameters
 through every expression variant. SQLite remains responsible for parameter limits
 and statement-context restrictions (including CHECK and generated columns).
+
+## Row values
+
+Parenthesized decoding distinguishes one expression (grouping) from two or more
+expressions (`RowValueExpression`). The separate row-value encoder requires at
+least two elements. The previous implementation's parenthesized-expression rule
+only retained one expression; the new rule adds comma-separated rows without
+changing the semantic representation of scalar grouping.
+
+Rows compose with the existing comparison, IN and BETWEEN codecs. Native tests
+cover lexicographic ordering, NULL/IS behavior and collation. Default validation
+recurses through all row elements, so scalar comparisons of constant rows work
+without allowing hidden column references or parameters. SQLite validates row
+cardinality and whether a context accepts a row rather than a scalar.

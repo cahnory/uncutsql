@@ -72,7 +72,8 @@ recognizing a keyword does not imply support for the construct it introduces.
 - [ ] Aggregate syntax: `*`, DISTINCT and argument ORDER BY.
 - [ ] FILTER, OVER, named windows and frame specifications.
 - [ ] Scalar subqueries, EXISTS and IN targets that are queries, tables or table functions.
-- [ ] Row-value expressions and comparisons.
+- [x] Row-value expressions and comparisons, including row-list IN and BETWEEN.
+      SQLite validates row cardinality and use in scalar contexts.
 
 Parsing and encoding share precedence rules. Encoding inserts parentheses to
 retain tree shape, including right-nested expressions; it does not algebraically
@@ -148,7 +149,7 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 
 Suggested order for further work:
 
-1. Add row values and remaining specialized expression forms.
+1. Add remaining specialized expressions and aggregate/window syntax.
 2. Add standalone indexes and their model/migration support.
 3. Add views/triggers and safe preservation during table rebuilds.
 4. Expand query grammar and the expression forms that depend on it.

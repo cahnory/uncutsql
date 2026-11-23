@@ -451,6 +451,7 @@ Signs are unary-expression nodes. Blob values contain hexadecimal byte pairs.
   NULL, current-time/date/timestamp and TRUE/FALSE literal spellings. TRUE/FALSE
   remain keywords on output so SQLite retains its contextual name resolution.
 - Column references with one, two or three identifier components.
+- Row values `(a, b, ...)`, row comparisons, BETWEEN and row-list membership.
 - Bind parameters `?`, `?NNN`, `:name`, `@name`, `$name`, with namespace/suffix
   extensions and exact token spelling. Defaults reject parameters. SQLite validates
   parameter-number limits and whether bindings are permitted in a statement context.
