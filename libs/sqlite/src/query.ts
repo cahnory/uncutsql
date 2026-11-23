@@ -17,5 +17,7 @@ export type {
   SelectQuery,
   ResultColumn,
   TableSource,
+  TableReferenceSource,
+  SubquerySource,
   LimitClause,
 } from "./codecs/query/types.ts";

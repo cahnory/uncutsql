@@ -28,9 +28,17 @@ export type ResultColumn =
   | { readonly _tag: "TableStarColumn"; readonly table: string }
   | { readonly _tag: "ExpressionColumn"; readonly expression: Expression; readonly alias?: string };
 
-export interface TableSource extends InTableTarget {
+export interface TableReferenceSource extends InTableTarget {
   readonly alias?: string;
 }
+
+export interface SubquerySource {
+  readonly _tag: "SubquerySource";
+  readonly query: Query;
+  readonly alias?: string;
+}
+
+export type TableSource = TableReferenceSource | SubquerySource;
 
 export type LimitClause =
   | { readonly _tag: "CountLimit"; readonly count: Expression; readonly offset?: Expression }

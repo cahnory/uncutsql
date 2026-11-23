@@ -723,7 +723,7 @@ clause ambiguity. A qualified-wildcard probe backtracks before ordinary expressi
 parsing so `table.column` and `table.*` remain distinct.
 
 FROM currently supports tables and table functions, including comma-separated
-sources. Joins, subquery sources and WITH remain pending; trailing
+sources. Joins and WITH remain pending; trailing
 unsupported clauses fail. Window declarations use the same quote-preserving name
 codec as references. All previous select-core fixtures are retained, and native
 SQLite tests cover aggregation, aliases, qualified wildcards and window inheritance.
@@ -761,3 +761,12 @@ correlation, empty-result NULL behavior, row subqueries, compounds and anonymous
 binding order. DEFAULT rejects all query expressions recursively. CHECK and
 generated-column codecs accept the syntax, with SQLite enforcing their context
 restrictions; tests confirm native rejection before and after serialization.
+
+## Derived tables
+
+FROM sources now include SubquerySource alongside existing table/function sources.
+A derived table holds a Query and an optional alias. Query construction is deferred
+inside the source codec to avoid eager recursive grammar expansion. Native tests
+cover nested derived tables, VALUES, compounds, inner and outer ordering/limits,
+qualified wildcards and parameter order. The previous subquery-source fixtures
+are retained unchanged. Parenthesized source groups and index hints remain pending.

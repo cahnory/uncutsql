@@ -63,3 +63,6 @@ exercised by `select-query.test.ts`, including its VALUES fixture.
 
 `select-statement` copies the previous valid/invalid fixtures unchanged, excluding
 WITH cases until CTE support lands. They run in `compound-query.test.ts`.
+
+The two subquery fixtures in `table-or-subquery/valid` are copied unchanged from
+the previous implementation and run in `derived-table.test.ts`.
