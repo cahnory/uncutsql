@@ -39,6 +39,14 @@ test("config schema agrees with runtime on editor metadata and invalid options",
 test("decisions schema validates generated snapshots and editable resolutions", () => {
   const validate = compile("decisions");
   const model = (key: string): DatabaseSchema => ({
+    triggers: [
+      {
+        identity: { name: "log" },
+        name: "log",
+        target: { name: "users" },
+        definition: { actions: [key] },
+      },
+    ],
     tables: [
       {
         identity: { name: "users" },

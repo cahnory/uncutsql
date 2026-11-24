@@ -86,6 +86,14 @@ const identity = (value: unknown, path: string) => {
   for (const key of ["catalog", "schema"])
     if (Object.hasOwn(identity, key)) text(identity[key], `${path}.${key}`);
 };
+const trigger = (value: unknown, path: string) => {
+  const item = record(value, path);
+  fields(item, ["identity", "name", "target", "definition"], path);
+  identity(item.identity, `${path}.identity`);
+  text(item.name, `${path}.name`);
+  identity(item.target, `${path}.target`);
+  semanticValue(item.definition, `${path}.definition`);
+};
 const view = (value: unknown, path: string) => {
   const item = record(value, path);
   fields(item, ["identity", "name", "columns", "query"], path);
@@ -112,9 +120,11 @@ export const decodeDatabaseSchema = (
   Effect.try({
     try: () => {
       const database = record(value, "$database");
-      fields(database, ["tables", "views"], "$database");
+      fields(database, ["tables", "views", "triggers"], "$database");
       array(database.tables, "$database.tables", table);
       if (Object.hasOwn(database, "views")) array(database.views, "$database.views", view);
+      if (Object.hasOwn(database, "triggers"))
+        array(database.triggers, "$database.triggers", trigger);
       return value as DatabaseSchema;
     },
     catch: (cause) =>

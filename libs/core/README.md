@@ -22,8 +22,8 @@ const migration = planDatabaseMigration(diff);
 The logical procedures express requested changes. Each dialect chooses physical
 operations, dependency order, rebuild strategy and SQL rendering. Cross-dialect
 semantic equivalence is not inferred: adapters must agree on normalized values
-before comparison. Other dialect parsers and additional objects such as views
-and triggers remain future work; the engine is independent of SQLite today.
+before comparison. Views carry a query, and triggers carry a target identity and a
+dialect-normalized definition. Changes to either trigger field produce a ReplaceTrigger procedure.
 
 ```sh
 pnpm --filter @uncutsql/core check
@@ -75,6 +75,6 @@ choices before calling it. The CLI enforces this sequence for migration/generate
 ## Roadmap
 
 - [x] Represent views in serializable database snapshots, validate restored snapshots, and describe view changes in the diff and logical plan.
-- [ ] Extend those contracts to triggers after the view milestone.
+- [x] Represent trigger snapshots, validate restored models and lower trigger diffs to logical procedures.
 
 See the [workspace roadmap](../../ROADMAP.md) for cross-project sequencing.

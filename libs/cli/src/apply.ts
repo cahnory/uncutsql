@@ -51,12 +51,24 @@ export const applyGenerated = <E extends Error, R>(
       (actual, expected, stage) =>
         Effect.gen(function* () {
           const diff = yield* diffDatabases(expected, actual);
-          if (diff.changes.length)
+          if (diff.changes.length) {
+            const descriptions = diff.changes.map((change) => {
+              const identity =
+                "table" in change
+                  ? change.table
+                  : "view" in change
+                    ? change.view.identity
+                    : "trigger" in change
+                      ? change.trigger.identity
+                      : change.after.identity;
+              return `${change._tag} ${JSON.stringify(identity)}`;
+            });
             return yield* Effect.fail(
               new ApplicationError({
-                message: `Database schema differs from the ${stage === "applied" ? "last applied snapshot" : "generation lock"}: ${diff.changes.map((change) => `${change._tag} ${JSON.stringify("table" in change ? change.table : "view" in change ? change.view.identity : change.after.identity)}`).join(", ")}`,
+                message: `Database schema differs from the ${stage === "applied" ? "last applied snapshot" : "generation lock"}: ${descriptions.join(", ")}`,
               }),
             );
+          }
         }),
     );
   });

@@ -159,3 +159,41 @@ test("view changes survive JSON restoration and lower to logical procedures", ()
   );
   assert.throws(() => diff(database(), { tables: [], views: [view, view] }), /Duplicate view/);
 });
+
+test("trigger snapshots compare target identity and ordered actions", () => {
+  const trigger = {
+    identity: { name: "audit" },
+    name: "audit",
+    target: { name: "users" },
+    definition: { actions: ["first", "second"] },
+  };
+  const schema = { tables: [], triggers: [trigger] };
+  assert.deepEqual(
+    Effect.runSync(decodeDatabaseSchema(JSON.parse(JSON.stringify(schema)))),
+    schema,
+  );
+  assert.deepEqual(planDatabaseMigration(diff(database(), schema)).procedures, [
+    { _tag: "CreateTrigger", trigger },
+  ]);
+  assert.deepEqual(planDatabaseMigration(diff(schema, database())).procedures, [
+    { _tag: "DropTrigger", trigger },
+  ]);
+  for (const after of [
+    { ...trigger, target: { name: "posts" } },
+    { ...trigger, definition: { actions: ["second", "first"] } },
+  ])
+    assert.deepEqual(
+      planDatabaseMigration(diff(schema, { tables: [], triggers: [after] })).procedures,
+      [{ _tag: "ReplaceTrigger", before: trigger, after }],
+    );
+  assert.deepEqual(diff(schema, schema).changes, []);
+  assert.throws(
+    () => diff(database(), { ...schema, triggers: [trigger, trigger] }),
+    /Duplicate trigger/,
+  );
+  assert.throws(
+    () =>
+      Effect.runSync(decodeDatabaseSchema({ ...schema, triggers: [{ ...trigger, target: {} }] })),
+    /target.name/,
+  );
+});

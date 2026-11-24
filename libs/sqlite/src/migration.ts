@@ -141,6 +141,10 @@ export const lowerMigration = (
   next: DatabaseSchema,
 ): Effect.Effect<MigrationPlan, SchemaDiffError | EncodeError | MigrationPlanError> =>
   Effect.gen(function* () {
+    if (previous.triggers?.length || next.triggers?.length)
+      return yield* Effect.fail(
+        new EncodeError({ message: "SQLite trigger snapshots are not supported yet" }),
+      );
     const before = yield* tablesFromDatabaseSchema(previous);
     const after = yield* tablesFromDatabaseSchema(next);
     const beforeViews = yield* viewsFromDatabaseSchema(previous);
@@ -296,6 +300,7 @@ export const lowerMigration = (
         .map((operation) => tableKey(operation.table)),
     );
     for (const procedure of procedures.procedures) {
+      if ("trigger" in procedure || procedure._tag === "ReplaceTrigger") continue;
       if ("view" in procedure || procedure._tag === "ReplaceView") continue;
       const model = "after" in procedure ? procedure.after : procedure.table;
       const table = { schema: model.identity.catalog!, name: model.identity.name };

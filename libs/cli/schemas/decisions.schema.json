@@ -185,6 +185,12 @@
           "items": {
             "$ref": "#/definitions/view"
           }
+        },
+        "triggers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/trigger"
+          }
         }
       },
       "required": ["tables"],
@@ -309,6 +315,25 @@
         }
       },
       "required": ["identity", "name", "query"],
+      "additionalProperties": false
+    },
+    "trigger": {
+      "type": "object",
+      "properties": {
+        "identity": {
+          "$ref": "#/definitions/identity"
+        },
+        "name": {
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/definitions/identity"
+        },
+        "definition": {
+          "$ref": "#/definitions/value"
+        }
+      },
+      "required": ["identity", "name", "target", "definition"],
       "additionalProperties": false
     }
   }

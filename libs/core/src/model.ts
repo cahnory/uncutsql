@@ -52,7 +52,17 @@ export interface DatabaseView {
   readonly query: SchemaValue;
 }
 
+export interface DatabaseTrigger {
+  readonly identity: TableIdentity;
+  readonly name: string;
+  /** Normalized identity of the table or view that owns this trigger. */
+  readonly target: TableIdentity;
+  /** Dialect-normalized timing, event, condition and ordered actions. */
+  readonly definition: SchemaValue;
+}
+
 export interface DatabaseSchema {
+  readonly triggers?: readonly DatabaseTrigger[];
   readonly views?: readonly DatabaseView[];
   readonly tables: readonly DatabaseTable[];
 }

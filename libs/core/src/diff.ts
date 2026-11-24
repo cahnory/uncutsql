@@ -6,6 +6,7 @@ import {
   type DatabaseColumn,
   type DatabaseIndex,
   type DatabaseView,
+  type DatabaseTrigger,
   type TableIdentity,
   type SchemaValue,
   tableKey,
@@ -83,6 +84,14 @@ export type ViewChange =
   | { readonly _tag: "ViewAdded" | "ViewRemoved"; readonly view: DatabaseView }
   | { readonly _tag: "ViewChanged"; readonly before: DatabaseView; readonly after: DatabaseView };
 
+export type TriggerChange =
+  | { readonly _tag: "TriggerAdded" | "TriggerRemoved"; readonly trigger: DatabaseTrigger }
+  | {
+      readonly _tag: "TriggerChanged";
+      readonly before: DatabaseTrigger;
+      readonly after: DatabaseTrigger;
+    };
+
 export interface DropGuard {
   readonly table: TableIdentity;
   /** Source column name. Omit to require an empty table. */
@@ -90,7 +99,7 @@ export interface DropGuard {
 }
 export interface DatabaseDiff {
   readonly dropGuards?: readonly DropGuard[];
-  readonly changes: readonly (TableChange | ViewChange)[];
+  readonly changes: readonly (TableChange | ViewChange | TriggerChange)[];
 }
 
 export const validateDatabase = (
@@ -153,6 +162,18 @@ export const validateDatabase = (
         message: `Duplicate view ${id}`,
       });
     views.add(id);
+  }
+  const triggers = new Set<string>();
+  for (const trigger of database.triggers ?? []) {
+    const id = tableKey(trigger.identity);
+    if (triggers.has(id))
+      diagnostics.push({
+        code: "DuplicateTrigger",
+        side,
+        table: trigger.identity,
+        message: `Duplicate trigger ${id}`,
+      });
+    triggers.add(id);
   }
   return diagnostics;
 };
@@ -231,7 +252,7 @@ export const diffDatabases = (
     if (diagnostics.length) return yield* Effect.fail(new SchemaDiffError({ diagnostics }));
     const previous = new Map(before.tables.map((table) => [tableKey(table.identity), table]));
     const next = new Map(after.tables.map((table) => [tableKey(table.identity), table]));
-    const changes: (TableChange | ViewChange)[] = [];
+    const changes: (TableChange | ViewChange | TriggerChange)[] = [];
     for (const [key, table] of previous)
       if (!next.has(key))
         changes.push({ _tag: "TableRemoved", table: table.identity, definition: table });
@@ -262,6 +283,23 @@ export const diffDatabases = (
         !schemaValueEqual(old.query, view.query)
       )
         changes.push({ _tag: "ViewChanged", before: old, after: view });
+    }
+    const oldTriggers = new Map(
+      (before.triggers ?? []).map((trigger) => [tableKey(trigger.identity), trigger]),
+    );
+    const newTriggers = new Map(
+      (after.triggers ?? []).map((trigger) => [tableKey(trigger.identity), trigger]),
+    );
+    for (const [key, trigger] of oldTriggers)
+      if (!newTriggers.has(key)) changes.push({ _tag: "TriggerRemoved", trigger });
+    for (const [key, trigger] of newTriggers) {
+      const old = oldTriggers.get(key);
+      if (!old) changes.push({ _tag: "TriggerAdded", trigger });
+      else if (
+        tableKey(old.target) !== tableKey(trigger.target) ||
+        !schemaValueEqual(old.definition, trigger.definition)
+      )
+        changes.push({ _tag: "TriggerChanged", before: old, after: trigger });
     }
     return { changes };
   });

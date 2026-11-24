@@ -10,6 +10,8 @@ The next workspace milestone is to preserve triggers during migrations.
 | 2. Generate trigger migrations         | SQLite maps declarations to the core model and orders trigger removal and recreation around table and view changes.                 |
 | 3. Apply and verify trigger migrations | The driver inspects live triggers. The CLI and demo exercise generation, rebuild preservation and drift detection.                  |
 
+Core trigger snapshots, structural comparison and logical procedures are implemented. The SQLite declaration and body grammar is the remaining part of step 1.
+
 SQLite contextual keyword and legacy quoting work can proceed independently of these handoffs.
 
 ## VS Code support after trigger migrations

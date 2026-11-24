@@ -1,5 +1,5 @@
 import type { DatabaseDiff, DropGuard, TableAlteration } from "./diff.ts";
-import type { DatabaseTable, DatabaseView } from "./model.ts";
+import type { DatabaseTable, DatabaseTrigger, DatabaseView } from "./model.ts";
 
 interface TableProcedure {
   readonly before: DatabaseTable;
@@ -8,6 +8,12 @@ interface TableProcedure {
 }
 /** Logical procedures, not execution order or physical operations such as a rebuild. */
 export type MigrationProcedure =
+  | { readonly _tag: "CreateTrigger" | "DropTrigger"; readonly trigger: DatabaseTrigger }
+  | {
+      readonly _tag: "ReplaceTrigger";
+      readonly before: DatabaseTrigger;
+      readonly after: DatabaseTrigger;
+    }
   | { readonly _tag: "CreateView" | "DropView"; readonly view: DatabaseView }
   | { readonly _tag: "ReplaceView"; readonly before: DatabaseView; readonly after: DatabaseView }
   | { readonly _tag: "CreateTable"; readonly table: DatabaseTable }
@@ -24,6 +30,14 @@ export const planDatabaseMigration = (diff: DatabaseDiff): DatabaseMigration => 
   ...(diff.dropGuards ? { dropGuards: diff.dropGuards } : {}),
   procedures: diff.changes.map((change): MigrationProcedure => {
     switch (change._tag) {
+      case "TriggerAdded":
+      case "TriggerRemoved":
+        return {
+          _tag: change._tag === "TriggerAdded" ? "CreateTrigger" : "DropTrigger",
+          trigger: change.trigger,
+        };
+      case "TriggerChanged":
+        return { _tag: "ReplaceTrigger", before: change.before, after: change.after };
       case "ViewAdded":
       case "ViewRemoved":
         return { _tag: change._tag === "ViewAdded" ? "CreateView" : "DropView", view: change.view };

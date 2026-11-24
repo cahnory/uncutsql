@@ -234,6 +234,10 @@ export const tablesFromDatabaseSchema = (
 
 export const fromDatabaseSchema = (database: DatabaseSchema) =>
   Effect.gen(function* () {
+    if (database.triggers?.length)
+      return yield* Effect.fail(
+        new EncodeError({ message: "SQLite trigger snapshots are not supported yet" }),
+      );
     const tables = yield* tablesFromDatabaseSchema(database);
     const indexes = yield* indexesFromDatabaseSchema(database);
     return [...tables, ...indexes, ...(yield* viewsFromDatabaseSchema(database))];
