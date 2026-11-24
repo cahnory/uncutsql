@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { readFile, writeFile, readdir, stat, realpath } from "node:fs/promises";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { readFile, readdir, stat } from "node:fs/promises";
+import { join } from "node:path";
 import { Data, Effect, Result } from "effect";
 import { SchemaDiffError, MigrationDecisionError, prepareMigrationDecisions } from "@uncutsql/core";
 import { ParseError } from "@uncutsql/codec";
@@ -16,29 +16,7 @@ import {
 } from "./generate.ts";
 import { compareSchemas, renderMigration } from "./workflow.ts";
 
-const decisionDocument = async (document: MigrationDecisions, output?: string) => {
-  const directory = await realpath(output === undefined ? process.cwd() : dirname(resolve(output)));
-  const schemaPath = "node_modules/@uncutsql/cli/schemas/decisions.schema.json";
-  let root = directory;
-  let schema = resolve(process.cwd(), schemaPath);
-  // Keep the node_modules path instead of resolving the package's symlink.
-  while (true) {
-    const candidate = join(root, schemaPath);
-    try {
-      if ((await stat(candidate)).isFile()) {
-        schema = candidate;
-        break;
-      }
-    } catch (cause) {
-      if (!(cause instanceof Error && "code" in cause && cause.code === "ENOENT")) throw cause;
-    }
-    const parent = dirname(root);
-    if (parent === root) break;
-    root = parent;
-  }
-  const path = relative(directory, schema).split(sep).join("/");
-  return { $schema: path.startsWith(".") ? path : `./${path}`, ...document };
-};
+import { decisionDocument, writeDecisionFile } from "./decision-file.ts";
 
 const help = `Usage: pnpm cli <check|format> [file|-]
        pnpm cli diff [schema-path|-]
@@ -48,7 +26,10 @@ const help = `Usage: pnpm cli <check|format> [file|-]
 
 Options: --config <file>, --dialect <module>, --driver <module>
          --schema <path|->, --migrations <directory>
-         --decisions <file>, --write-decisions [new-file] (migration/generate)
+         --decisions <file> (migration/generate)
+         --write-decisions [file]    Create a new decision file
+         --rewrite-decisions [file]  Reset all current decisions to pending
+         --merge-decisions [file]    Refresh while keeping applicable choices
 Positional paths override flags; flags override configuration. Drivers are loaded only for apply.
 
 Schema paths accept files or directories of **/*.uncut.sql in sorted path order.
@@ -56,7 +37,7 @@ check, format and generate use config.schema when the path is omitted.
 Use '-' for stdin. Without config.schema, check and format default to stdin.
 generate and apply use config.migrations unless an output directory is supplied.
 Decisions default to config.decisions or uncutsql.decisions.json beside the config
-(working directory without config). --write-decisions may omit its path.
+(working directory without config). Choose one decision-file option for migration or generate.
   check   Validate syntax supported by the selected dialect (no execution).
   format  Print canonical SQL to stdout; comments and formatting are discarded.
   diff    Compare the configured schema (or one path) to the migration lock.
@@ -146,22 +127,22 @@ const program = Effect.gen(function* () {
       }),
     );
   if (
-    (options.decisions || options.writeDecisions) &&
+    (options.decisions || options.decisionWriter) &&
     command !== "migration" &&
     command !== "generate"
   )
     return yield* Effect.fail(
       new UsageError({ message: "Decision-file options apply only to migration and generate." }),
     );
-  if (options.decisions && options.writeDecisions)
+  if (options.decisions && options.decisionWriter)
     return yield* Effect.fail(
-      new UsageError({ message: "Choose --decisions or --write-decisions, not both." }),
+      new UsageError({
+        message: `Choose only one of --decisions and ${options.decisionWriter.flag}.`,
+      }),
     );
   const selected = yield* resolveConfig(options, process.cwd());
-  const decisionOutput =
-    options.writeDecisions === true ? selected.decisions : options.writeDecisions;
   const decisions: unknown =
-    (command !== "generate" && command !== "migration") || options.writeDecisions
+    (command !== "generate" && command !== "migration") || options.decisionWriter
       ? undefined
       : yield* Effect.tryPromise({
           try: async () => {
@@ -186,24 +167,17 @@ const program = Effect.gen(function* () {
               message: `Cannot read decisions ${selected.decisions}: ${String(cause)}`,
             }),
         });
-  const writeDecisions = (document: MigrationDecisions) =>
-    Effect.tryPromise({
-      try: async () => {
-        await writeFile(
-          decisionOutput!,
-          JSON.stringify(await decisionDocument(document, decisionOutput), null, 2) + "\n",
-          {
-            flag: "wx",
-          },
-        );
-        const rename = document.decisions.some((item) => item.candidates.length)
-          ? " or rename with a target from candidates"
-          : "";
-        return `Wrote ${decisionOutput}. Set resolution.action to drop_if_empty or drop${rename}, then rerun without --write-decisions (use --decisions with this path if it differs from the configured/default file).\n`;
-      },
+  const writeDecisions = (document: MigrationDecisions) => {
+    const writer = options.decisionWriter!;
+    const path = writer.path ?? selected.decisions;
+    return Effect.tryPromise({
+      try: () => writeDecisionFile(document, path, writer.flag),
       catch: (cause) =>
-        new InputError({ message: `Cannot create decision file: ${String(cause)}` }),
+        new InputError({
+          message: `${path}: ${cause instanceof Error ? cause.message : String(cause)}`,
+        }),
     });
+  };
   // Apply only needs the driver's dialect ID; it does not load a SQL parser.
   const dialect = command === "apply" ? undefined : yield* loadDialect(selected.dialect);
   const readSchema = (path: string) => readSchemaWith(dialect!, path);
@@ -243,7 +217,7 @@ const program = Effect.gen(function* () {
       );
     }
     const ast = yield* readSchema(args[1] ?? selected.schema!);
-    if (options.writeDecisions)
+    if (options.decisionWriter)
       return yield* writeDecisions(yield* prepareGeneratedDecisions(dialect!, ast, directory));
     const result = yield* generateMigration(dialect!, ast, directory, decisions);
     return result.migrationPath
@@ -304,7 +278,7 @@ const program = Effect.gen(function* () {
         ) + "\n"
       );
     if (command === "migration") {
-      if (options.writeDecisions)
+      if (options.decisionWriter)
         return yield* writeDecisions(
           yield* prepareMigrationDecisions(comparison.before, comparison.after),
         );

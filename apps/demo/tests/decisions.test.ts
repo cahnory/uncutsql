@@ -48,6 +48,8 @@ test("CLI requires reviewable decisions, persists them, and applies renamed data
     assert.deepEqual(pending.decisions[0]!.resolution, { action: "pending" });
     const second = run(cwd, ["generate", "-", "--write-decisions"], after);
     assert.equal(second.status, 1);
+    assert.match(second.stderr, /--merge-decisions/);
+    assert.match(second.stderr, /--rewrite-decisions/);
     assert.deepEqual(JSON.parse(readFileSync(decisions, "utf8")), pending);
     writeFileSync(
       decisions,
@@ -142,6 +144,11 @@ test("default and configured decision files can be prepared and loaded without p
       };
       assert.equal(pending.$schema, "../node_modules/@uncutsql/cli/schemas/decisions.schema.json");
       assert.equal(run(cwd, [...args, "--write-decisions"]).status, 1);
+      for (const flag of ["--merge-decisions", "--rewrite-decisions"]) {
+        const refreshed = run(cwd, [...args, flag]);
+        assert.equal(refreshed.status, 0, refreshed.stderr);
+        assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), pending);
+      }
       writeFileSync(
         path,
         JSON.stringify({
@@ -254,6 +261,68 @@ test("guarded drops check live data and can retry the same migration after rollb
     } finally {
       db.close();
     }
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("merge refreshes a changed review and rewrite resets its answers", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "uncutsql-refresh-decisions-"));
+  try {
+    const file = join(cwd, "review.json");
+    const read = () => JSON.parse(readFileSync(file, "utf8")) as MigrationDecisions;
+    const generate = (schema: string, ...flags: string[]) =>
+      run(cwd, ["generate", "-", ...flags], schema);
+    const before = "CREATE TABLE t(id, a, b, c, d, e); CREATE TABLE obsolete(id)";
+    const first = "CREATE TABLE t(id, e, x, y)";
+    const next = "CREATE TABLE t(id, d, x, z)";
+    assert.equal(generate(before).status, 0);
+    const written = generate(first, "--write-decisions=review.json");
+    assert.equal(written.status, 0, written.stderr);
+    const initial = read();
+    writeFileSync(
+      file,
+      JSON.stringify({
+        ...initial,
+        decisions: initial.decisions.map((item) => ({
+          ...item,
+          resolution:
+            item.column === "a"
+              ? { action: "rename", target: "x" }
+              : item.column === "b"
+                ? { action: "rename", target: "y" }
+                : { action: item.column ? "drop" : "drop_if_empty" },
+        })),
+      }),
+    );
+    const merged = generate(next, "--merge-decisions", "review.json");
+    assert.equal(merged.status, 0, merged.stderr);
+    const review = read();
+    assert.deepEqual(
+      Object.fromEntries(
+        review.decisions.map((item) => [item.column ?? item.table.name, item.resolution]),
+      ),
+      {
+        a: { action: "rename", target: "x" },
+        b: { action: "pending" },
+        c: { action: "drop" },
+        e: { action: "pending" },
+        obsolete: { action: "drop_if_empty" },
+      },
+    );
+    assert.deepEqual(review.decisions.find((item) => item.column === "a")!.candidates, ["x", "z"]);
+    assert.equal(existsSync(join(cwd, "migrations/000002.sql")), false);
+    assert.match(generate(next, "--decisions", "review.json").stderr, /Unresolved decision/);
+    const reset = generate(next, "--rewrite-decisions=review.json");
+    assert.equal(reset.status, 0, reset.stderr);
+    assert.deepEqual(read(), {
+      ...review,
+      decisions: review.decisions.map((item) => ({ ...item, resolution: { action: "pending" } })),
+    });
+    writeFileSync(file, "broken");
+    assert.equal(generate(next, "--merge-decisions=review.json").status, 1);
+    assert.equal(readFileSync(file, "utf8"), "broken");
+    assert.equal(generate(next, "--rewrite-decisions=review.json").status, 0);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }

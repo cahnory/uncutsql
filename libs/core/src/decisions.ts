@@ -1,4 +1,5 @@
 import { Data, Effect } from "effect";
+import { decodeDatabaseSchema } from "./decode.ts";
 import { diffDatabases, type DatabaseDiff, type DropGuard, type TableAlteration } from "./diff.ts";
 import {
   schemaValueEqual,
@@ -72,33 +73,17 @@ export const prepareMigrationDecisions = (before: DatabaseSchema, after: Databas
     decisions: questions(diff),
   }));
 
-/** Validate untrusted JSON and resolve intent against fresh comparison results. */
-export const resolveMigrationDecisions = (
-  before: DatabaseSchema,
-  after: DatabaseSchema,
-  supplied?: unknown,
+const readAnswers = (
+  pending: MigrationDecisions,
+  inputs: readonly unknown[],
+  allowPending: boolean,
 ) =>
   Effect.gen(function* () {
-    const diff = yield* diffDatabases(before, after);
-    const pending: MigrationDecisions = { version: 1, before, after, decisions: questions(diff) };
     const fail = (message: string) => Effect.fail(new MigrationDecisionError({ message, pending }));
-    if (supplied === undefined) {
-      if (pending.decisions.length)
-        return yield* fail(
-          "Unresolved migration decisions. Prepare a decision file and resolve each removal before planning.",
-        );
-      return { diff, decisions: pending };
-    }
-    if (!record(supplied) || supplied.version !== 1 || !Array.isArray(supplied.decisions))
-      return yield* fail("Expected a version 1 migration decision document.");
-    if (!equal(supplied.before, before) || !equal(supplied.after, after))
-      return yield* fail(
-        "Stale migration decisions: source or target schema changed. Prepare a new decision file.",
-      );
     const expected = new Map(pending.decisions.map((item) => [item.id, item]));
     const answers = new Map<string, MigrationDecision>();
     const targets = new Set<string>();
-    for (const input of supplied.decisions) {
+    for (const input of inputs) {
       if (!record(input) || typeof input.id !== "string")
         return yield* fail("Each decision needs its original id.");
       const question = expected.get(input.id);
@@ -107,6 +92,15 @@ export const resolveMigrationDecisions = (
       if (!equal(input.table, question.table) || input.column !== question.column)
         return yield* fail(`Decision identity changed: ${input.id}`);
       const resolution = input.resolution;
+      if (
+        allowPending &&
+        record(resolution) &&
+        resolution.action === "pending" &&
+        Object.keys(resolution).length === 1
+      ) {
+        answers.set(input.id, question);
+        continue;
+      }
       if (!record(resolution) || resolution.action === "pending")
         return yield* fail(`Unresolved decision: ${question.question}`);
       if (
@@ -135,6 +129,61 @@ export const resolveMigrationDecisions = (
       return yield* fail(
         "Missing migration decisions: every removal requires an explicit resolution.",
       );
+    return answers;
+  });
+
+/** Refresh the questions and snapshots, carrying forward applicable reviewed choices. */
+export const mergeMigrationDecisions = (fresh: MigrationDecisions, previous: unknown) =>
+  Effect.gen(function* () {
+    if (!record(previous) || previous.version !== 1 || !Array.isArray(previous.decisions))
+      return yield* Effect.fail(
+        new MigrationDecisionError({
+          message: "Expected a version 1 migration decision document.",
+          pending: fresh,
+        }),
+      );
+    const before = yield* decodeDatabaseSchema(previous.before);
+    const after = yield* decodeDatabaseSchema(previous.after);
+    const original = yield* prepareMigrationDecisions(before, after);
+    const answers = yield* readAnswers(original, previous.decisions, true);
+    return {
+      ...fresh,
+      decisions: fresh.decisions.map((question) => {
+        const resolution = answers.get(question.id)?.resolution;
+        if (
+          !resolution ||
+          (resolution.action === "rename" && !question.candidates.includes(resolution.target))
+        )
+          return question;
+        return { ...question, resolution };
+      }),
+    };
+  });
+
+/** Validate untrusted JSON and resolve intent against fresh comparison results. */
+export const resolveMigrationDecisions = (
+  before: DatabaseSchema,
+  after: DatabaseSchema,
+  supplied?: unknown,
+) =>
+  Effect.gen(function* () {
+    const diff = yield* diffDatabases(before, after);
+    const pending: MigrationDecisions = { version: 1, before, after, decisions: questions(diff) };
+    const fail = (message: string) => Effect.fail(new MigrationDecisionError({ message, pending }));
+    if (supplied === undefined) {
+      if (pending.decisions.length)
+        return yield* fail(
+          "Unresolved migration decisions. Prepare a decision file and resolve each removal before planning.",
+        );
+      return { diff, decisions: pending };
+    }
+    if (!record(supplied) || supplied.version !== 1 || !Array.isArray(supplied.decisions))
+      return yield* fail("Expected a version 1 migration decision document.");
+    if (!equal(supplied.before, before) || !equal(supplied.after, after))
+      return yield* fail(
+        "Stale migration decisions: source or target schema changed. Prepare a new decision file.",
+      );
+    const answers = yield* readAnswers(pending, supplied.decisions, false);
     const dropGuards: DropGuard[] = [];
     const changes = diff.changes.map((change) => {
       if (change._tag !== "TableChanged") {

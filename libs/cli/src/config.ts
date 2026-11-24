@@ -33,6 +33,8 @@ const validate = (value: unknown): UncutConfig => {
   return value as UncutConfig;
 };
 
+export type DecisionWriterFlag = "--write-decisions" | "--rewrite-decisions" | "--merge-decisions";
+
 export const parseOptions = (args: readonly string[]) =>
   Effect.try({
     try: () => {
@@ -44,7 +46,7 @@ export const parseOptions = (args: readonly string[]) =>
         dialect?: string;
         driver?: string;
         decisions?: string;
-        writeDecisions?: string | true;
+        decisionWriter?: { flag: DecisionWriterFlag; path: string | undefined };
       } = {};
       for (let index = 0; index < args.length; index++) {
         const arg = args[index]!;
@@ -54,32 +56,39 @@ export const parseOptions = (args: readonly string[]) =>
         }
         const [name, ...inline] = arg.split("=");
         if (
+          name === "--write-decisions" ||
+          name === "--rewrite-decisions" ||
+          name === "--merge-decisions"
+        ) {
+          if (options.decisionWriter)
+            throw new Error(
+              `Choose only one decision-file option. Received ${options.decisionWriter.flag} and ${name}.`,
+            );
+          const next = args[index + 1];
+          const path = inline.length
+            ? inline.join("=")
+            : next !== undefined && !next.startsWith("--")
+              ? args[++index]
+              : undefined;
+          if (path === "" || path?.startsWith("--"))
+            throw new Error(`${name} requires a nonempty path when supplied`);
+          options.decisionWriter = { flag: name, path };
+          continue;
+        }
+        if (
           name !== "--schema" &&
           name !== "--migrations" &&
           name !== "--config" &&
           name !== "--dialect" &&
           name !== "--driver" &&
-          name !== "--decisions" &&
-          name !== "--write-decisions"
+          name !== "--decisions"
         ) {
           positional.push(arg);
           continue;
         }
-        if (
-          name === "--write-decisions" &&
-          !inline.length &&
-          (args[index + 1] === undefined || args[index + 1]!.startsWith("--"))
-        ) {
-          if (options.writeDecisions !== undefined)
-            throw new Error(`${name} was specified more than once`);
-          options.writeDecisions = true;
-          continue;
-        }
         const value = inline.length ? inline.join("=") : args[++index];
         if (!value || value.startsWith("--")) throw new Error(`${name} requires a value`);
-        const key = (
-          name === "--write-decisions" ? "writeDecisions" : name.slice(2)
-        ) as keyof typeof options;
+        const key = name.slice(2) as Exclude<keyof typeof options, "decisionWriter">;
         if (options[key] !== undefined) throw new Error(`${name} was specified more than once`);
         options[key] = value;
       }

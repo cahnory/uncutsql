@@ -135,6 +135,10 @@ test("configuration and invalid adapter failures are actionable typed errors", a
     for (const args of [
       ["--dialect"],
       ["--driver="],
+      ["--merge-decisions="],
+      ["--merge-decisions", "--write-decisions"],
+      ["--write-decisions", "--rewrite-decisions"],
+      ["--rewrite-decisions", "--merge-decisions"],
       ["--config", "--dialect"],
       ["--dialect", "x", "--dialect", "y"],
     ]) {

@@ -19,7 +19,7 @@ is resolved. Use `decisions before.sql after.sql` to print the review JSON, or:
 
 ```sh
 uncutsql migration before.sql after.sql --write-decisions choices.json
-# Edit each resolution: {"action":"drop"} or {"action":"rename","target":"new_key"}
+# Review each pending resolution.
 uncutsql migration before.sql after.sql --decisions choices.json
 ```
 
@@ -29,8 +29,9 @@ Each generated resolution starts as an object:
 { "action": "pending" }
 ```
 
-Change `action` to `drop` or `rename`. For `rename`, add `target` with a column
-key from `candidates`. Table removals offer only `pending` and `drop`. Pending
+Choose `drop_if_empty` to require an empty table or an all-NULL column, or `drop`
+to allow removal with data. For a column rename, choose `rename` and set `target`
+to a column key from `candidates`. Pending
 actions stop migration generation until reviewed. The schema declares the action
 choices together so editors can suggest `rename` before its target is filled in.
 
@@ -43,11 +44,18 @@ uncutsql generate desired.sql migrations --decisions choices.json
 uncutsql apply app.sqlite migrations
 ```
 
-Preparing choices does not generate or apply a migration. Existing choice files
-are never overwritten. Snapshots are rechecked against the current baseline and
-target; stale answers require a fresh review. `--decisions` and `--write-decisions`
-are mutually exclusive. The file workflow works in CI; terminal prompts are not
-implemented yet. The core's structured questions can support another interface.
+Both `generate` and `migration` accept one decision-file option per invocation.
+
+| Flag                         | Behavior                                                                                                                                                                                     |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--write-decisions [file]`   | Create a fresh review. If the file already exists, show the merge and rewrite options.                                                                                                       |
+| `--merge-decisions [file]`   | Refresh the review, keeping answers for matching table and column removals. A rename whose target disappeared becomes pending. Obsolete questions disappear and new questions start pending. |
+| `--rewrite-decisions [file]` | Replace the review with fresh questions, all pending.                                                                                                                                        |
+| `--decisions <file>`         | Read the reviewed answers and generate SQL.                                                                                                                                                  |
+
+All three preparation flags can create the file when it is missing. They leave
+migration files and the lock untouched. Merge validates the previous review
+before replacing it. Generation checks the refreshed snapshots against the current schemas.
 
 Validated choices and their snapshots are embedded as one JSON line comment in
 the generated SQL. That comment is covered by the existing migration hash and
@@ -127,12 +135,8 @@ uncutsql generate --write-decisions  # create the configured/default review file
 uncutsql generate                    # load the answers automatically
 ```
 
-`--decisions path` overrides the read path; `--write-decisions path` overrides the
-preparation destination. Explicit paths resolve from the working directory;
-configured paths resolve from the config directory. Preparation never overwrites
-an existing file and never loads the old answers. After generation, remove or
-archive the review file before preparing the next change: its snapshots describe
-only the reviewed baseline and target.
+Each preparation flag accepts an optional output path. Explicit paths resolve
+from the working directory. Configured paths resolve from the config directory.
 
 ## JSON schemas
 
@@ -161,6 +165,6 @@ resolve relative to the JSON file; adjust the path for files in subdirectories. 
 [`schemas`](./schemas).
 
 The decisions schema covers the snapshots, pending `{ "action": "pending" }` resolutions, and
-`drop`/`rename` answers. The CLI additionally checks snapshot freshness, decision
+`drop_if_empty`, `drop`, and `rename` answers. The CLI additionally checks snapshot freshness, decision
 identities, rename candidates, and duplicate targets when consuming answers.
 The generated `uncutsql.lock.json` is managed by the CLI and has no editor schema.

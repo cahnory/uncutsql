@@ -553,7 +553,11 @@ pnpm cli migration before.sql after.sql --decisions choices.json
 | `{"action":"rename","target":"new_key"}` | Copy the removed column to a target listed in `candidates`. Available only when the table has an added column.                                              |
 
 `generate desired.sql migrations` supports the same flags against its saved
-baseline. Unresolved, stale and conflicting choices stop generation. Confirmed
+baseline. If the decision file exists, replace `--write-decisions` with
+`--merge-decisions` to keep applicable answers, remove obsolete questions, and
+add new ones as pending. A rename returns to pending if its target disappears.
+Use `--rewrite-decisions` to reset every answer. Both flags accept the same optional path.
+Unresolved, stale and conflicting choices stop generation. Confirmed
 renames retain separate type/constraint changes and SQLite currently implements
 them with a rebuild. Validated decisions are persisted inside the hashed SQL;
 review that concrete script before running apply. See the
