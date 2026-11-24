@@ -16,7 +16,7 @@ import { parenthesized } from "../operators/parenthesized.ts";
 import { punctuation } from "../operators/punctuation.ts";
 import { terminator } from "../operators/terminator.ts";
 import { trivia } from "../operators/trivia.ts";
-import { identifier } from "./identifier.ts";
+import { nameIdentifier } from "./identifier.ts";
 import { tableReference } from "./table-reference.ts";
 import { expression, type Expression } from "./expression.ts";
 
@@ -54,7 +54,7 @@ export const createIndexBodyGrammar: Codec<CreateIndex> = prefixed(
         indexKeyword: keyword("INDEX"),
         ifNotExists: flag(keywordSequence(["IF", "NOT", "EXISTS"])),
         reference: tableReference,
-        table: prefixed(keyword("ON"), identifier, " "),
+        table: prefixed(keyword("ON"), nameIdentifier, " "),
         terms: parenthesized(repeat(indexTerm, { min: 1, separator: punctuation(",", ", ") })),
         where: optional(prefixed(keyword("WHERE"), expression, " ")),
       },

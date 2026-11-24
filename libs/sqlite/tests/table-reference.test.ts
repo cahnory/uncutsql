@@ -47,6 +47,7 @@ test("schema names are encoded as identifiers and reject NUL", () => {
 });
 
 for (const source of [
+  "CREATE TABLE 'main'.'a.b''s' (id INTEGER PRIMARY KEY)",
   "CREATE TABLE main.t (id INTEGER PRIMARY KEY)",
   "CREATE TABLE temp.t (id INTEGER PRIMARY KEY)",
   "CREATE TEMP TABLE temp.t (id INTEGER PRIMARY KEY)",

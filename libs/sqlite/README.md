@@ -40,6 +40,7 @@ SQLite conformance.** Update this checklist when adding a grammar feature.
       numeric dimensions are accepted; digit separators in dimensions are rejected.
 - [x] Bind parameters: `?`, `?NNN`, `:name`, `@name`, `$name` and extended names.
 - [x] Single-quoted result and table aliases, including doubled apostrophes. Formatting emits double-quoted aliases.
+- [x] Single-quoted schema and relation names in declarations and query table sources.
 - [ ] General contextual keyword fallbacks and SQLite's legacy quote reinterpretation.
       Reserved-word identifiers require quotes, except the built-in `temp` schema
       before a dot. TRUE/FALSE retain their contextual expression semantics.

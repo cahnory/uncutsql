@@ -13,7 +13,7 @@ import {
 import { lexeme } from "../operators/lexeme.ts";
 import { keyword } from "../operators/keyword.ts";
 import { punctuation } from "../operators/punctuation.ts";
-import { identifier } from "./identifier.ts";
+import { identifier, nameIdentifier } from "./identifier.ts";
 
 export interface TableReference {
   readonly name: string;
@@ -47,8 +47,8 @@ export const tableReference: Codec<TableReference> = lexeme(
     "TableReference",
     transform(
       tuple([
-        alternatives(identifier, tempSchema),
-        optional(prefixed(punctuation("."), identifier)),
+        alternatives(nameIdentifier, tempSchema),
+        optional(prefixed(punctuation("."), nameIdentifier)),
       ]),
       {
         decode: ([first, second]): TableReference =>

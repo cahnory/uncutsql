@@ -39,3 +39,6 @@ export const identifier = lexeme(
     alternatives(quoted('"'), quoted("`"), quoted("[", "]", false), bareIdentifier),
   ),
 );
+
+/** SQLite also accepts string tokens in grammar positions that require a name. */
+export const nameIdentifier = alternatives(identifier, lexeme(located("Identifier", quoted("'"))));
