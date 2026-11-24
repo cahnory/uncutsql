@@ -39,7 +39,7 @@ const inspectDatabase = (database: DatabaseSync) =>
         .all(historyName),
     );
     const unsupported = objects.find(
-      (object) => object.type !== "table" && object.type !== "index",
+      (object) => object.type !== "table" && object.type !== "index" && object.type !== "view",
     );
     if (unsupported)
       return yield* Effect.fail(
@@ -149,7 +149,7 @@ export const applyMigrations = <V extends Error, RV>(
   Effect.gen(function* () {
     if (
       target === ":memory:" ||
-      desired.tables.some(
+      [...desired.tables, ...(desired.views ?? [])].some(
         (table) =>
           table.identity.catalog !== "main" ||
           table.identity.schema !== undefined ||
@@ -200,7 +200,7 @@ export const applyMigrations = <V extends Error, RV>(
                 Effect.gen(function* () {
                   const history = yield* readHistory(database, migrations);
                   const actual = yield* inspectDatabase(database);
-                  if (history.count === 0 && actual.tables.length)
+                  if (history.count === 0 && (actual.tables.length || actual.views?.length))
                     return yield* Effect.fail(
                       new SqliteExecutionError({
                         message:

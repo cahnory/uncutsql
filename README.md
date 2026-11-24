@@ -292,7 +292,7 @@ pending file commits, the CLI also verifies its schema against the generation lo
 The first executor uses Node's SQLite support and accepts a persistent **main
 SQLite database file only**. It refuses to adopt an existing nonempty database
 without application history. Attached/temporary database migrations, baseline
-adoption, rollback/down migrations and views/triggers are not
+adoption, rollback/down migrations and triggers are not
 yet supported. `__uncutsql_migrations` is reserved for application metadata.
 Migration scripts must use the generated BEGIN/COMMIT envelope; PRAGMAs outside
 it are limited to the emitted foreign-key settings. An initial failed attempt can

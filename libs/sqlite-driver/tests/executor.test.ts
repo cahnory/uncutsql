@@ -403,3 +403,30 @@ test("executor leaves incompatible history tables untouched", async () => {
     }
   }
 });
+
+test("live view snapshots survive rebuilds and detect drift before the next migration", async () => {
+  const target = fixture();
+  const view = "; CREATE VIEW v AS SELECT n FROM t";
+  const baseline = "CREATE TABLE t(n INT)" + view;
+  const rebuilt = "CREATE TABLE t(n INT UNIQUE)" + view;
+  const generated = generate([baseline, rebuilt]);
+  try {
+    await Effect.runPromise(
+      applyMigrations(target.path, generated.migrations.slice(0, 1), model(baseline), verify),
+    );
+    exec(target.path, "INSERT INTO t VALUES (7)");
+    await Effect.runPromise(
+      applyMigrations(target.path, generated.migrations, generated.desired, verify),
+    );
+    assert.deepEqual(read(target.path, "SELECT * FROM v"), [{ n: 7 }]);
+    exec(target.path, "DROP VIEW v; CREATE VIEW v AS SELECT 99 AS n");
+    await assert.rejects(
+      Effect.runPromise(
+        applyMigrations(target.path, generated.migrations, generated.desired, verify),
+      ),
+      /Schema mismatch: applied/,
+    );
+  } finally {
+    target.close();
+  }
+});
