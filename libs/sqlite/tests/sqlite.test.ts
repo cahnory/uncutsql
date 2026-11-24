@@ -239,3 +239,30 @@ for (const source of [
     assert.ok(failure(createTable.decode(source)) instanceof ParseError);
   });
 }
+
+test("Unicode lookalikes retain their SQLite identifier meaning", () => {
+  const ast = Effect.runSync(createTable.decode("create table t(ıf, ſelect)"));
+  assert.deepEqual(
+    ast.columns.map((column) => column.name),
+    ["ıf", "ſelect"],
+  );
+  assert.deepEqual(Effect.runSync(sqlExpression.decode("falſe")), {
+    _tag: "ColumnReference",
+    parts: ["falſe"],
+  });
+  failure(createTable.decode("create table t(a, foreıgn key(a) references t(a))"));
+});
+
+test("statement-leading whitespace matches the native SQLite tokenizer", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    for (const prefix of ["\v", "\f", " \v", "\ufeff", "-- comment\n\v", "/* comment */\v"]) {
+      const sql = prefix + "CREATE TABLE IF NOT EXISTS t(a)";
+      const parsed = Effect.runSync(Effect.result(createTable.decode(sql)));
+      if (Result.isSuccess(parsed)) assert.doesNotThrow(() => db.exec(sql));
+      else assert.throws(() => db.exec(sql));
+    }
+  } finally {
+    db.close();
+  }
+});

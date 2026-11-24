@@ -1,19 +1,6 @@
 import { constants, type DatabaseSync } from "node:sqlite";
 
-const skipTrivia = (source: string, start: number) => {
-  let offset = start;
-  while (offset < source.length) {
-    if (/[\t\n\v\f\r ;]/.test(source[offset]!)) offset++;
-    else if (source.startsWith("--", offset)) {
-      const end = source.indexOf("\n", offset + 2);
-      offset = end < 0 ? source.length : end + 1;
-    } else if (source.startsWith("/*", offset)) {
-      const end = source.indexOf("*/", offset + 2);
-      offset = end < 0 ? source.length : end + 2;
-    } else break;
-  }
-  return offset;
-};
+import { skipSqliteTrivia } from "@uncutsql/sqlite/tokens";
 
 /** Execute the body of one transaction script inside a driver-owned transaction. */
 export const executeScriptBody = (
@@ -70,7 +57,11 @@ export const executeScriptBody = (
   });
   try {
     let offset = 0;
-    while ((offset = skipTrivia(sql, offset)) < sql.length) {
+    while ((offset = skipSqliteTrivia(sql, offset)) < sql.length) {
+      if (sql[offset] === ";") {
+        offset++;
+        continue;
+      }
       control = undefined;
       foreignKeySetting = false;
       denial = undefined;

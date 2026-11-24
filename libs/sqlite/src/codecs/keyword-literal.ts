@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { type Codec, EncodeError, located, make, parseError, read } from "@uncutsql/codec";
-import { identifierPart } from "../lexer/characters.ts";
+import { identifierPart, uppercaseAscii } from "../lexer/characters.ts";
 import { lexeme } from "../operators/lexeme.ts";
 
 const values = ["CURRENT_TIME", "CURRENT_DATE", "CURRENT_TIMESTAMP", "TRUE", "FALSE"] as const;
@@ -18,7 +18,7 @@ export const keywordLiteral: Codec<KeywordLiteral> = lexeme(
       decode: (cursor) => {
         let end = cursor.offset;
         while (identifierPart.test(cursor.source[end] ?? "")) end++;
-        const word = cursor.source.slice(cursor.offset, end).toUpperCase();
+        const word = uppercaseAscii(cursor.source.slice(cursor.offset, end));
         const value = values.find((value) => value === word);
         return value === undefined
           ? Effect.fail(parseError(cursor, values))

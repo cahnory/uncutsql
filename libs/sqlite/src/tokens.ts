@@ -1,5 +1,5 @@
 // Lexical exports retained for callers of the initial foundation.
-export { trivia } from "./operators/trivia.ts";
+export { trivia, skipSqliteTrivia } from "./operators/trivia.ts";
 export { lexeme } from "./operators/lexeme.ts";
 export { keyword } from "./operators/keyword.ts";
 export { punctuation } from "./operators/punctuation.ts";

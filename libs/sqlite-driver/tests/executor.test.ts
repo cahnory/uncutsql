@@ -259,6 +259,7 @@ for (const sql of [
   "CREATE TABLE t (id);",
   "BEGIN; CREATE TABLE t (id); COMMIT; CREATE TABLE outside (id);",
   "BEGIN; CREATE TABLE t (id); BEGIN; COMMIT;",
+  "BEGIN;\vCREATE TABLE t (id); COMMIT;",
   "BEGIN; DROP TABLE __uncutsql_migrations; COMMIT;",
   "BEGIN; PRAGMA writable_schema=ON; CREATE TABLE t (id); COMMIT;",
 ]) {
