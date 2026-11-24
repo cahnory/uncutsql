@@ -18,7 +18,9 @@ Explicit result and table aliases now accept SQLite contextual keywords. Tests c
 
 Implicit `WINDOW`, `FILTER` and `OVER` aliases now use token lookahead to preserve window clauses after function calls and before named window declarations.
 
-Next, cover contextual and single-quoted names in named window declarations and references.
+Named window declarations, references and base windows now accept contextual keywords and single-quoted names according to their grammar position. Tests compare keyword names with native SQLite and verify that formatting preserves the spelling of each window name.
+
+Next, extend contextual keyword support to relation names in table declarations and query sources, checking qualified names and join boundaries against SQLite.
 
 ## VS Code support
 

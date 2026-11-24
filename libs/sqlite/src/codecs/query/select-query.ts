@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import {
   type Codec,
   located,
@@ -6,13 +7,15 @@ import {
   repeat,
   struct,
   transform,
+  make,
 } from "@uncutsql/codec";
 import { keyword } from "../../operators/keyword.ts";
 import { keywordChoice } from "../../operators/keyword-choice.ts";
 import { keywordSequence } from "../../operators/keyword-sequence.ts";
 import { punctuation } from "../../operators/punctuation.ts";
 import { windowDefinition } from "../over-clause.ts";
-import { windowName } from "../window-name.ts";
+import { windowKeyword } from "../../operators/window-keyword.ts";
+import { windowName, windowNameAfterKeyword } from "../window-name.ts";
 import type { Expression } from "../expression/types.ts";
 import type { SelectCore } from "./types.ts";
 import { resultColumn } from "./result-column.ts";
@@ -25,6 +28,20 @@ export const selectCore = (
   const list = <A>(codec: Codec<A>) => repeat(codec, { min: 1, separator: punctuation(",", ", ") });
   const clause = <A>(words: readonly string[], codec: Codec<A>) =>
     optional(prefixed(keywordSequence(words), codec, " "));
+  const declarations = list(
+    struct(
+      { name: windowName, definition: prefixed(keyword("AS"), windowDefinition(expression), " ") },
+      " ",
+    ),
+  );
+  const windows = make<NonNullable<SelectCore["windows"]>>({
+    decode: declarations.decode,
+    encode: (values) =>
+      Effect.gen(function* () {
+        if (values[0]) yield* windowNameAfterKeyword.encode(values[0].name);
+        return yield* declarations.encode(values);
+      }),
+  });
   return located(
     "SelectCore",
     transform(
@@ -38,18 +55,7 @@ export const selectCore = (
             where: clause(["WHERE"], expression),
             groupBy: clause(["GROUP", "BY"], list(expression)),
             having: clause(["HAVING"], expression),
-            windows: clause(
-              ["WINDOW"],
-              list(
-                struct(
-                  {
-                    name: windowName,
-                    definition: prefixed(keyword("AS"), windowDefinition(expression), " "),
-                  },
-                  " ",
-                ),
-              ),
-            ),
+            windows: optional(prefixed(windowKeyword("WINDOW"), windows, " ")),
           },
           " ",
         ),

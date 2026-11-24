@@ -23,3 +23,9 @@ OFFSET OTHERS OUTER OVER PARTITION PLAN PRAGMA PRECEDING QUERY RAISE RANGE RECUR
 RELEASE RENAME REPLACE RESTRICT RIGHT ROLLBACK ROW ROWS SAVEPOINT TEMP TEMPORARY TIES TRIGGER
 UNBOUNDED VACUUM VIEW VIRTUAL WINDOW WITH WITHOUT`.split(/\s+/),
 );
+
+// SQLite's tokenizer counts string tokens, join modifiers and fallback names in
+// this lookahead. FILTER and INDEXED can be aliases but do not count as names here.
+export const windowLookaheadKeywords = new Set(explicitAliasKeywords);
+windowLookaheadKeywords.delete("FILTER");
+windowLookaheadKeywords.delete("INDEXED");

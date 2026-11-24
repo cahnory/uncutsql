@@ -11,7 +11,7 @@ import {
 import { keywordSequence } from "../operators/keyword-sequence.ts";
 import { parenthesized } from "../operators/parenthesized.ts";
 import { punctuation } from "../operators/punctuation.ts";
-import { windowName } from "./window-name.ts";
+import { baseWindowName, windowNameAfterKeyword } from "./window-name.ts";
 import { orderingTerm } from "./ordering-term.ts";
 import { windowFrame } from "./window-frame.ts";
 import type { Expression, WindowDefinition, WindowReference } from "./expression/types.ts";
@@ -21,7 +21,7 @@ export const windowDefinition = (expression: Codec<Expression>): Codec<WindowDef
     parenthesized(
       struct(
         {
-          base: optional(windowName),
+          base: optional(baseWindowName),
           partitionBy: optional(
             prefixed(
               keywordSequence(["PARTITION", "BY"]),
@@ -63,7 +63,7 @@ export const overClause = (expression: Codec<Expression>): Codec<WindowReference
     windowKeyword("OVER"),
     taggedUnion({
       WindowDefinition: windowDefinition(expression),
-      NamedWindow: transform(windowName, {
+      NamedWindow: transform(windowNameAfterKeyword, {
         decode: (name) => ({ _tag: "NamedWindow" as const, name }),
         encode: (value) => value.name,
       }),

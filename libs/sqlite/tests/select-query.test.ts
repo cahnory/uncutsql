@@ -66,6 +66,29 @@ test("explicit result and source aliases match SQLite for every dialect keyword"
   }
 });
 
+test("named window declarations, references and base names match SQLite", () => {
+  using db = new DatabaseSync(":memory:");
+  for (const name of [...keywords, "'it''s a window'"]) {
+    for (const source of [
+      `SELECT sum(1) OVER ${name} WINDOW ${name} AS ()`,
+      `SELECT sum(1) OVER ( ${name} ) WINDOW w AS (), ${name} AS ()`,
+    ]) {
+      const parsed = Effect.runSync(Effect.result(sqlQuery.decode(source)));
+      let native;
+      try {
+        native = db.prepare(source);
+      } catch {
+        assert.ok(Result.isFailure(parsed), source);
+        continue;
+      }
+      assert.ok(Result.isSuccess(parsed), source);
+      const rendered = Effect.runSync(sqlQuery.encode(parsed.success));
+      assert.deepEqual(decode(rendered), parsed.success, source);
+      assert.deepEqual(db.prepare(rendered).all(), native.all(), source);
+    }
+  }
+});
+
 test("implicit keyword aliases preserve spelling and following clause boundaries", () => {
   using db = new DatabaseSync(":memory:");
   db.exec("CREATE TABLE t(v); INSERT INTO t VALUES (1); CREATE INDEX ix ON t(v)");
