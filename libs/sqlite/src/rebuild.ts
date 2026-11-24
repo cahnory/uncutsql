@@ -39,21 +39,25 @@ export const rebuildCopy = (
   renames: readonly { readonly source: string; readonly target: string }[] = [],
 ): readonly { source: string; target: string }[] | string => {
   const previous = new Map(before.columns.map((column) => [foldIdentifier(column.name), column]));
-  const next = new Set(after.columns.map((column) => foldIdentifier(column.name)));
+  const next = new Map(after.columns.map((column) => [foldIdentifier(column.name), column]));
   const mapping = new Map<string, string>();
   const sources = new Set<string>();
   for (const rename of renames) {
     const source = foldIdentifier(rename.source),
       target = foldIdentifier(rename.target);
+    const from = previous.get(source);
+    const to = next.get(target);
     if (
-      !previous.has(source) ||
-      !next.has(target) ||
+      !from ||
+      !to ||
       previous.has(target) ||
       next.has(source) ||
       mapping.has(target) ||
       sources.has(source)
     )
       return "Invalid or conflicting column rename mapping";
+    if (!generated(from) && generated(to))
+      return `Cannot copy ${JSON.stringify(from.name)} into generated column ${JSON.stringify(to.name)}`;
     mapping.set(target, source);
     sources.add(source);
   }

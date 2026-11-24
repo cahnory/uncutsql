@@ -125,3 +125,17 @@ test("a stale foreign key identifies the chosen table rename", () => {
     /foreign key still references "old", which is being renamed to "new"/,
   );
 });
+
+test("a stored column cannot be copied into a generated rename target", () => {
+  for (const kind of ["VIRTUAL", "STORED"]) {
+    assert.throws(
+      () =>
+        plan(
+          "CREATE TABLE t(old TEXT, base TEXT)",
+          `CREATE TABLE t(new TEXT AS (base) ${kind}, base TEXT)`,
+          true,
+        ),
+      /Cannot copy.*old.*generated column.*new/,
+    );
+  }
+});
