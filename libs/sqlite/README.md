@@ -161,7 +161,14 @@ source-map assertions, compile-only type checks and native SQLite behavior check
 SQLite is used **in tests**, not imported by the dialect's production code.
 Coverage is evidence for the implemented subset, not an exhaustive conformance score.
 
-Suggested order for further work:
+### Current work in priority order
+
+1. [ ] Reject rebuilds that discard ordinary column values on conversion to generated columns.
+2. [ ] Make index snapshot ordering reproducible across locales and declaration orders.
+3. [ ] Match SQLite tokenization of a trailing bare block-comment opener.
+4. [ ] Parse and format view declarations, with explicit diagnostics at the migration boundary.
+
+### Subsequent milestones
 
 1. Add view declarations, dependency ordering and preservation during rebuilds.
 2. Add trigger declarations, trigger bodies and preservation during rebuilds.
