@@ -169,6 +169,7 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 2. [x] Validate the reserved history table's column constraints before using it.
 3. [x] Bound concurrent migration-file reads during apply.
 4. [x] Accept SQLite single-quoted query aliases and verify the formatted result with SQLite.
+5. [x] Update the rebuild guides and verify rowid preservation when declared columns shadow all three hidden aliases.
 
 ### Previous pass
 

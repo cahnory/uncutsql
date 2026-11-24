@@ -242,3 +242,26 @@ test("rebuild preserves distinct rowids and rejects competing integer primary ke
     db.close();
   }
 });
+
+test("declared integer primary keys preserve rowids when all hidden aliases are shadowed", () => {
+  const before = "CREATE TABLE t (id INTEGER PRIMARY KEY, rowid, oid, _rowid_, value)";
+  const after = before.replace("value)", "value UNIQUE)");
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec(before);
+    db.exec("INSERT INTO t VALUES (42, 'r', 'o', 'u', 'v')");
+    db.exec(migration(before, after));
+    assert.deepEqual(
+      { ...db.prepare("SELECT * FROM t").get() },
+      {
+        id: 42,
+        rowid: "r",
+        oid: "o",
+        _rowid_: "u",
+        value: "v",
+      },
+    );
+  } finally {
+    db.close();
+  }
+});

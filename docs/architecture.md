@@ -380,9 +380,7 @@ applied migration history remains a separate database concern.
 The planner allocates replacement names and a temporary validation table without
 colliding with any names in either schema input. Rebuild operations retain old
 and new definitions. Copy mappings use matching column identities; generated
-target columns are omitted. Accessible hidden rowids are included for rowid-table
-to rowid-table copies. If every alias is shadowed, or no writable mapping exists,
-planning fails. New columns evaluate their defaults during insertion. Retained
+target columns are omitted. For copies between rowid tables, a declared integer primary key that aliases the rowid supplies an explicit name for it. Otherwise the planner uses an unshadowed hidden alias. Planning fails if the rowid is inaccessible, a target integer primary key would receive two independent values, or no writable mapping exists. New columns evaluate their defaults during insertion. Retained
 AUTOINCREMENT tables transfer the prior sqlite_sequence high-water mark before
 the original is dropped, including when the original is empty.
 

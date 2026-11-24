@@ -186,9 +186,7 @@ The planner supports:
 
 Rebuilds create a replacement table, copy matching names and explicitly resolved rename mappings, drop the old
 table, and rename the replacement. New columns use defaults, and generated columns are recomputed. The planner rejects
-converting an ordinary column to a generated column, including during a rename, because the copy would discard its stored values. Removed columns produce data-loss warnings. Accessible hidden
-rowids are copied when both tables support rowids; a changed INTEGER PRIMARY KEY
-can determine a different rowid. Retained AUTOINCREMENT high-water marks are preserved. Column/table removals require explicit decisions in CLI workflows. Rename similarity
+converting an ordinary column to a generated column, including during a rename, because the copy would discard its stored values. Removed columns produce data-loss warnings. When both tables support rowids, rebuilds preserve them through an accessible hidden alias or a declared integer primary key that aliases the rowid. The planner rejects a change that would copy an independent column and the old rowid into the same primary key. Retained AUTOINCREMENT high-water marks are preserved. Column/table removals require explicit decisions in CLI workflows. Rename similarity
 heuristics and custom data transformations are not implemented. Copying can fail when existing
 rows violate the desired constraints or types; rows are never silently ignored or
 replaced to make a migration succeed.
@@ -205,8 +203,7 @@ separately from PRIMARY KEY/UNIQUE constraints. Index-only changes use DROP/CREA
 INDEX; rebuilds recreate all desired indexes after copying the table.
 Runtime checks refuse unrepresented or missing explicit indexes, triggers on rebuilt
 tables and any views in affected schemas (including temporary views/triggers).
-Views and triggers cannot yet be preserved. Rebuilds with all hidden
-rowid aliases shadowed, no writable copy mapping, retained references to removed
+Views and triggers cannot yet be preserved. Rebuilds with an inaccessible rowid, no writable copy mapping, retained references to removed
 tables, and cyclic/self-referential table drops still produce planning errors.
 The baseline must cover all table declarations involved; a live database can still
 have drift or other semantic errors that cause execution to fail.
