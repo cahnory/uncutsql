@@ -376,3 +376,30 @@ test("independent executor processes serialize history and do not apply files tw
     target.close();
   }
 });
+
+test("executor leaves incompatible history tables untouched", async () => {
+  const columns =
+    "id INTEGER PRIMARY KEY, sha256 TEXT NOT NULL, dialect TEXT NOT NULL, format_version INTEGER NOT NULL, database_json TEXT NOT NULL, applied_at TEXT NOT NULL";
+  for (const definition of [
+    columns.replace(" PRIMARY KEY", ""),
+    columns.replace(" NOT NULL", ""),
+    columns + ", extra AS (id)",
+    columns.replace("sha256 TEXT", "sha256 TEXT DEFAULT 'unknown'"),
+  ]) {
+    const target = fixture();
+    try {
+      exec(target.path, `CREATE TABLE __uncutsql_migrations (${definition})`);
+      const { migrations, desired } = generate(["CREATE TABLE t (id)"]);
+      await assert.rejects(
+        Effect.runPromise(applyMigrations(target.path, migrations, desired, verify)),
+        /Unrecognized applied-history table format/,
+      );
+      assert.deepEqual(read(target.path, "SELECT name FROM sqlite_schema"), [
+        { name: "__uncutsql_migrations" },
+      ]);
+      assert.deepEqual(read(target.path, "SELECT * FROM __uncutsql_migrations"), []);
+    } finally {
+      target.close();
+    }
+  }
+});

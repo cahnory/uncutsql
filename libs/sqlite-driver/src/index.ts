@@ -81,7 +81,7 @@ const readHistory = (database: DatabaseSync, migrations: readonly MigrationSourc
         new SqliteExecutionError({ message: "The reserved applied-history name is not a table" }),
       );
     const columns = yield* native("Validate applied-history table", () =>
-      database.prepare(`PRAGMA main.table_info("${historyName}")`).all(),
+      database.prepare(`PRAGMA main.table_xinfo("${historyName}")`).all(),
     );
     const names = ["id", "sha256", "dialect", "format_version", "database_json", "applied_at"];
     if (
@@ -89,6 +89,10 @@ const readHistory = (database: DatabaseSync, migrations: readonly MigrationSourc
       columns.some(
         (column, index) =>
           column.name !== names[index] ||
+          column.pk !== (index === 0 ? 1 : 0) ||
+          column.notnull !== (index === 0 ? 0 : 1) ||
+          column.hidden !== 0 ||
+          column.dflt_value !== null ||
           column.type !== (index === 0 || index === 3 ? "INTEGER" : "TEXT"),
       )
     )
