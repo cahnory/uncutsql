@@ -552,6 +552,12 @@ pnpm cli migration before.sql after.sql --decisions choices.json
 | `{"action":"drop"}`                      | Drop even if data is present.                                                                                                                               |
 | `{"action":"rename","target":"new_key"}` | Rename a table or column to a target listed in `candidates`.                                                                                                |
 
+Run `uncutsql generate desired.sql migrations --interactive` to answer removal and
+rename questions in the terminal. A table rename can lead to further questions
+about its columns. Enter the number of your choice, or `q` to cancel before
+publishing the migration. This mode reads answers from stdin, so use a schema
+file or directory. It skips configured and default decision files.
+
 `generate desired.sql migrations` supports the same flags against its saved
 baseline. If the decision file exists, replace `--write-decisions` with
 `--merge-decisions` to keep applicable answers, remove obsolete questions, and

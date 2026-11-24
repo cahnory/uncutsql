@@ -16,6 +16,7 @@ import {
 } from "./generate.ts";
 import { compareSchemas, renderMigration } from "./workflow.ts";
 
+import { promptDecisions } from "./interactive.ts";
 import { decisionDocument, writeDecisionFile } from "./decision-file.ts";
 
 const help = `Usage: pnpm cli <check|format> [file|-]
@@ -26,6 +27,7 @@ const help = `Usage: pnpm cli <check|format> [file|-]
 
 Options: --config <file>, --dialect <module>, --driver <module>
          --schema <path|->, --migrations <directory>
+         --interactive              Answer generate decisions on stdin (schema file or directory)
          --decisions <file> (migration/generate)
          --write-decisions [file]    Create a new decision file
          --rewrite-decisions [file]  Reset all current decisions to pending
@@ -140,9 +142,21 @@ const program = Effect.gen(function* () {
         message: `Choose only one of --decisions and ${options.decisionWriter.flag}.`,
       }),
     );
+  if (
+    options.interactive &&
+    (command !== "generate" || options.decisions || options.decisionWriter)
+  )
+    return yield* Effect.fail(
+      new UsageError({
+        message:
+          "--interactive requires generate and cannot be combined with decision-file options.",
+      }),
+    );
   const selected = yield* resolveConfig(options, process.cwd());
   const decisions: unknown =
-    (command !== "generate" && command !== "migration") || options.decisionWriter
+    (command !== "generate" && command !== "migration") ||
+    options.decisionWriter ||
+    options.interactive
       ? undefined
       : yield* Effect.tryPromise({
           try: async () => {
@@ -216,10 +230,24 @@ const program = Effect.gen(function* () {
         }),
       );
     }
-    const ast = yield* readSchema(args[1] ?? selected.schema!);
+    const path = args[1] ?? selected.schema!;
+    if (options.interactive && path === "-")
+      return yield* Effect.fail(
+        new UsageError({
+          message:
+            "--interactive reads answers from stdin. Supply the schema as a file or directory.",
+        }),
+      );
+    const ast = yield* readSchema(path);
     if (options.decisionWriter)
       return yield* writeDecisions(yield* prepareGeneratedDecisions(dialect!, ast, directory));
-    const result = yield* generateMigration(dialect!, ast, directory, decisions);
+    const reviewed = options.interactive
+      ? yield* promptDecisions(
+          yield* prepareGeneratedDecisions(dialect!, ast, directory),
+          dialect!.supportsDropGuards === true,
+        )
+      : decisions;
+    const result = yield* generateMigration(dialect!, ast, directory, reviewed);
     return result.migrationPath
       ? `Generated ${result.migrationPath}\nUpdated ${result.lockPath}\n`
       : "No schema changes.\n";

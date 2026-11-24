@@ -45,6 +45,12 @@ uncutsql generate desired.sql migrations --decisions choices.json
 uncutsql apply app.sqlite migrations
 ```
 
+Run `uncutsql generate desired.sql migrations --interactive` to answer removal and
+rename questions in the terminal. A table rename can lead to further questions
+about its columns. Enter the number of your choice, or `q` to cancel before
+publishing the migration. This mode reads answers from stdin, so use a schema
+file or directory. It skips configured and default decision files.
+
 Both `generate` and `migration` accept one decision-file option per invocation.
 
 | Flag                         | Behavior                                                                                                                                                                                     |

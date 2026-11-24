@@ -413,3 +413,35 @@ test("generate and apply a table rename with a second round of column decisions"
     rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+test("interactive generation reviews table and column choices in memory", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "uncutsql-interactive-"));
+  try {
+    const schema = join(cwd, "schema.sql");
+    const args = ["generate", schema, "--interactive"];
+    writeFileSync(join(cwd, ".uncutsqlrc.json"), '{"decisions":"missing.json"}');
+    writeFileSync(schema, "CREATE TABLE people(id, old, unused)");
+    const initial = run(cwd, args);
+    assert.equal(initial.status, 0, initial.stderr);
+    writeFileSync(schema, "CREATE TABLE members(id, name)");
+    for (const input of ["3\nq\n", "3\n"]) {
+      const cancelled = run(cwd, args, input);
+      assert.equal(cancelled.status, 1, cancelled.stderr);
+      assert.match(cancelled.stderr, /cancelled/);
+      assert.equal(existsSync(join(cwd, "migrations/000002.sql")), false);
+    }
+    const reviewed = run(cwd, args, "invalid\n3\n3\n1\n");
+    assert.equal(reviewed.status, 0, reviewed.stderr);
+    const sql = readFileSync(join(cwd, "migrations/000002.sql"), "utf8");
+    assert.match(sql, /"action":"rename","target":"members"/);
+    assert.match(sql, /"action":"rename","target":"name"/);
+    assert.match(sql, /"action":"drop_if_empty"/);
+    assert.equal(existsSync(join(cwd, "missing.json")), false);
+    assert.equal(existsSync(join(cwd, "uncutsql.decisions.json")), false);
+    assert.match(run(cwd, args).stdout, /No schema changes/);
+    assert.equal(run(cwd, [...args, "--write-decisions"]).status, 2);
+    assert.equal(run(cwd, ["generate", "-", "--interactive"]).status, 2);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});

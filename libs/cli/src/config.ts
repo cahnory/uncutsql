@@ -46,6 +46,7 @@ export const parseOptions = (args: readonly string[]) =>
         dialect?: string;
         driver?: string;
         decisions?: string;
+        interactive?: boolean;
         decisionWriter?: { flag: DecisionWriterFlag; path: string | undefined };
       } = {};
       for (let index = 0; index < args.length; index++) {
@@ -55,6 +56,12 @@ export const parseOptions = (args: readonly string[]) =>
           break;
         }
         const [name, ...inline] = arg.split("=");
+        if (name === "--interactive") {
+          if (inline.length) throw new Error("--interactive takes no value");
+          if (options.interactive) throw new Error("--interactive was specified more than once");
+          options.interactive = true;
+          continue;
+        }
         if (
           name === "--write-decisions" ||
           name === "--rewrite-decisions" ||
@@ -88,7 +95,10 @@ export const parseOptions = (args: readonly string[]) =>
         }
         const value = inline.length ? inline.join("=") : args[++index];
         if (!value || value.startsWith("--")) throw new Error(`${name} requires a value`);
-        const key = name.slice(2) as Exclude<keyof typeof options, "decisionWriter">;
+        const key = name.slice(2) as Exclude<
+          keyof typeof options,
+          "decisionWriter" | "interactive"
+        >;
         if (options[key] !== undefined) throw new Error(`${name} was specified more than once`);
         options[key] = value;
       }
