@@ -150,11 +150,11 @@ export const lowerMigration = (
     const diagnostics: MigrationDiagnostic[] = [];
     const drops = changes.filter((change) => change._tag === "DropTable");
     const dropped = new Set(drops.map((change) => tableKey(change.table)));
-    const renamed = new Map(
-      changes
-        .filter((change) => change._tag === "RenameTable")
-        .map((change) => [tableKey(tableIdentity(change.before)), change.after.name]),
-    );
+    const renamed = new Map<string, string>();
+    for (const change of changes) {
+      if (change._tag === "RenameTable")
+        renamed.set(tableKey(tableIdentity(change.before)), change.after.name);
+    }
     for (const table of after) {
       for (const reference of references(table)) {
         const key = tableKey(reference);
