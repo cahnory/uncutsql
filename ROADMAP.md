@@ -10,7 +10,7 @@ The next workspace milestone is to preserve triggers during migrations.
 | 2. Generate trigger migrations         | SQLite maps declarations to the core model and orders trigger removal and recreation around table and view changes.       |
 | 3. Apply and verify trigger migrations | The driver inspects live triggers. The CLI and demo exercise generation, rebuild preservation and drift detection.        |
 
-Next, map SQLite trigger declarations into snapshots and restore them from JSON. Cover triggers on both tables and views before lowering migration procedures.
+SQLite snapshots now round-trip triggers on tables and views through JSON. Next, lower trigger changes and suspend triggers while rebuilding their dependencies.
 
 SQLite contextual keyword and legacy quoting work can proceed independently of these handoffs.
 

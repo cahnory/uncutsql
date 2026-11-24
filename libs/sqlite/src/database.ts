@@ -11,6 +11,7 @@ import { createTable, type CreateTable } from "./create-table.ts";
 import { semanticValue, syntaxValue } from "./schema-value.ts";
 import { createIndex, type CreateIndex } from "./codecs/create-index.ts";
 import { indexesFromDatabaseSchema, indexModel } from "./indexes.ts";
+import { triggerModel, triggersFromDatabaseSchema } from "./triggers.ts";
 import { viewsFromDatabaseSchema } from "./views.ts";
 import type { Statement } from "./schema.ts";
 import { foldIdentifier, tableIdentity } from "./schema-identity.ts";
@@ -31,9 +32,7 @@ export const toDatabaseSchema = (
   side: DiffDiagnostic["side"] = "after",
 ) =>
   Effect.gen(function* () {
-    const unsupported = statements.filter(
-      (statement) => statement._tag === "CreateTableAs" || statement._tag === "CreateTrigger",
-    );
+    const unsupported = statements.filter((statement) => statement._tag === "CreateTableAs");
     if (unsupported.length)
       return yield* Effect.fail(
         new SchemaDiffError({
@@ -45,9 +44,7 @@ export const toDatabaseSchema = (
               name: statement.name,
             },
             message:
-              statement._tag === "CreateTrigger"
-                ? "CREATE TRIGGER migration generation is not supported yet"
-                : "CREATE TABLE AS queries require SQLite evaluation to determine columns and populate data; use an explicit table definition for declarative schema comparison",
+              "CREATE TABLE AS queries require SQLite evaluation to determine columns and populate data; use an explicit table definition for declarative schema comparison",
           })),
         }),
       );
@@ -101,7 +98,7 @@ export const toDatabaseSchema = (
           message: "Standalone index names cannot use SQLite's reserved sqlite_ prefix",
         });
     }
-    const database: DatabaseSchema = {
+    const relations: DatabaseSchema = {
       ...(views.length
         ? {
             views: views.map((view) => ({
@@ -140,6 +137,11 @@ export const toDatabaseSchema = (
         };
       }),
     };
+    const triggers = yield* Effect.forEach(
+      statements.filter((s) => s._tag === "CreateTrigger"),
+      (trigger) => triggerModel(trigger, relations),
+    );
+    const database = triggers.length ? { ...relations, triggers } : relations;
     const diagnostics = [...indexDiagnostics, ...validateDatabase(database, side)];
     for (const table of [...tables, ...views]) {
       const id = tableIdentity(table);
@@ -159,6 +161,7 @@ export const toDatabaseSchema = (
       { discard: true },
     );
     yield* viewsFromDatabaseSchema(database);
+    yield* triggersFromDatabaseSchema(database);
     return database;
   });
 
@@ -238,11 +241,12 @@ export const tablesFromDatabaseSchema = (
 
 export const fromDatabaseSchema = (database: DatabaseSchema) =>
   Effect.gen(function* () {
-    if (database.triggers?.length)
-      return yield* Effect.fail(
-        new EncodeError({ message: "SQLite trigger snapshots are not supported yet" }),
-      );
     const tables = yield* tablesFromDatabaseSchema(database);
     const indexes = yield* indexesFromDatabaseSchema(database);
-    return [...tables, ...indexes, ...(yield* viewsFromDatabaseSchema(database))];
+    return [
+      ...tables,
+      ...indexes,
+      ...(yield* viewsFromDatabaseSchema(database)),
+      ...(yield* triggersFromDatabaseSchema(database)),
+    ];
   });
