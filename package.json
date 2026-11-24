@@ -10,7 +10,7 @@
   },
   "type": "module",
   "scripts": {
-    "build": "pnpm --filter './libs/**' -r build",
+    "build": "pnpm -r --if-present run build",
     "check": "concurrently --names format,lint,test,types --group \"pnpm check:format\" \"pnpm check:lint\" \"pnpm check:test\" \"pnpm check:types\"",
     "check:format": "oxfmt --check",
     "check:lint": "oxlint --deny-warnings",

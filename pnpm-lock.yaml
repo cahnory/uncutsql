@@ -204,6 +204,24 @@ importers:
         specifier: workspace:*
         version: link:../../libs/sqlite-driver
 
+  apps/vscode:
+    devDependencies:
+      '@types/vscode':
+        specifier: 1.110.0
+        version: 1.110.0
+      '@uncutsql/cli':
+        specifier: workspace:*
+        version: link:../../libs/cli
+      '@uncutsql/sqlite':
+        specifier: workspace:*
+        version: link:../../libs/sqlite
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+      tsdown:
+        specifier: ^0.23.2
+        version: 0.23.7(typescript@5.9.3)
+
   libs/cli:
     dependencies:
       '@uncutsql/codec':
@@ -661,6 +679,9 @@ packages:
 
   '@types/node@24.19.2':
     resolution: {integrity: sha512-93d49wCWJkCyN87MxLpNN6KXPCwFw7bVUg79mGUV1OS40JGWwVCr8n61DXCSqz7CV6/VfPkb7xec7uP2M+QHWQ==}
+
+  '@types/vscode@1.110.0':
+    resolution: {integrity: sha512-AGuxUEpU4F4mfuQjxPPaQVyuOMhs+VT/xRok1jiHVBubHK7lBRvCuOMZG0LKUwxncrPorJ5qq/uil3IdZBd5lA==}
 
   '@vscode/l10n@0.0.18':
     resolution: {integrity: sha512-KYSIHVmslkaCDyw013pphY+d7x1qV8IZupYfeIfzNA+nsaWHbn5uPuQRvdRFsa9zFzGeudPuoGoZ1Op4jrJXIQ==}
@@ -1197,6 +1218,8 @@ snapshots:
   '@types/node@24.19.2':
     dependencies:
       undici-types: 7.24.6
+
+  '@types/vscode@1.110.0': {}
 
   '@vscode/l10n@0.0.18': {}
 

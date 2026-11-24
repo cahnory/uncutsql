@@ -1,0 +1,36 @@
+{
+  "name": "uncutsql-vscode",
+  "displayName": "UncutSQL",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SQLite schema diagnostics, Outline and foreign key navigation for UncutSQL.",
+  "publisher": "uncutsql",
+  "main": "./dist/extension.cjs",
+  "scripts": {
+    "build": "tsdown",
+    "vscode:prepublish": "pnpm build",
+    "check:types": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/vscode": "1.110.0",
+    "@uncutsql/cli": "workspace:*",
+    "@uncutsql/sqlite": "workspace:*",
+    "effect": "4.1.4",
+    "tsdown": "^0.23.2"
+  },
+  "activationEvents": [
+    "onLanguage:sql"
+  ],
+  "engines": {
+    "vscode": "^1.110.0"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    },
+    "virtualWorkspaces": {
+      "supported": false
+    }
+  }
+}
