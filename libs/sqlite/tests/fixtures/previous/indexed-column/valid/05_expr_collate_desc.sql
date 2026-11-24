@@ -1,0 +1,1 @@
+(a+b) COLLATE RTRIM DESC

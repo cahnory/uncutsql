@@ -26,10 +26,20 @@ export interface DatabaseColumn {
   readonly constraints: readonly Constraint[];
 }
 
+/** Standalone indexes belong to a table; keys are normalized within its namespace. */
+export interface DatabaseIndex {
+  readonly key: string;
+  readonly name: string;
+  readonly unique: boolean;
+  readonly terms: readonly SchemaValue[];
+  readonly where: SchemaValue;
+}
+
 export interface DatabaseTable {
   readonly identity: TableIdentity;
   readonly name: string;
   readonly columns: readonly DatabaseColumn[];
+  readonly indexes?: readonly DatabaseIndex[];
   readonly constraints: readonly Constraint[];
   /** Namespaced keys retain vendor-specific features without teaching core their meaning. */
   readonly options: { readonly [key: string]: SchemaValue };

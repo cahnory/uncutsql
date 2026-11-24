@@ -4,6 +4,7 @@ import {
   type DatabaseSchema,
   type DatabaseTable,
   type DatabaseColumn,
+  type DatabaseIndex,
   type TableIdentity,
   type SchemaValue,
   tableKey,
@@ -26,6 +27,9 @@ export class SchemaDiffError extends Data.TaggedError("SchemaDiffError")<{
   }
 }
 export type TableAlteration =
+  | { readonly _tag: "IndexAdded"; readonly index: DatabaseIndex }
+  | { readonly _tag: "IndexRemoved"; readonly index: DatabaseIndex }
+  | { readonly _tag: "IndexChanged"; readonly before: DatabaseIndex; readonly after: DatabaseIndex }
   | {
       readonly _tag: "ColumnRenamed";
       readonly before: DatabaseColumn;
@@ -83,6 +87,7 @@ export const validateDatabase = (
 ): readonly DiffDiagnostic[] => {
   const diagnostics: DiffDiagnostic[] = [];
   const tables = new Set<string>();
+  const indexes = new Set<string>();
   for (const table of database.tables) {
     const id = tableKey(table.identity);
     if (tables.has(id))
@@ -106,6 +111,25 @@ export const validateDatabase = (
       columns.add(column.key);
     }
   }
+  for (const table of database.tables)
+    for (const index of table.indexes ?? []) {
+      const id = JSON.stringify([tableKey(table.identity), index.key]);
+      if (indexes.has(id))
+        diagnostics.push({
+          code: "DuplicateIndex",
+          side,
+          table: table.identity,
+          message: `Duplicate or conflicting index identity ${id}`,
+        });
+      indexes.add(id);
+      if (!index.terms.length)
+        diagnostics.push({
+          code: "EmptyIndex",
+          side,
+          table: table.identity,
+          message: `Index ${id} requires at least one term`,
+        });
+    }
   return diagnostics;
 };
 const constraintsEqual = (before: readonly Constraint[], after: readonly Constraint[]): boolean =>
@@ -150,6 +174,20 @@ const compareTable = (before: DatabaseTable, after: DatabaseTable): readonly Tab
     });
   if (!schemaValueEqual(before.options, after.options))
     changes.push({ _tag: "TableOptionsChanged", before: before.options, after: after.options });
+  const oldIndexes = new Map((before.indexes ?? []).map((index) => [index.key, index]));
+  const newIndexes = new Map((after.indexes ?? []).map((index) => [index.key, index]));
+  for (const [key, index] of oldIndexes)
+    if (!newIndexes.has(key)) changes.push({ _tag: "IndexRemoved", index });
+  for (const [key, index] of newIndexes) {
+    const old = oldIndexes.get(key);
+    if (!old) changes.push({ _tag: "IndexAdded", index });
+    else if (
+      old.unique !== index.unique ||
+      !schemaValueEqual(old.terms, index.terms) ||
+      !schemaValueEqual(old.where, index.where)
+    )
+      changes.push({ _tag: "IndexChanged", before: old, after: index });
+  }
   return changes;
 };
 

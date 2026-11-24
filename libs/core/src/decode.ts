@@ -70,9 +70,18 @@ const column = (value: unknown, path: string) => {
   semanticValue(item.dataType, `${path}.dataType`);
   array(item.constraints, `${path}.constraints`, constraint);
 };
+const index = (value: unknown, path: string) => {
+  const item = record(value, path);
+  fields(item, ["key", "name", "unique", "terms", "where"], path);
+  text(item.key, `${path}.key`);
+  text(item.name, `${path}.name`);
+  if (typeof item.unique !== "boolean") fail(`${path}.unique`, "a boolean");
+  array(item.terms, `${path}.terms`, semanticValue);
+  semanticValue(item.where, `${path}.where`);
+};
 const table = (value: unknown, path: string) => {
   const item = record(value, path);
-  fields(item, ["identity", "name", "columns", "constraints", "options"], path);
+  fields(item, ["identity", "name", "columns", "constraints", "options", "indexes"], path);
   const identity = record(item.identity, `${path}.identity`);
   fields(identity, ["catalog", "schema", "name"], `${path}.identity`);
   text(identity.name, `${path}.identity.name`);
@@ -80,6 +89,7 @@ const table = (value: unknown, path: string) => {
     if (Object.hasOwn(identity, key)) text(identity[key], `${path}.identity.${key}`);
   text(item.name, `${path}.name`);
   array(item.columns, `${path}.columns`, column);
+  if (Object.hasOwn(item, "indexes")) array(item.indexes, `${path}.indexes`, index);
   array(item.constraints, `${path}.constraints`, constraint);
   properties(item.options, `${path}.options`);
 };

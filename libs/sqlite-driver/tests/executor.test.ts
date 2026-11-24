@@ -110,6 +110,52 @@ test("executor applies, records and resumes generated rebuilds without rerunning
   }
 });
 
+test("executor inspects standalone indexes and rolls back failed index recreation", async () => {
+  const target = fixture();
+  const before = "CREATE TABLE t (name TEXT); CREATE INDEX i ON t(lower(name))";
+  const after = "CREATE TABLE t (name TEXT NOT NULL); CREATE UNIQUE INDEX i ON t(lower(name))";
+  const generated = generate([before, after]);
+  try {
+    await Effect.runPromise(
+      applyMigrations(target.path, generated.migrations.slice(0, 1), model(before), verify),
+    );
+    exec(target.path, "INSERT INTO t VALUES ('Ada'), ('ADA')");
+    const result = await Effect.runPromise(
+      Effect.result(applyMigrations(target.path, generated.migrations, generated.desired, verify)),
+    );
+    assert.ok(Result.isFailure(result));
+    assert.match(result.failure.message, /UNIQUE/);
+    assert.equal(read(target.path, "SELECT count(*) AS n FROM t")[0]!.n, 2);
+    assert.equal(
+      read(target.path, "SELECT [unique] FROM pragma_index_list('t') WHERE name='i'")[0]!.unique,
+      0,
+    );
+    assert.equal(read(target.path, "SELECT count(*) AS n FROM __uncutsql_migrations")[0]!.n, 1);
+    exec(target.path, "DELETE FROM t WHERE name='ADA'");
+    await Effect.runPromise(
+      applyMigrations(target.path, generated.migrations, generated.desired, verify),
+    );
+    assert.equal(
+      read(target.path, "SELECT [unique] FROM pragma_index_list('t') WHERE name='i'")[0]!.unique,
+      1,
+    );
+    assert.deepEqual(
+      await Effect.runPromise(
+        applyMigrations(target.path, generated.migrations, generated.desired, verify),
+      ),
+      { appliedIds: [], lastAppliedId: 2 },
+    );
+    exec(target.path, "DROP INDEX i; CREATE INDEX i ON t(name)");
+    const drift = await Effect.runPromise(
+      Effect.result(applyMigrations(target.path, generated.migrations, generated.desired, verify)),
+    );
+    assert.ok(Result.isFailure(drift));
+    assert.match(drift.failure.message, /Schema mismatch: applied/);
+  } finally {
+    target.close();
+  }
+});
+
 test("native statement parsing handles Unicode, comments, strings and trigger-body semicolons", async () => {
   const target = fixture();
   const ddl = "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT DEFAULT 'é;COMMIT; -- text')";

@@ -38,7 +38,9 @@ const inspectDatabase = (database: DatabaseSync) =>
         )
         .all(historyName),
     );
-    const unsupported = objects.find((object) => object.type !== "table");
+    const unsupported = objects.find(
+      (object) => object.type !== "table" && object.type !== "index",
+    );
     if (unsupported)
       return yield* Effect.fail(
         new SqliteExecutionError({
@@ -57,7 +59,7 @@ const inspectDatabase = (database: DatabaseSync) =>
       Effect.mapError(
         (error) =>
           new SqliteExecutionError({
-            message: `Unsupported live table syntax: ${error.message}`,
+            message: `Unsupported live schema syntax: ${error.message}`,
           }),
       ),
     );

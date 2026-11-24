@@ -1,3 +1,5 @@
+import { createIndex, type CreateIndex } from "./codecs/create-index.ts";
+import { indexesFromDatabaseSchema } from "./indexes.ts";
 import { Data, Effect } from "effect";
 import { EncodeError } from "@uncutsql/codec";
 import {
@@ -16,11 +18,17 @@ import {
 import { resolveProcedures } from "./procedures.ts";
 import type { SchemaDiffError, DatabaseSchema, DatabaseMigration } from "@uncutsql/core";
 import type { TableIdentity } from "./schema-identity.ts";
-import { fromDatabaseSchema } from "./database.ts";
+import { tablesFromDatabaseSchema } from "./database.ts";
 import { foldIdentifier, tableIdentity, tableKey } from "./schema-identity.ts";
 import type { Expression } from "./codecs/expression.ts";
 
 export type MigrationOperation =
+  | {
+      readonly _tag: "CreateIndex";
+      readonly table: TableIdentity;
+      readonly definition: CreateIndex;
+    }
+  | { readonly _tag: "DropIndex"; readonly table: TableIdentity; readonly index: TableIdentity }
   | RebuildTableOperation
   | { readonly _tag: "CreateTable"; readonly definition: CreateTable }
   | { readonly _tag: "DropTable"; readonly table: TableIdentity }
@@ -120,8 +128,16 @@ export const lowerMigration = (
   next: DatabaseSchema,
 ): Effect.Effect<MigrationPlan, SchemaDiffError | EncodeError | MigrationPlanError> =>
   Effect.gen(function* () {
-    const before = yield* fromDatabaseSchema(previous);
-    const after = yield* fromDatabaseSchema(next);
+    const before = yield* tablesFromDatabaseSchema(previous);
+    const after = yield* tablesFromDatabaseSchema(next);
+    const beforeIndexes = yield* indexesFromDatabaseSchema(previous);
+    const afterIndexes = yield* indexesFromDatabaseSchema(next);
+    const indexesFor = (indexes: readonly CreateIndex[], table: TableIdentity) =>
+      indexes.filter(
+        (index) =>
+          foldIdentifier(index.schema ?? "main") === table.schema &&
+          foldIdentifier(index.table) === table.name,
+      );
     const changes = yield* resolveProcedures(procedures, before, after);
     const diagnostics: MigrationDiagnostic[] = [];
     const drops = changes.filter((change) => change._tag === "DropTable");
@@ -137,6 +153,13 @@ export const lowerMigration = (
     const operations: MigrationOperation[] = [];
     const warnings: MigrationWarning[] = [];
     const reserved = new Set([...before, ...after].map((table) => tableKey(tableIdentity(table))));
+    for (const index of [...beforeIndexes, ...afterIndexes])
+      reserved.add(
+        tableKey({
+          schema: foldIdentifier(index.schema ?? "main"),
+          name: foldIdentifier(index.name),
+        }),
+      );
     const allocate = (schema: string, prefix: string) => {
       let index = 0;
       let name = prefix;
@@ -186,7 +209,9 @@ export const lowerMigration = (
         });
       } else if (change._tag === "AlterTable") {
         const rebuild =
-          change.changes.some((item) => item._tag !== "ColumnAdded") ||
+          change.changes.some(
+            (item) => item._tag !== "ColumnAdded" && !item._tag.startsWith("Index"),
+          ) ||
           change.before.columns.some(
             (column, index) =>
               foldIdentifier(column.name) !==
@@ -208,6 +233,7 @@ export const lowerMigration = (
             before: change.before,
             after: change.after,
             temporaryName: allocate(change.table.schema, "__uncutsql_rebuild"),
+            indexesBefore: indexesFor(beforeIndexes, change.table),
             ...(renames.length ? { renames } : {}),
           });
           const removed = change.changes.filter((item) => item._tag === "ColumnRemoved");
@@ -223,6 +249,54 @@ export const lowerMigration = (
         }
       }
     }
+    const indexDrops = new Map<string, Extract<MigrationOperation, { _tag: "DropIndex" }>>();
+    const indexCreates = new Map<string, Extract<MigrationOperation, { _tag: "CreateIndex" }>>();
+    const rebuilt = new Set(
+      operations
+        .filter((operation) => operation._tag === "RebuildTable")
+        .map((operation) => tableKey(operation.table)),
+    );
+    for (const procedure of procedures.procedures) {
+      const model = procedure._tag === "AlterTable" ? procedure.after : procedure.table;
+      const table = { schema: model.identity.catalog!, name: model.identity.name };
+      const old = indexesFor(beforeIndexes, table),
+        desired = indexesFor(afterIndexes, table);
+      const drop = (index: CreateIndex) => {
+        const identity = { schema: table.schema, name: foldIdentifier(index.name) };
+        indexDrops.set(tableKey(identity), { _tag: "DropIndex", table, index: identity });
+      };
+      const create = (index: CreateIndex) =>
+        indexCreates.set(tableKey({ schema: table.schema, name: foldIdentifier(index.name) }), {
+          _tag: "CreateIndex",
+          table,
+          definition: { ...index, ifNotExists: false },
+        });
+      if (procedure._tag === "DropTable" || rebuilt.has(tableKey(table))) old.forEach(drop);
+      if (procedure._tag === "CreateTable" || rebuilt.has(tableKey(table))) desired.forEach(create);
+      if (procedure._tag === "AlterTable" && !rebuilt.has(tableKey(table)))
+        for (const change of procedure.changes) {
+          if (change._tag === "IndexRemoved" || change._tag === "IndexChanged") {
+            const key = change._tag === "IndexRemoved" ? change.index.key : change.before.key;
+            const index = old.find((index) => foldIdentifier(index.name) === key);
+            if (!index)
+              return yield* Effect.fail(
+                new EncodeError({ message: "Index removal does not match the database context" }),
+              );
+            drop(index);
+          }
+          if (change._tag === "IndexAdded" || change._tag === "IndexChanged") {
+            const key = change._tag === "IndexAdded" ? change.index.key : change.after.key;
+            const index = desired.find((index) => foldIdentifier(index.name) === key);
+            if (!index)
+              return yield* Effect.fail(
+                new EncodeError({ message: "Index creation does not match the database context" }),
+              );
+            create(index);
+          }
+        }
+    }
+    operations.unshift(...indexDrops.values());
+    operations.push(...indexCreates.values());
     if (diagnostics.length) return yield* Effect.fail(new MigrationPlanError({ diagnostics }));
     const guardTable = operations.some((operation) => operation._tag === "RebuildTable")
       ? { schema: "temp", name: allocate("temp", "__uncutsql_migration_guard") }
@@ -236,6 +310,10 @@ export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, Enco
     const statements = yield* Effect.forEach(plan.operations, (operation) =>
       Effect.gen(function* () {
         switch (operation._tag) {
+          case "CreateIndex":
+            return yield* createIndex.encode(operation.definition);
+          case "DropIndex":
+            return `DROP INDEX ${yield* qualified(operation.index)};`;
           case "RebuildTable":
             return yield* encodeRebuild(operation);
           case "CreateTable":
@@ -269,9 +347,19 @@ export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, Enco
     for (const operation of rebuilds) {
       const catalog = yield* qualified({ ...operation.table, name: "sqlite_schema" });
       const name = yield* sqlString(operation.before.name);
-      preflight.push(
-        `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM ${catalog} WHERE type = 'view' OR (tbl_name = ${name} COLLATE NOCASE AND (type = 'trigger' OR (type = 'index' AND sql IS NOT NULL)));`,
+      const known = yield* Effect.forEach(operation.indexesBefore ?? [], (index) =>
+        sqlString(index.name),
       );
+      const unknownIndex = known.length
+        ? ` AND name COLLATE NOCASE NOT IN (${known.join(", ")})`
+        : "";
+      preflight.push(
+        `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM ${catalog} WHERE type = 'view' OR (tbl_name = ${name} COLLATE NOCASE AND (type = 'trigger' OR (type = 'index' AND sql IS NOT NULL${unknownIndex})));`,
+      );
+      if (known.length)
+        preflight.push(
+          `INSERT OR ROLLBACK INTO ${guard} SELECT abs(count(*) - ${known.length}) FROM ${catalog} WHERE type = 'index' AND sql IS NOT NULL AND tbl_name = ${name} COLLATE NOCASE AND name COLLATE NOCASE IN (${known.join(", ")});`,
+        );
       preflight.push(
         `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM temp.sqlite_schema WHERE type = 'view' OR (type = 'trigger' AND tbl_name = ${name} COLLATE NOCASE);`,
       );

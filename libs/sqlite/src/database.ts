@@ -6,30 +6,15 @@ import {
   type Constraint,
   type DatabaseSchema,
   type DiffDiagnostic,
-  type SchemaValue,
 } from "@uncutsql/core";
 import { createTable, type CreateTable } from "./create-table.ts";
+import { semanticValue, syntaxValue } from "./schema-value.ts";
+import { createIndex, type CreateIndex } from "./codecs/create-index.ts";
+import { indexesFromDatabaseSchema, indexModel } from "./indexes.ts";
 import type { Statement } from "./schema.ts";
 import { foldIdentifier, tableIdentity } from "./schema-identity.ts";
 
 /** Structural semantic values, not source text or a parser AST. */
-const semanticValue = (value: unknown): SchemaValue => {
-  if (
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "boolean" ||
-    typeof value === "number"
-  )
-    return value;
-  if (Array.isArray(value)) return value.map(semanticValue);
-  if (typeof value === "object")
-    return Object.fromEntries(
-      Object.entries(value)
-        .filter(([, item]) => item !== undefined)
-        .map(([key, item]) => [key === "_tag" ? "kind" : key, semanticValue(item)]),
-    );
-  throw new TypeError("Schema model values must be serializable");
-};
 const constraint = (value: { readonly _tag: string }): Constraint => ({
   kind: value._tag,
   properties: Object.fromEntries(
@@ -45,7 +30,7 @@ export const toDatabaseSchema = (
   side: DiffDiagnostic["side"] = "after",
 ) =>
   Effect.gen(function* () {
-    const unsupported = statements.filter((statement) => statement._tag !== "CreateTable");
+    const unsupported = statements.filter((statement) => statement._tag === "CreateTableAs");
     if (unsupported.length)
       return yield* Effect.fail(
         new SchemaDiffError({
@@ -62,12 +47,68 @@ export const toDatabaseSchema = (
         }),
       );
     const tables = statements.filter((statement) => statement._tag === "CreateTable");
+    const indexGroups = new Map<string, CreateIndex[]>();
+    const indexDiagnostics: DiffDiagnostic[] = [];
+    const objectNames = new Set(tables.map((table) => JSON.stringify(tableIdentity(table))));
+    for (const index of statements.filter((statement) => statement._tag === "CreateIndex")) {
+      let candidates = tables.filter(
+        (table) =>
+          foldIdentifier(table.name) === foldIdentifier(index.table) &&
+          (index.schema === undefined ||
+            tableIdentity(table).schema === foldIdentifier(index.schema)),
+      );
+      if (index.schema === undefined) {
+        const preferred =
+          candidates.find((table) => tableIdentity(table).schema === "temp") ??
+          candidates.find((table) => tableIdentity(table).schema === "main");
+        if (preferred) candidates = [preferred];
+      }
+      if (candidates.length !== 1) {
+        indexDiagnostics.push({
+          code: "IndexTableResolution",
+          side,
+          table: { catalog: index.schema ?? "main", name: index.table },
+          message: `Index ${index.name} requires an unambiguous declared table; qualify the index schema if needed`,
+        });
+        continue;
+      }
+      const table = candidates[0]!;
+      const objectKey = JSON.stringify({
+        schema: tableIdentity(table).schema,
+        name: foldIdentifier(index.name),
+      });
+      if (objectNames.has(objectKey))
+        indexDiagnostics.push({
+          code: "DuplicateIndex",
+          side,
+          table: { catalog: tableIdentity(table).schema, name: table.name },
+          message: `Index ${index.name} conflicts with another table or index in its schema`,
+        });
+      objectNames.add(objectKey);
+      const key = JSON.stringify(tableIdentity(table));
+      indexGroups.set(key, [...(indexGroups.get(key) ?? []), index]);
+      if (/^sqlite_/i.test(index.name))
+        indexDiagnostics.push({
+          code: "ReservedIndexName",
+          side,
+          table: { catalog: tableIdentity(table).schema, name: table.name },
+          message: "Standalone index names cannot use SQLite's reserved sqlite_ prefix",
+        });
+    }
     const database: DatabaseSchema = {
       tables: tables.map((table) => {
         const identity = tableIdentity(table);
         return {
           identity: { catalog: identity.schema, name: identity.name },
           name: table.name,
+          ...((indexGroups.get(JSON.stringify(identity))?.length ?? 0)
+            ? {
+                indexes: indexGroups
+                  .get(JSON.stringify(identity))!
+                  .map(indexModel)
+                  .sort((a, b) => a.key.localeCompare(b.key)),
+              }
+            : {}),
           columns: table.columns.map((column) => ({
             key: foldIdentifier(column.name),
             name: column.name,
@@ -83,7 +124,7 @@ export const toDatabaseSchema = (
         };
       }),
     };
-    const diagnostics = [...validateDatabase(database, side)];
+    const diagnostics = [...indexDiagnostics, ...validateDatabase(database, side)];
     for (const table of tables) {
       const id = tableIdentity(table);
       if (table.temporary && id.schema !== "temp")
@@ -96,20 +137,14 @@ export const toDatabaseSchema = (
     }
     if (diagnostics.length) return yield* Effect.fail(new SchemaDiffError({ diagnostics }));
     yield* Effect.forEach(tables, createTable.encode, { discard: true });
+    yield* Effect.forEach(
+      statements.filter((statement) => statement._tag === "CreateIndex"),
+      createIndex.encode,
+      { discard: true },
+    );
     return database;
   });
 
-const syntaxValue = (value: SchemaValue): unknown => {
-  if (Array.isArray(value)) return value.map(syntaxValue);
-  if (value !== null && typeof value === "object")
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [
-        key === "kind" ? "_tag" : key,
-        syntaxValue(item),
-      ]),
-    );
-  return value;
-};
 const syntaxConstraint = (value: Constraint) => ({
   _tag: value.kind,
   ...Object.fromEntries(
@@ -118,7 +153,7 @@ const syntaxConstraint = (value: Constraint) => ({
 });
 
 /** Materialize SQLite-supported semantic models, including a JSON-restored baseline. */
-export const fromDatabaseSchema = (
+export const tablesFromDatabaseSchema = (
   database: DatabaseSchema,
 ): Effect.Effect<readonly CreateTable[], SchemaDiffError | EncodeError> =>
   Effect.gen(function* () {
@@ -182,4 +217,11 @@ export const fromDatabaseSchema = (
           .pipe(Effect.mapError((error) => new EncodeError({ message: error.message })));
       }),
     );
+  });
+
+export const fromDatabaseSchema = (database: DatabaseSchema) =>
+  Effect.gen(function* () {
+    const tables = yield* tablesFromDatabaseSchema(database);
+    const indexes = yield* indexesFromDatabaseSchema(database);
+    return [...tables, ...indexes];
   });

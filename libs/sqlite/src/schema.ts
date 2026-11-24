@@ -7,18 +7,41 @@ import {
   parseError,
   read,
   repeat,
+  followedBy,
+  optional,
 } from "@uncutsql/codec";
 import {
   createTableStatementBodyGrammar,
-  createTableStatementGrammar,
   type CreateTableStatement,
 } from "./codecs/create-table-statement.ts";
+import { createIndexBodyGrammar, type CreateIndex } from "./codecs/create-index.ts";
+import { keyword } from "./operators/keyword.ts";
+import { keywordChoice } from "./operators/keyword-choice.ts";
+import { terminator } from "./operators/terminator.ts";
 import { trivia } from "./operators/trivia.ts";
 
 /** Supported schema statements, in source order. Extend this union with further DDL. */
-export type Statement = CreateTableStatement;
+export type Statement = CreateTableStatement | CreateIndex;
 
-const statementList = repeat(createTableStatementGrammar, { join: "\n" });
+const statementBody: Codec<Statement> = make<Statement>({
+  decode: (cursor) =>
+    Effect.gen(function* () {
+      const start = yield* keyword("CREATE").decode(cursor);
+      const modifier = yield* optional(keywordChoice(["UNIQUE", "TEMP", "TEMPORARY"])).decode(
+        start.next,
+      );
+      const kind = yield* keywordChoice(["TABLE", "INDEX"]).decode(modifier.next);
+      return yield* kind.value === "INDEX"
+        ? createIndexBodyGrammar.decode(cursor)
+        : createTableStatementBodyGrammar.decode(cursor);
+    }),
+  encode: (value) =>
+    value._tag === "CreateIndex"
+      ? createIndexBodyGrammar.encode(value)
+      : createTableStatementBodyGrammar.encode(value),
+});
+
+const statementList = repeat(followedBy(statementBody, terminator), { join: "\n" });
 
 export const schemaGrammar: Codec<readonly Statement[]> = make<readonly Statement[]>({
   decode: (cursor) =>
@@ -33,7 +56,7 @@ export const schemaGrammar: Codec<readonly Statement[]> = make<readonly Statemen
           continue;
         }
         const start = next.offset;
-        const statement = yield* createTableStatementBodyGrammar.decode(next);
+        const statement = yield* statementBody.decode(next);
         next = (yield* trivia.decode(statement.next)).next;
         statements.push(statement.value);
         if (next.offset < next.source.length) {

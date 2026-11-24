@@ -1,3 +1,4 @@
+import type { CreateIndex } from "./codecs/create-index.ts";
 import { Effect } from "effect";
 import { EncodeError } from "@uncutsql/codec";
 import { createTable, type CreateTable } from "./create-table.ts";
@@ -12,6 +13,7 @@ export interface RebuildTableOperation {
   readonly before: CreateTable;
   readonly after: CreateTable;
   readonly temporaryName: string;
+  readonly indexesBefore?: readonly CreateIndex[];
   readonly renames?: readonly { readonly source: string; readonly target: string }[];
 }
 

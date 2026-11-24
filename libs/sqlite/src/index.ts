@@ -87,3 +87,5 @@ export {
   type GroupedSource,
   type LimitClause,
 } from "./query.ts";
+
+export { createIndex, type CreateIndex, type IndexTerm } from "./codecs/create-index.ts";

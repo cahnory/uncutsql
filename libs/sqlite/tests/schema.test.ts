@@ -47,7 +47,7 @@ test("schema files require separators and reject unsupported trailing statements
   for (const source of [
     "CREATE TABLE a (x) CREATE TABLE b (x)",
     "CREATE TABLE a (x); SELECT 1;",
-    "CREATE INDEX idx ON a(x);",
+    "CREATE INDEX idx ON a();",
     "CREATE TABLE a (x); garbage",
   ]) {
     const result = Effect.runSync(Effect.result(schema.decode(source)));

@@ -201,9 +201,12 @@ transaction and restore `PRAGMA foreign_keys=ON`; generation cannot perform that
 cleanup for a caller. Copy and validation constraint failures request a rollback.
 Simple migrations retain the existing foreign-key setting.
 
-Runtime checks refuse unrepresented explicit indexes or triggers on rebuilt
+Standalone indexes, including unique, expression and partial indexes, are modeled
+separately from PRIMARY KEY/UNIQUE constraints. Index-only changes use DROP/CREATE
+INDEX; rebuilds recreate all desired indexes after copying the table.
+Runtime checks refuse unrepresented or missing explicit indexes, triggers on rebuilt
 tables and any views in affected schemas (including temporary views/triggers).
-The current schema grammar cannot preserve those objects. Rebuilds with all hidden
+Views and triggers cannot yet be preserved. Rebuilds with all hidden
 rowid aliases shadowed, no writable copy mapping, retained references to removed
 tables, and cyclic/self-referential table drops still produce planning errors.
 The baseline must cover all table declarations involved; a live database can still
@@ -292,7 +295,7 @@ pending file commits, the CLI also verifies its schema against the generation lo
 The first executor uses Node's SQLite support and accepts a persistent **main
 SQLite database file only**. It refuses to adopt an existing nonempty database
 without application history. Attached/temporary database migrations, baseline
-adoption, rollback/down migrations and standalone indexes/views/triggers are not
+adoption, rollback/down migrations and views/triggers are not
 yet supported. `__uncutsql_migrations` is reserved for application metadata.
 Migration scripts must use the generated BEGIN/COMMIT envelope; PRAGMAs outside
 it are limited to the emitted foreign-key settings. An initial failed attempt can
