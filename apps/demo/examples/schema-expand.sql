@@ -12,3 +12,6 @@ create table posts (
   title TEXT NOT NULL,
   created_at TEXT DEFAULT (datetime('now'))
 );
+
+create view active_users as
+  select id, name as user_name from users where status = 'active';

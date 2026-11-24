@@ -180,6 +180,7 @@ The generated `uncutsql.lock.json` is managed by the CLI and has no editor schem
 
 - [x] Bound concurrent migration-file reads during apply.
 - [x] Reconcile the decision-review documentation with verified behavior.
-- [ ] Verify diff and lock-backed generation for schemas containing views, then exercise apply and drift checks with the SQLite driver. Repeat for triggers when supported.
+- [x] Verify diff, lock-backed generation, apply and drift checks for schemas containing views.
+- [ ] Repeat the migration workflow for triggers when supported.
 
 See the [workspace roadmap](../../ROADMAP.md) for cross-project sequencing.

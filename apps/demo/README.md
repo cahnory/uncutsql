@@ -52,13 +52,16 @@ ignored `apps/demo/.local/` directory. The first generation creates the director
 pnpm demo:cli generate examples/schema.sql .local/migrations
 pnpm demo:cli apply .local/app.sqlite .local/migrations
 
-# Add a nullable email column
+# Add a nullable email column and the active_users view
 pnpm demo:cli generate examples/schema-expand.sql .local/migrations
 pnpm demo:cli apply .local/app.sqlite .local/migrations
 
 # Add uniqueness and a CHECK constraint, exercising the table-rebuild planner
 pnpm demo:cli generate examples/schema-next.sql .local/migrations
 pnpm demo:cli apply .local/app.sqlite .local/migrations
+
+# Query the view after rebuilding its source table
+sqlite3 apps/demo/.local/app.sqlite 'SELECT id, user_name FROM active_users;'
 
 # Repeating the final operations makes no changes
 pnpm demo:cli generate examples/schema-next.sql .local/migrations
@@ -107,6 +110,6 @@ advancing the baseline invalidates an old decision file.
 
 ## Roadmap
 
-- [ ] Extend the migration walkthrough with a dependent view once the CLI supports generating and applying the migration.
+- [x] Exercise a dependent view across a table rebuild and a column rename.
 
 See the [workspace roadmap](../../ROADMAP.md) for cross-project sequencing.

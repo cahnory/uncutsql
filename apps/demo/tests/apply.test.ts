@@ -190,3 +190,30 @@ test("application orchestration uses a swappable executor and core-owned verific
     rmSync(cwd, { recursive: true });
   }
 });
+
+test("CLI diffs, generates and applies view-only revisions from the lock", () => {
+  const cwd = directory();
+  try {
+    const before = "CREATE VIEW tally(n) AS VALUES (1)";
+    const after = "CREATE VIEW tally(n) AS VALUES (2)";
+    writeFileSync(join(cwd, "before.sql"), before);
+    writeFileSync(join(cwd, "after.sql"), after);
+    const diff = run(cwd, ["diff", "before.sql", "after.sql"]);
+    assert.equal(diff.status, 0, diff.stderr);
+    assert.equal(JSON.parse(diff.stdout).changes[0]._tag, "ViewChanged");
+    for (const schema of [before, after]) {
+      const generate = run(cwd, ["generate", "-"], schema);
+      assert.equal(generate.status, 0, generate.stderr);
+      const apply = run(cwd, ["apply", "app.sqlite"]);
+      assert.equal(apply.status, 0, apply.stderr);
+    }
+    const path = join(cwd, "app.sqlite");
+    assert.deepEqual(rows(path, "SELECT * FROM tally"), [{ n: 2 }]);
+    exec(path, "DROP VIEW tally");
+    const drift = run(cwd, ["apply", "app.sqlite"]);
+    assert.equal(drift.status, 1);
+    assert.match(drift.stderr, /ViewRemoved.*tally/);
+  } finally {
+    rmSync(cwd, { recursive: true });
+  }
+});
