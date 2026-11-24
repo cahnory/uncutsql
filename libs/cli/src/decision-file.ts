@@ -73,7 +73,12 @@ export const writeDecisionFile = async (
       await rename(stage, path);
       published = true;
     }
-    return `Wrote ${path}. Review pending resolutions, then rerun without ${flag} (use --decisions with this path if it differs from the configured/default file).\n`;
+    const renameHint = document.decisions.some(
+      (item) => item.column === undefined && item.candidates.length,
+    )
+      ? " After choosing a table rename, run --merge-decisions with the same path to review its columns."
+      : "";
+    return `Wrote ${path}. Review pending resolutions.${renameHint} When all choices are complete, rerun without ${flag} (use --decisions with this path if it differs from the configured/default file).\n`;
   } finally {
     await handle.close();
     // A successful rename transfers ownership of the staging path to the next writer.

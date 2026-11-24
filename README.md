@@ -550,15 +550,17 @@ pnpm cli migration before.sql after.sql --decisions choices.json
 | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `{"action":"drop_if_empty"}`             | Drop a table only if it has no rows, or a column only if all its values are NULL. SQLite checks inside the migration transaction and rolls back on failure. |
 | `{"action":"drop"}`                      | Drop even if data is present.                                                                                                                               |
-| `{"action":"rename","target":"new_key"}` | Copy the removed column to a target listed in `candidates`. Available only when the table has an added column.                                              |
+| `{"action":"rename","target":"new_key"}` | Rename a table or column to a target listed in `candidates`.                                                                                                |
 
 `generate desired.sql migrations` supports the same flags against its saved
 baseline. If the decision file exists, replace `--write-decisions` with
 `--merge-decisions` to keep applicable answers, remove obsolete questions, and
 add new ones as pending. A rename returns to pending if its target disappears.
+For example, after choosing to rename `users` to `accounts`, run
+`--merge-decisions` again. If `users.email` disappeared, the review now asks
+whether to drop it or rename it to an added column in `accounts`. Repeat after
+editing table choices until every resolution is answered.
 Use `--rewrite-decisions` to reset every answer. Both flags accept the same optional path.
-Unresolved, stale and conflicting choices stop generation. Confirmed
-renames retain separate type/constraint changes and SQLite currently implements
-them with a rebuild. Validated decisions are persisted inside the hashed SQL;
+Unresolved, stale and conflicting choices stop generation. SQLite emits `ALTER TABLE … RENAME TO` for table renames and uses a rebuild for column renames. Validated decisions are persisted inside the hashed SQL;
 review that concrete script before running apply. See the
 [demo rename walkthrough](apps/demo/README.md#resolve-a-column-rename).

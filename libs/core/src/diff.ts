@@ -59,6 +59,12 @@ export type TableAlteration =
       readonly before: { readonly [key: string]: SchemaValue };
       readonly after: { readonly [key: string]: SchemaValue };
     };
+interface TableChanges {
+  readonly table: TableIdentity;
+  readonly before: DatabaseTable;
+  readonly after: DatabaseTable;
+  readonly changes: readonly TableAlteration[];
+}
 export type TableChange =
   | {
       readonly _tag: "TableAdded";
@@ -70,13 +76,8 @@ export type TableChange =
       readonly table: TableIdentity;
       readonly definition: DatabaseTable;
     }
-  | {
-      readonly _tag: "TableChanged";
-      readonly table: TableIdentity;
-      readonly before: DatabaseTable;
-      readonly after: DatabaseTable;
-      readonly changes: readonly TableAlteration[];
-    };
+  | (TableChanges & { readonly _tag: "TableChanged" })
+  | (TableChanges & { readonly _tag: "TableRenamed" });
 export interface DropGuard {
   readonly table: TableIdentity;
   /** Source column name. Omit to require an empty table. */
@@ -146,7 +147,10 @@ const constraintsEqual = (before: readonly Constraint[], after: readonly Constra
       schemaValueEqual(item.properties, after[index]!.properties),
   );
 
-const compareTable = (before: DatabaseTable, after: DatabaseTable): readonly TableAlteration[] => {
+export const compareTable = (
+  before: DatabaseTable,
+  after: DatabaseTable,
+): readonly TableAlteration[] => {
   const changes: TableAlteration[] = [];
   const previous = new Map(before.columns.map((column) => [column.key, column]));
   const next = new Map(after.columns.map((column) => [column.key, column]));

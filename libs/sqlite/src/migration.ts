@@ -36,6 +36,7 @@ export type MigrationOperation =
       readonly definition: CreateIndex;
     }
   | { readonly _tag: "DropIndex"; readonly table: TableIdentity; readonly index: TableIdentity }
+  | { readonly _tag: "RenameTable"; readonly table: TableIdentity; readonly target: string }
   | RebuildTableOperation
   | { readonly _tag: "CreateTable"; readonly definition: CreateTable }
   | { readonly _tag: "DropTable"; readonly table: TableIdentity }
@@ -149,13 +150,25 @@ export const lowerMigration = (
     const diagnostics: MigrationDiagnostic[] = [];
     const drops = changes.filter((change) => change._tag === "DropTable");
     const dropped = new Set(drops.map((change) => tableKey(change.table)));
+    const renamed = new Map(
+      changes
+        .filter((change) => change._tag === "RenameTable")
+        .map((change) => [tableKey(tableIdentity(change.before)), change.after.name]),
+    );
     for (const table of after) {
-      if (references(table).some((reference) => dropped.has(tableKey(reference))))
+      for (const reference of references(table)) {
+        const key = tableKey(reference);
+        const target = renamed.get(key);
+        if (target === undefined && !dropped.has(key)) continue;
         diagnostics.push({
           code: "RetainedForeignKey",
           table: tableIdentity(table),
-          message: "The desired schema still references a table scheduled for removal",
+          message:
+            target === undefined
+              ? `The desired schema still references table ${key}, which is scheduled for removal`
+              : `The foreign key still references ${JSON.stringify(reference.name)}, which is being renamed to ${JSON.stringify(target)}. Update REFERENCES in the desired schema and refresh the review with --merge-decisions.`,
         });
+      }
     }
     const operations: MigrationOperation[] = [];
     const warnings: MigrationWarning[] = [];
@@ -203,6 +216,14 @@ export const lowerMigration = (
       });
     }
     for (const change of changes) {
+      if (change._tag === "RenameTable")
+        operations.push({
+          _tag: "RenameTable",
+          table: tableIdentity(change.before),
+          target: change.after.name,
+        });
+    }
+    for (const change of changes) {
       if (change._tag === "CreateTable") {
         // Make placement explicit; never conceal baseline drift with IF NOT EXISTS.
         operations.push({
@@ -214,7 +235,7 @@ export const lowerMigration = (
             ifNotExists: false,
           },
         });
-      } else if (change._tag === "AlterTable") {
+      } else if (change._tag === "AlterTable" || change._tag === "RenameTable") {
         const rebuild =
           change.changes.some(
             (item) => item._tag !== "ColumnAdded" && !item._tag.startsWith("Index"),
@@ -240,7 +261,7 @@ export const lowerMigration = (
             before: change.before,
             after: change.after,
             temporaryName: allocate(change.table.schema, "__uncutsql_rebuild"),
-            indexesBefore: indexesFor(beforeIndexes, change.table),
+            indexesBefore: indexesFor(beforeIndexes, tableIdentity(change.before)),
             ...(renames.length ? { renames } : {}),
           });
           const removed = change.changes.filter((item) => item._tag === "ColumnRemoved");
@@ -264,9 +285,10 @@ export const lowerMigration = (
         .map((operation) => tableKey(operation.table)),
     );
     for (const procedure of procedures.procedures) {
-      const model = procedure._tag === "AlterTable" ? procedure.after : procedure.table;
+      const model = "after" in procedure ? procedure.after : procedure.table;
       const table = { schema: model.identity.catalog!, name: model.identity.name };
-      const old = indexesFor(beforeIndexes, table),
+      const source = "before" in procedure ? procedure.before.identity : model.identity;
+      const old = indexesFor(beforeIndexes, { schema: source.catalog!, name: source.name }),
         desired = indexesFor(afterIndexes, table);
       const drop = (index: CreateIndex) => {
         const identity = { schema: table.schema, name: foldIdentifier(index.name) };
@@ -280,7 +302,7 @@ export const lowerMigration = (
         });
       if (procedure._tag === "DropTable" || rebuilt.has(tableKey(table))) old.forEach(drop);
       if (procedure._tag === "CreateTable" || rebuilt.has(tableKey(table))) desired.forEach(create);
-      if (procedure._tag === "AlterTable" && !rebuilt.has(tableKey(table)))
+      if ("changes" in procedure && !rebuilt.has(tableKey(table)))
         for (const change of procedure.changes) {
           if (change._tag === "IndexRemoved" || change._tag === "IndexChanged") {
             const key = change._tag === "IndexRemoved" ? change.index.key : change.before.key;
@@ -347,6 +369,8 @@ export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, Enco
             return yield* encodeRebuild(operation);
           case "CreateTable":
             return yield* createTable.encode(operation.definition);
+          case "RenameTable":
+            return `ALTER TABLE ${yield* qualified(operation.table)} RENAME TO ${yield* identifier.encode(operation.target)};`;
           case "DropTable":
             return `DROP TABLE ${yield* qualified(operation.table)};`;
           case "AddColumn": {

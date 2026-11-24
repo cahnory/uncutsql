@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { Effect, Result } from "effect";
 import {
   prepareMigrationDecisions,
+  mergeMigrationDecisions,
   resolveMigrationDecisions,
   MigrationDecisionError,
   type DatabaseSchema,
@@ -157,4 +158,52 @@ test("mixed rename/drop decisions retain other additions and accompanying constr
   const rename = change.changes[0]!;
   if (rename._tag !== "ColumnRenamed") throw new Error("Expected rename");
   assert.deepEqual(rename.fields, ["dataType", "constraints"]);
+});
+
+test("changing a table pairing discards only its dependent column answers", () => {
+  const table = (name: string, column: string) => ({
+    ...model([column]).tables[0]!,
+    name,
+    identity: { name },
+  });
+  const source = { tables: [table("old", "value"), table("other", "value")] };
+  const target = { tables: [table("first", "label"), table("second", "label")] };
+  const fresh = Effect.runSync(prepareMigrationDecisions(source, target));
+  const pair = (target: string) => ({ action: "rename" as const, target });
+  const answered = {
+    ...fresh,
+    decisions: fresh.decisions.map((item) => ({
+      ...item,
+      resolution: item.table.name === "old" ? pair("first") : { action: "drop" as const },
+    })),
+  };
+  const merge = (document: unknown) => Effect.runSync(mergeMigrationDecisions(fresh, document));
+  const expanded = merge(answered);
+  assert.equal(expanded.decisions.length, 3);
+  const complete = merge({
+    ...expanded,
+    decisions: expanded.decisions.map((item) =>
+      item.column ? { ...item, resolution: pair("label") } : item,
+    ),
+  });
+  assert.deepEqual(merge(complete), complete);
+  const changed = merge({
+    ...complete,
+    decisions: complete.decisions.map((item) =>
+      item.table.name === "old" && !item.column ? { ...item, resolution: pair("second") } : item,
+    ),
+  });
+  assert.equal(changed.decisions[2]!.resolution.action, "pending");
+  assert.notEqual(changed.decisions[2]!.id, complete.decisions[2]!.id);
+  assert.throws(
+    () =>
+      merge({
+        ...answered,
+        decisions: answered.decisions.map((item) => ({
+          ...item,
+          resolution: pair("first"),
+        })),
+      }),
+    /Multiple source tables/,
+  );
 });

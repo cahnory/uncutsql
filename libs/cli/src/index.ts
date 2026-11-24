@@ -310,7 +310,7 @@ if (Result.isSuccess(result)) {
   process.stderr.write(`${error.message}\n${error instanceof UsageError ? `\n${help}` : ""}`);
   if (error instanceof MigrationDecisionError)
     process.stderr.write(
-      "Use --write-decisions [new-file] to prepare choices; edit resolution fields, then rerun without --write-decisions. No migration was generated.\n",
+      "Use --write-decisions [new-file] to start a review or --merge-decisions [file] to refresh an existing review. No migration was generated.\n",
     );
   process.exitCode = error instanceof UsageError ? 2 : 1;
 }

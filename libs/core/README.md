@@ -55,17 +55,18 @@ both schema snapshots and structured questions for removed tables and columns.
 Column questions list all added keys in that table as candidates; no similarity
 heuristic selects a rename. Each `resolution` starts as `{ "action": "pending" }`.
 
-Consumers collect `{"action":"drop"}` or, for a column,
-`{"action":"rename","target":"new-column-key"}`. Then
+Table questions list added table names in the same namespace. Consumers choose
+`drop`, `drop_if_empty`, or `rename` with a listed target. After choosing a table
+rename, `mergeMigrationDecisions` adds questions for columns removed from that
+table and retains reviewed answers for the same source and target. Then
 `resolveMigrationDecisions(before, after, document)` validates the untrusted
 answers and snapshots and returns a resolved diff and sanitized decision record.
 Missing, stale, duplicate or conflicting answers fail with MigrationDecisionError;
 its `pending` field carries the review document. Additions alone need no answers.
 
-Renames become ColumnRenamed alterations, including separate dataType/constraints
+Table renames become RenameTable procedures. Column renames become ColumnRenamed alterations, including separate dataType/constraints
 change fields. The desired schema remains authoritative: rename decisions do not
-rewrite desired CHECK expressions or foreign-key references. Table renames,
-custom transformations, similarity ranking and automatic approval are not provided.
+rewrite desired CHECK expressions or foreign-key references. Custom transformations, similarity ranking and automatic approval are not provided.
 
 Core has no prompts or persistence. `planDatabaseMigration` remains a low-level
 primitive for caller-approved intent; user-facing workflows should resolve

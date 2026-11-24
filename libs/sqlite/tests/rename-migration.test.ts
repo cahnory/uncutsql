@@ -93,3 +93,35 @@ test("renaming an AUTOINCREMENT key retains rowids and its deleted-row high-wate
     db.close();
   }
 });
+
+test("a table-only rename preserves rows and indexes using one native operation", () => {
+  const before = "CREATE TABLE old(id INTEGER); CREATE INDEX lookup ON old(id);";
+  const after = "CREATE TABLE new(id INTEGER); CREATE INDEX lookup ON new(id);";
+  const migration = plan(before, after, true);
+  assert.deepEqual(
+    migration.operations.map((item) => item._tag),
+    ["RenameTable"],
+  );
+  assert.deepEqual(migration.warnings, []);
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec(before + "INSERT INTO old VALUES(42);");
+    db.exec(Effect.runSync(encodeMigration(migration)));
+    assert.equal(db.prepare("SELECT id FROM new INDEXED BY lookup").get()?.id, 42);
+  } finally {
+    db.close();
+  }
+});
+
+test("a stale foreign key identifies the chosen table rename", () => {
+  const posts = "CREATE TABLE posts(author_id REFERENCES old(id))";
+  assert.throws(
+    () =>
+      plan(
+        "CREATE TABLE old(id PRIMARY KEY);" + posts,
+        "CREATE TABLE new(id PRIMARY KEY);" + posts,
+        true,
+      ),
+    /foreign key still references "old", which is being renamed to "new"/,
+  );
+});

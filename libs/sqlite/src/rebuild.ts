@@ -104,7 +104,7 @@ export const encodeRebuild = (
     ];
     if (autoincrement(operation.before) && autoincrement(operation.after)) {
       const sequence = yield* qualifiedTable({ ...operation.table, name: "sqlite_sequence" });
-      const old = yield* sqlString(operation.before.name);
+      const old = yield* sqlString(operation.after.name);
       const fresh = yield* sqlString(operation.temporaryName);
       statements.push(
         `UPDATE ${sequence} SET seq = max(seq, coalesce((SELECT seq FROM ${sequence} WHERE name = ${old} COLLATE NOCASE), 0)) WHERE name = ${fresh};`,

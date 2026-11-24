@@ -103,7 +103,7 @@ test("decisions schema validates generated snapshots and editable resolutions", 
   );
 });
 
-test("action completion offers column choices before a target exists and restricts table choices", async () => {
+test("action completion offers column choices before a target exists and offers table renames when targets exist", async () => {
   const { getLanguageService } = await import("vscode-json-languageservice");
   const { TextDocument } = await import("vscode-languageserver-textdocument");
   const schema = JSON.parse(
@@ -134,6 +134,7 @@ test("action completion offers column choices before a target exists and restric
     ["old", ["new"]],
     ["old", []],
     [undefined, []],
+    [undefined, ["new_table"]],
   ] as const) {
     for (const value of ['"|pending"', "|", '"|rename"']) {
       const source = JSON.stringify({

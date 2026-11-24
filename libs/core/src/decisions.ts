@@ -1,6 +1,13 @@
 import { Data, Effect } from "effect";
 import { decodeDatabaseSchema } from "./decode.ts";
-import { diffDatabases, type DatabaseDiff, type DropGuard, type TableAlteration } from "./diff.ts";
+import {
+  compareTable,
+  diffDatabases,
+  type DatabaseDiff,
+  type DropGuard,
+  type TableAlteration,
+  type TableChange,
+} from "./diff.ts";
 import {
   schemaValueEqual,
   tableKey,
@@ -14,7 +21,7 @@ export interface MigrationDecision {
   readonly table: TableIdentity;
   readonly column?: string;
   readonly question: string;
-  /** Added column keys, not guesses: no candidate is selected automatically. */
+  /** Added table names or column keys, not guesses: no candidate is selected automatically. */
   readonly candidates: readonly string[];
   readonly resolution:
     | { readonly action: "pending" }
@@ -36,26 +43,42 @@ const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const idFor = (table: TableIdentity, column?: string) =>
   JSON.stringify([tableKey(table), column ?? null]);
+const renamedColumnId = (source: TableIdentity, target: TableIdentity, column: string) =>
+  JSON.stringify([tableKey(source), tableKey(target), column]);
+const columnId = (change: Extract<TableChange, { before: unknown }>, column: string) =>
+  change._tag === "TableRenamed"
+    ? renamedColumnId(change.before.identity, change.after.identity, column)
+    : idFor(change.table, column);
 const questions = (diff: DatabaseDiff): readonly MigrationDecision[] =>
   diff.changes.flatMap<MigrationDecision>((change) => {
-    if (change._tag === "TableRemoved")
+    if (change._tag === "TableRemoved") {
+      const candidates = diff.changes.flatMap((item) =>
+        item._tag === "TableAdded" &&
+        item.table.catalog === change.table.catalog &&
+        item.table.schema === change.table.schema
+          ? [item.table.name]
+          : [],
+      );
       return [
         {
           id: idFor(change.table),
           table: change.table,
-          question: `Drop table ${tableKey(change.table)} and its data?`,
-          candidates: [],
+          question: candidates.length
+            ? `Drop table ${tableKey(change.table)}, or rename it to an added table?`
+            : `Drop table ${tableKey(change.table)} and its data?`,
+          candidates,
           resolution: { action: "pending" },
         },
       ];
-    if (change._tag !== "TableChanged") return [];
+    }
+    if (change._tag === "TableAdded") return [];
     const candidates = change.changes
       .filter((item) => item._tag === "ColumnAdded")
       .map((item) => item.column.key);
     return change.changes
       .filter((item) => item._tag === "ColumnRemoved")
       .map((item) => ({
-        id: idFor(change.table, item.column.key),
+        id: columnId(change, item.column.key),
         table: change.table,
         column: item.column.key,
         question: candidates.length
@@ -112,12 +135,16 @@ const readAnswers = (
         resolution.action === "rename" &&
         Object.keys(resolution).length === 2 &&
         typeof resolution.target === "string" &&
-        question.column !== undefined &&
         question.candidates.includes(resolution.target)
       ) {
-        const target = idFor(question.table, resolution.target);
+        const target =
+          question.column === undefined
+            ? idFor({ ...question.table, name: resolution.target })
+            : idFor(question.table, resolution.target);
         if (targets.has(target))
-          return yield* fail(`Multiple source columns map to ${resolution.target}.`);
+          return yield* fail(
+            `Multiple source ${question.column === undefined ? "tables" : "columns"} map to ${resolution.target}.`,
+          );
         targets.add(target);
         answers.set(input.id, {
           ...question,
@@ -132,6 +159,86 @@ const readAnswers = (
     return answers;
   });
 
+// Pair tables first. Only then can their removed columns become review questions.
+const expandRenames = (diff: DatabaseDiff, answers: ReadonlyMap<string, MigrationDecision>) => {
+  const additions = new Map(
+    diff.changes
+      .filter((item) => item._tag === "TableAdded")
+      .map((item) => [tableKey(item.table), item]),
+  );
+  const renames: TableChange[] = [];
+  for (const source of diff.changes) {
+    if (source._tag !== "TableRemoved") continue;
+    const choice = answers.get(idFor(source.table))?.resolution;
+    if (choice?.action !== "rename") continue;
+    const key = tableKey({ ...source.table, name: choice.target });
+    const target = additions.get(key)!;
+    additions.delete(key);
+    renames.push({
+      _tag: "TableRenamed",
+      table: source.table,
+      before: source.definition,
+      after: target.definition,
+      changes: compareTable(source.definition, target.definition),
+    });
+  }
+  const changes = diff.changes.filter((item) => {
+    if (item._tag === "TableAdded") return additions.has(tableKey(item.table));
+    return (
+      item._tag !== "TableRemoved" || answers.get(idFor(item.table))?.resolution.action !== "rename"
+    );
+  });
+  return { diff: { changes: [...changes, ...renames] }, nested: questions({ changes: renames }) };
+};
+
+const reviewAnswers = (
+  pending: MigrationDecisions,
+  diff: DatabaseDiff,
+  inputs: readonly unknown[],
+  merging: boolean,
+) =>
+  Effect.gen(function* () {
+    const rootIds = new Set(pending.decisions.map((item) => item.id));
+    const roots = inputs.filter(
+      (input) => record(input) && typeof input.id === "string" && rootIds.has(input.id),
+    );
+    const rootAnswers = yield* readAnswers(pending, roots, merging);
+    const expanded = expandRenames(diff, rootAnswers);
+    const review = { ...pending, decisions: [...rootAnswers.values(), ...expanded.nested] };
+    const expected = new Set(review.decisions.map((item) => item.id));
+    const current = inputs.filter((input) => {
+      if (
+        !merging ||
+        !record(input) ||
+        typeof input.column !== "string" ||
+        typeof input.id !== "string" ||
+        expected.has(input.id)
+      )
+        return true;
+      // Drop questions issued for an earlier pairing when a reviewer edits the parent.
+      const column = input.column;
+      return !pending.decisions.some(
+        (parent) =>
+          parent.column === undefined &&
+          equal(parent.table, input.table) &&
+          parent.candidates.some(
+            (name) => input.id === renamedColumnId(parent.table, { ...parent.table, name }, column),
+          ),
+      );
+    });
+    const ids = new Set(current.flatMap((input) => (record(input) ? [input.id] : [])));
+    const missing = expanded.nested.filter((item) => !ids.has(item.id));
+    if (!merging && missing.length)
+      return yield* Effect.fail(
+        new MigrationDecisionError({
+          message: "Table rename requires column decisions. Run --merge-decisions to review them.",
+          pending: review,
+        }),
+      );
+    const answers = yield* readAnswers(review, [...current, ...missing], merging);
+    return { diff: expanded.diff, answers };
+  });
+
 /** Refresh the questions and snapshots, carrying forward applicable reviewed choices. */
 export const mergeMigrationDecisions = (fresh: MigrationDecisions, previous: unknown) =>
   Effect.gen(function* () {
@@ -144,20 +251,22 @@ export const mergeMigrationDecisions = (fresh: MigrationDecisions, previous: unk
       );
     const before = yield* decodeDatabaseSchema(previous.before);
     const after = yield* decodeDatabaseSchema(previous.after);
-    const original = yield* prepareMigrationDecisions(before, after);
-    const answers = yield* readAnswers(original, previous.decisions, true);
-    return {
-      ...fresh,
-      decisions: fresh.decisions.map((question) => {
-        const resolution = answers.get(question.id)?.resolution;
-        if (
-          !resolution ||
-          (resolution.action === "rename" && !question.candidates.includes(resolution.target))
-        )
-          return question;
-        return { ...question, resolution };
-      }),
+    const originalDiff = yield* diffDatabases(before, after);
+    const original = { version: 1 as const, before, after, decisions: questions(originalDiff) };
+    const { answers } = yield* reviewAnswers(original, originalDiff, previous.decisions, true);
+    const carry = (question: MigrationDecision) => {
+      const resolution = answers.get(question.id)?.resolution;
+      if (
+        !resolution ||
+        (resolution.action === "rename" && !question.candidates.includes(resolution.target))
+      )
+        return question;
+      return { ...question, resolution };
     };
+    const freshDiff = yield* diffDatabases(fresh.before, fresh.after);
+    const roots = questions(freshDiff).map(carry);
+    const expanded = expandRenames(freshDiff, new Map(roots.map((item) => [item.id, item])));
+    return { ...fresh, decisions: [...roots, ...expanded.nested.map(carry)] };
   });
 
 /** Validate untrusted JSON and resolve intent against fresh comparison results. */
@@ -183,10 +292,11 @@ export const resolveMigrationDecisions = (
       return yield* fail(
         "Stale migration decisions: source or target schema changed. Prepare a new decision file.",
       );
-    const answers = yield* readAnswers(pending, supplied.decisions, false);
+    const reviewed = yield* reviewAnswers(pending, diff, supplied.decisions, false);
+    const answers = reviewed.answers;
     const dropGuards: DropGuard[] = [];
-    const changes = diff.changes.map((change) => {
-      if (change._tag !== "TableChanged") {
+    const changes = reviewed.diff.changes.map((change) => {
+      if (change._tag === "TableRemoved" || change._tag === "TableAdded") {
         if (
           change._tag === "TableRemoved" &&
           answers.get(idFor(change.table))?.resolution.action === "drop_if_empty"
@@ -198,7 +308,7 @@ export const resolveMigrationDecisions = (
       const changes: TableAlteration[] = [];
       for (const item of change.changes) {
         if (item._tag !== "ColumnRemoved") continue;
-        const answer = answers.get(idFor(change.table, item.column.key))!;
+        const answer = answers.get(columnId(change, item.column.key))!;
         if (answer.resolution.action === "drop_if_empty")
           dropGuards.push({ table: change.table, column: item.column.name });
         if (answer.resolution.action !== "rename") continue;
@@ -219,7 +329,7 @@ export const resolveMigrationDecisions = (
               !(item._tag === "ColumnAdded" && renamedTargets.has(item.column.key)) &&
               !(
                 item._tag === "ColumnRemoved" &&
-                answers.get(idFor(change.table, item.column.key))?.resolution.action === "rename"
+                answers.get(columnId(change, item.column.key))?.resolution.action === "rename"
               ),
           ),
         ],

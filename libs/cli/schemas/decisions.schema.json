@@ -214,16 +214,14 @@
       "required": ["id", "table", "question", "candidates", "resolution"],
       "additionalProperties": false,
       "if": {
-        "required": ["column"],
         "properties": {
-          "column": {},
           "candidates": { "type": "array", "minItems": 1 }
         }
       },
       "then": {
         "properties": {
           "resolution": {
-            "$ref": "#/definitions/columnResolution"
+            "$ref": "#/definitions/renameOrDropResolution"
           }
         }
       },
@@ -235,18 +233,18 @@
         }
       }
     },
-    "columnResolution": {
+    "renameOrDropResolution": {
       "type": "object",
       "description": "Choose drop_if_empty, drop or rename. Pending requires an explicit decision before migration generation. Rename targets must be listed in candidates.",
       "properties": {
         "action": {
           "type": "string",
           "enum": ["pending", "drop_if_empty", "drop", "rename"],
-          "description": "drop_if_empty requires all source values to be NULL at apply time. drop allows data loss. rename copies to the selected target."
+          "description": "drop_if_empty requires an empty table or all-NULL column at apply time. drop allows data loss. rename preserves data in the selected target."
         },
         "target": {
           "type": "string",
-          "description": "An added column key from candidates. Required only for rename."
+          "description": "An added table name or column key from candidates. Required only for rename."
         }
       },
       "required": ["action"],

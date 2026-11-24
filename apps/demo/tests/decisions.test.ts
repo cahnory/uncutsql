@@ -327,3 +327,89 @@ test("merge refreshes a changed review and rewrite resets its answers", () => {
     rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+test("generate and apply a table rename with a second round of column decisions", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "uncutsql-table-rename-"));
+  try {
+    const before =
+      "CREATE TABLE people(id INTEGER PRIMARY KEY AUTOINCREMENT, surname TEXT, unused TEXT); CREATE INDEX by_name ON people(surname);";
+    const after =
+      'CREATE TABLE "Members"(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT); CREATE INDEX by_name ON "Members"(name);';
+    const path = join(cwd, "review.json");
+    const read = (): MigrationDecisions => JSON.parse(readFileSync(path, "utf8"));
+    const generate = (...args: string[]) => run(cwd, ["generate", "-", ...args], after);
+    const dbPath = join(cwd, "db.sqlite");
+    assert.equal(run(cwd, ["generate", "-"], before).status, 0);
+    assert.equal(run(cwd, ["apply", dbPath]).status, 0);
+    const db = new DatabaseSync(dbPath);
+    try {
+      db.exec(
+        "INSERT INTO people VALUES(1,'Ada',NULL),(10,'deleted',NULL); DELETE FROM people WHERE id=10",
+      );
+      assert.equal(generate("--write-decisions", path).status, 0);
+      const first = read();
+      assert.deepEqual(
+        first.decisions.map((item) => item.candidates),
+        [["members"]],
+      );
+      writeFileSync(
+        path,
+        JSON.stringify({
+          ...first,
+          decisions: first.decisions.map((item) => ({
+            ...item,
+            resolution: { action: "rename", target: "members" },
+          })),
+        }),
+      );
+      assert.match(generate("--decisions", path).stderr, /--merge-decisions/);
+      assert.equal(generate("--merge-decisions", path).status, 0);
+      const second = read();
+      assert.deepEqual(
+        second.decisions.map((item) => item.column),
+        [undefined, "surname", "unused"],
+      );
+      writeFileSync(
+        path,
+        JSON.stringify({
+          ...second,
+          decisions: second.decisions.map((item) => ({
+            ...item,
+            resolution:
+              item.column === "surname"
+                ? { action: "rename", target: "name" }
+                : item.column === "unused"
+                  ? { action: "drop_if_empty" }
+                  : item.resolution,
+          })),
+        }),
+      );
+      const answered = read();
+      assert.equal(generate("--merge-decisions", path).status, 0);
+      assert.deepEqual(read(), answered);
+      const generated = generate("--decisions", path);
+      assert.equal(generated.status, 0, generated.stderr);
+      const applied = run(cwd, ["apply", dbPath]);
+      assert.equal(applied.status, 0, applied.stderr);
+      db.exec("INSERT INTO Members(name) VALUES('Grace')");
+      assert.deepEqual(
+        db
+          .prepare("SELECT id,name FROM Members ORDER BY id")
+          .all()
+          .map((row) => [row.id, row.name]),
+        [
+          [1, "Ada"],
+          [11, "Grace"],
+        ],
+      );
+      assert.equal(
+        db.prepare("SELECT tbl_name FROM sqlite_schema WHERE name='by_name'").get()?.tbl_name,
+        "Members",
+      );
+    } finally {
+      db.close();
+    }
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});

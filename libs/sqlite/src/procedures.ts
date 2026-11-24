@@ -27,7 +27,7 @@ type NativeProcedure =
     }
   | { readonly _tag: "DropTable"; readonly table: TableIdentity; readonly definition: CreateTable }
   | {
-      readonly _tag: "AlterTable";
+      readonly _tag: "AlterTable" | "RenameTable";
       readonly table: TableIdentity;
       readonly before: CreateTable;
       readonly after: CreateTable;
@@ -45,10 +45,14 @@ export const resolveProcedures = (
     const next = new Map(after.map((table) => [tableKey(tableIdentity(table)), table]));
     const procedures: NativeProcedure[] = [];
     for (const procedure of migration.procedures) {
-      const identity =
-        procedure._tag === "AlterTable" ? procedure.after.identity : procedure.table.identity;
+      const identity = "after" in procedure ? procedure.after.identity : procedure.table.identity;
       const table = { schema: identity.catalog ?? "", name: identity.name };
-      const old = previous.get(tableKey(table));
+      const source = procedure._tag === "RenameTable" ? procedure.before.identity : identity;
+      if (source.catalog !== identity.catalog || source.schema !== identity.schema)
+        return yield* Effect.fail(
+          new EncodeError({ message: "Cannot rename a table across schemas" }),
+        );
+      const old = previous.get(tableKey({ schema: source.catalog ?? "", name: source.name }));
       const target = next.get(tableKey(table));
       if (procedure._tag === "CreateTable" || procedure._tag === "DropTable") {
         const definition = procedure._tag === "CreateTable" ? target : old;
@@ -93,7 +97,7 @@ export const resolveProcedures = (
           changes.push({ _tag: change._tag, position: change.position, column });
         } else changes.push({ _tag: change._tag });
       }
-      procedures.push({ _tag: "AlterTable", table, before: old, after: target, changes });
+      procedures.push({ _tag: procedure._tag, table, before: old, after: target, changes });
     }
     return procedures;
   });

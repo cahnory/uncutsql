@@ -30,8 +30,9 @@ Each generated resolution starts as an object:
 ```
 
 Choose `drop_if_empty` to require an empty table or an all-NULL column, or `drop`
-to allow removal with data. For a column rename, choose `rename` and set `target`
-to a column key from `candidates`. Pending
+to allow removal with data. For a table or column rename, choose `rename` and set `target`
+to a name from `candidates`. After selecting a table rename, run
+`--merge-decisions` to reveal any column questions for the selected pair. Pending
 actions stop migration generation until reviewed. The schema declares the action
 choices together so editors can suggest `rename` before its target is filled in.
 
