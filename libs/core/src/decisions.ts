@@ -1,5 +1,5 @@
 import { Data, Effect } from "effect";
-import { diffDatabases, type DatabaseDiff, type TableAlteration } from "./diff.ts";
+import { diffDatabases, type DatabaseDiff, type DropGuard, type TableAlteration } from "./diff.ts";
 import {
   schemaValueEqual,
   tableKey,
@@ -17,7 +17,7 @@ export interface MigrationDecision {
   readonly candidates: readonly string[];
   readonly resolution:
     | { readonly action: "pending" }
-    | { readonly action: "drop" }
+    | { readonly action: "drop_if_empty" | "drop" }
     | { readonly action: "rename"; readonly target: string };
 }
 export interface MigrationDecisions {
@@ -57,7 +57,9 @@ const questions = (diff: DatabaseDiff): readonly MigrationDecision[] =>
         id: idFor(change.table, item.column.key),
         table: change.table,
         column: item.column.key,
-        question: `Drop column ${JSON.stringify(item.column.name)} in ${tableKey(change.table)}, or rename it to an added column?`,
+        question: candidates.length
+          ? `Drop column ${JSON.stringify(item.column.name)} in ${tableKey(change.table)}, or rename it to an added column?`
+          : `Drop column ${JSON.stringify(item.column.name)} in ${tableKey(change.table)}?`,
         candidates,
         resolution: { action: "pending" },
       }));
@@ -83,7 +85,7 @@ export const resolveMigrationDecisions = (
     if (supplied === undefined) {
       if (pending.decisions.length)
         return yield* fail(
-          "Unresolved migration decisions. Prepare a decision file and choose Drop or Rename for each removal before planning.",
+          "Unresolved migration decisions. Prepare a decision file and resolve each removal before planning.",
         );
       return { diff, decisions: pending };
     }
@@ -107,8 +109,11 @@ export const resolveMigrationDecisions = (
       const resolution = input.resolution;
       if (!record(resolution) || resolution.action === "pending")
         return yield* fail(`Unresolved decision: ${question.question}`);
-      if (resolution.action === "drop" && Object.keys(resolution).length === 1) {
-        answers.set(input.id, { ...question, resolution: { action: "drop" } });
+      if (
+        (resolution.action === "drop" || resolution.action === "drop_if_empty") &&
+        Object.keys(resolution).length === 1
+      ) {
+        answers.set(input.id, { ...question, resolution: { action: resolution.action } });
       } else if (
         resolution.action === "rename" &&
         Object.keys(resolution).length === 2 &&
@@ -130,38 +135,47 @@ export const resolveMigrationDecisions = (
       return yield* fail(
         "Missing migration decisions: every removal requires an explicit resolution.",
       );
-    const resolved: DatabaseDiff = {
-      changes: diff.changes.map((change) => {
-        if (change._tag !== "TableChanged") return change;
-        const renamedTargets = new Set<string>();
-        const changes: TableAlteration[] = [];
-        for (const item of change.changes) {
-          if (item._tag !== "ColumnRemoved") continue;
-          const answer = answers.get(idFor(change.table, item.column.key))!;
-          if (answer.resolution.action !== "rename") continue;
-          const targetKey = answer.resolution.target;
-          const afterColumn = change.after.columns.find((column) => column.key === targetKey)!;
-          renamedTargets.add(afterColumn.key);
-          const fields: ("dataType" | "constraints")[] = [];
-          if (!equal(item.column.dataType, afterColumn.dataType)) fields.push("dataType");
-          if (!equal(item.column.constraints, afterColumn.constraints)) fields.push("constraints");
-          changes.push({ _tag: "ColumnRenamed", before: item.column, after: afterColumn, fields });
-        }
-        return {
-          ...change,
-          changes: [
-            ...changes,
-            ...change.changes.filter(
-              (item) =>
-                !(item._tag === "ColumnAdded" && renamedTargets.has(item.column.key)) &&
-                !(
-                  item._tag === "ColumnRemoved" &&
-                  answers.get(idFor(change.table, item.column.key))?.resolution.action === "rename"
-                ),
-            ),
-          ],
-        };
-      }),
-    };
+    const dropGuards: DropGuard[] = [];
+    const changes = diff.changes.map((change) => {
+      if (change._tag !== "TableChanged") {
+        if (
+          change._tag === "TableRemoved" &&
+          answers.get(idFor(change.table))?.resolution.action === "drop_if_empty"
+        )
+          dropGuards.push({ table: change.table });
+        return change;
+      }
+      const renamedTargets = new Set<string>();
+      const changes: TableAlteration[] = [];
+      for (const item of change.changes) {
+        if (item._tag !== "ColumnRemoved") continue;
+        const answer = answers.get(idFor(change.table, item.column.key))!;
+        if (answer.resolution.action === "drop_if_empty")
+          dropGuards.push({ table: change.table, column: item.column.name });
+        if (answer.resolution.action !== "rename") continue;
+        const targetKey = answer.resolution.target;
+        const afterColumn = change.after.columns.find((column) => column.key === targetKey)!;
+        renamedTargets.add(afterColumn.key);
+        const fields: ("dataType" | "constraints")[] = [];
+        if (!equal(item.column.dataType, afterColumn.dataType)) fields.push("dataType");
+        if (!equal(item.column.constraints, afterColumn.constraints)) fields.push("constraints");
+        changes.push({ _tag: "ColumnRenamed", before: item.column, after: afterColumn, fields });
+      }
+      return {
+        ...change,
+        changes: [
+          ...changes,
+          ...change.changes.filter(
+            (item) =>
+              !(item._tag === "ColumnAdded" && renamedTargets.has(item.column.key)) &&
+              !(
+                item._tag === "ColumnRemoved" &&
+                answers.get(idFor(change.table, item.column.key))?.resolution.action === "rename"
+              ),
+          ),
+        ],
+      };
+    });
+    const resolved: DatabaseDiff = { changes, ...(dropGuards.length ? { dropGuards } : {}) };
     return { diff: resolved, decisions: { ...pending, decisions: [...answers.values()] } };
   });

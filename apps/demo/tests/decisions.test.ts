@@ -202,3 +202,59 @@ test("decision schema paths use the nearest installed package for nested output 
     rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+test("guarded drops check live data and can retry the same migration after rollback", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "uncutsql-guarded-drops-"));
+  try {
+    const before = 'CREATE TABLE t(id, "old value"); CREATE TABLE obsolete(value)';
+    const after = "CREATE TABLE t(id)";
+    const path = join(cwd, "db.sqlite");
+    const generate = (sql: string, ...args: string[]) => {
+      const result = run(cwd, ["generate", "-", ...args], sql);
+      assert.equal(result.status, 0, result.stderr);
+    };
+    generate(before);
+    const initial = run(cwd, ["apply", path]);
+    assert.equal(initial.status, 0, initial.stderr);
+    generate(after, "--write-decisions");
+    const file = join(cwd, "uncutsql.decisions.json");
+    const choices = JSON.parse(readFileSync(file, "utf8")) as MigrationDecisions;
+    for (const choice of choices.decisions) assert.doesNotMatch(choice.question, /rename/i);
+    writeFileSync(
+      file,
+      JSON.stringify({
+        ...choices,
+        decisions: choices.decisions.map((choice) => ({
+          ...choice,
+          resolution: { action: "drop_if_empty" },
+        })),
+      }),
+    );
+    generate(after);
+    const db = new DatabaseSync(path);
+    try {
+      db.exec("INSERT INTO obsolete VALUES(NULL)");
+      const blocked = (target: RegExp) => {
+        const result = run(cwd, ["apply", path]);
+        assert.equal(result.status, 1);
+        assert.match(result.stderr, target);
+        assert.equal(db.prepare("SELECT count(*) AS n FROM __uncutsql_migrations").get()!.n, 1);
+      };
+      blocked(/drop_if_empty.*obsolete/);
+      db.exec("DELETE FROM obsolete; INSERT INTO t VALUES(1, '')");
+      blocked(/drop_if_empty.*old value/);
+      db.exec('UPDATE t SET "old value" = 0');
+      blocked(/drop_if_empty.*old value/);
+      assert.equal(db.prepare('SELECT "old value" AS v FROM t').get()!.v, 0);
+      db.exec('UPDATE t SET "old value" = NULL');
+      const applied = run(cwd, ["apply", path]);
+      assert.equal(applied.status, 0, applied.stderr);
+      assert.deepEqual({ ...db.prepare("SELECT * FROM t").get() }, { id: 1 });
+      assert.throws(() => db.prepare("SELECT * FROM obsolete"), /no such table/);
+    } finally {
+      db.close();
+    }
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});

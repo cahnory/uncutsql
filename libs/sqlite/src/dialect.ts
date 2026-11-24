@@ -15,6 +15,7 @@ export const dialect: Dialect<
   ParseError | EncodeError | SchemaDiffError | MigrationPlanError
 > = {
   name: "sqlite",
+  supportsDropGuards: true,
   parse: schema.decode,
   combineSchemas: (parts) => parts.flat(),
   format: schema.encode,

@@ -196,7 +196,10 @@ const program = Effect.gen(function* () {
             flag: "wx",
           },
         );
-        return `Wrote ${decisionOutput}. Set each resolution to {"action":"drop"} or {"action":"rename","target":"column-key"}, then rerun without --write-decisions (use --decisions with this path if it differs from the configured/default file).\n`;
+        const rename = document.decisions.some((item) => item.candidates.length)
+          ? " or rename with a target from candidates"
+          : "";
+        return `Wrote ${decisionOutput}. Set resolution.action to drop_if_empty or drop${rename}, then rerun without --write-decisions (use --decisions with this path if it differs from the configured/default file).\n`;
       },
       catch: (cause) =>
         new InputError({ message: `Cannot create decision file: ${String(cause)}` }),

@@ -6,6 +6,7 @@ import type { DiffDiagnostic } from "./diff.ts";
 /** Dialect capabilities. The caller owns comparison and logical planning. */
 export interface Dialect<Ast, PhysicalPlan, E extends Error = Error, R = never> {
   readonly name: string;
+  readonly supportsDropGuards?: boolean;
   readonly parse: (source: string) => Effect.Effect<Ast, E, R>;
   /** Combine independently parsed schema documents in source order. */
   readonly combineSchemas?: (parts: readonly Ast[]) => Ast;

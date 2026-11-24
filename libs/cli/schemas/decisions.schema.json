@@ -216,7 +216,8 @@
       "if": {
         "required": ["column"],
         "properties": {
-          "column": {}
+          "column": {},
+          "candidates": { "type": "array", "minItems": 1 }
         }
       },
       "then": {
@@ -229,19 +230,19 @@
       "else": {
         "properties": {
           "resolution": {
-            "$ref": "#/definitions/tableResolution"
+            "$ref": "#/definitions/dropResolution"
           }
         }
       }
     },
     "columnResolution": {
       "type": "object",
-      "description": "Choose drop or rename. Pending requires an explicit decision before migration generation. Rename targets must be listed in candidates.",
+      "description": "Choose drop_if_empty, drop or rename. Pending requires an explicit decision before migration generation. Rename targets must be listed in candidates.",
       "properties": {
         "action": {
           "type": "string",
-          "enum": ["pending", "drop", "rename"],
-          "description": "Leave pending until reviewed; drop removes data, rename preserves the source column as target."
+          "enum": ["pending", "drop_if_empty", "drop", "rename"],
+          "description": "drop_if_empty requires all source values to be NULL at apply time. drop allows data loss. rename copies to the selected target."
         },
         "target": {
           "type": "string",
@@ -269,13 +270,13 @@
         }
       }
     },
-    "tableResolution": {
+    "dropResolution": {
       "type": "object",
       "properties": {
         "action": {
           "type": "string",
-          "enum": ["pending", "drop"],
-          "description": "Leave pending until reviewed, or choose drop to remove the table and its data."
+          "enum": ["pending", "drop_if_empty", "drop"],
+          "description": "drop_if_empty requires an empty table or an all-NULL column at apply time. drop allows data loss."
         }
       },
       "required": ["action"],

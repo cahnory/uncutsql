@@ -56,7 +56,11 @@ test("decisions schema validates generated snapshots and editable resolutions", 
   const after = model("new");
   const pending = Effect.runSync(prepareMigrationDecisions(before, after));
   assert.equal(validate(pending), true, JSON.stringify(validate.errors));
-  for (const resolution of [{ action: "drop" }, { action: "rename", target: "new" }]) {
+  for (const resolution of [
+    { action: "drop_if_empty" },
+    { action: "drop" },
+    { action: "rename", target: "new" },
+  ]) {
     const answered = {
       $schema: "./decisions.schema.json",
       ...pending,
@@ -126,11 +130,15 @@ test("action completion offers column choices before a target exists and restric
       },
     ],
   };
-  for (const column of ["old", undefined]) {
+  for (const [column, candidates] of [
+    ["old", ["new"]],
+    ["old", []],
+    [undefined, []],
+  ] as const) {
     for (const value of ['"|pending"', "|", '"|rename"']) {
       const source = JSON.stringify({
         ...base,
-        decisions: base.decisions.map((item) => ({ ...item, column })),
+        decisions: base.decisions.map((item) => ({ ...item, column, candidates })),
       }).replace('"pending"', value);
       const offset = source.indexOf("|");
       const document = TextDocument.create(
@@ -145,9 +153,9 @@ test("action completion offers column choices before a target exists and restric
         service.parseJSONDocument(document),
       );
       const labels = completion!.items.map((item) => item.label);
-      for (const action of ["pending", "drop"])
+      for (const action of ["pending", "drop_if_empty", "drop"])
         assert.ok(labels.includes(JSON.stringify(action)), JSON.stringify(labels));
-      assert.equal(labels.includes('"rename"'), column !== undefined, JSON.stringify(labels));
+      assert.equal(labels.includes('"rename"'), candidates.length > 0, JSON.stringify(labels));
     }
   }
 });

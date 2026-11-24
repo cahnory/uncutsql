@@ -40,6 +40,19 @@ test("consumer workflow swaps dialect adapters without changing its diff or plan
     ...pending,
     decisions: pending.decisions.map((item) => ({ ...item, resolution: { action: "drop" } })),
   };
+  assert.throws(
+    () =>
+      Effect.runSync(
+        renderMigration(adapter, comparison, {
+          ...pending,
+          decisions: pending.decisions.map((item) => ({
+            ...item,
+            resolution: { action: "drop_if_empty" },
+          })),
+        }),
+      ),
+    /does not support drop_if_empty/,
+  );
   assert.match(
     Effect.runSync(renderMigration(adapter, comparison, choices)),
     /DropTable,CreateTable$/,

@@ -1,4 +1,4 @@
-import type { DatabaseDiff, TableAlteration } from "./diff.ts";
+import type { DatabaseDiff, DropGuard, TableAlteration } from "./diff.ts";
 import type { DatabaseTable } from "./model.ts";
 
 /** Logical procedures, not execution order or physical operations such as a rebuild. */
@@ -12,11 +12,13 @@ export type MigrationProcedure =
       readonly changes: readonly TableAlteration[];
     };
 export interface DatabaseMigration {
+  readonly dropGuards?: readonly DropGuard[];
   readonly procedures: readonly MigrationProcedure[];
 }
 
 /** Low-level logical lowering of caller-approved intent. Resolve migration decisions first in user-facing workflows. */
 export const planDatabaseMigration = (diff: DatabaseDiff): DatabaseMigration => ({
+  ...(diff.dropGuards ? { dropGuards: diff.dropGuards } : {}),
   procedures: diff.changes.map((change): MigrationProcedure => {
     switch (change._tag) {
       case "TableAdded":

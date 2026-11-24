@@ -3,7 +3,7 @@ import {
   diffDatabases,
   planDatabaseMigration,
   resolveMigrationDecisions,
-  type MigrationDecisionError,
+  MigrationDecisionError,
   SchemaDiffError,
   type DatabaseSchema,
   type DatabaseDiff,
@@ -56,6 +56,13 @@ export const renderMigration = <Ast, Plan, E extends Error, R>(
       decisions,
     );
     const procedures = planDatabaseMigration(resolved.diff);
+    if (procedures.dropGuards?.length && dialect.supportsDropGuards !== true)
+      return yield* Effect.fail(
+        new MigrationDecisionError({
+          message: `Dialect ${dialect.name} does not support drop_if_empty.`,
+          pending: resolved.decisions,
+        }),
+      );
     const plan = yield* dialect.lowerMigration(procedures, comparison.before, comparison.after);
     const sql = yield* dialect.encodeMigration(plan);
     if (!sql.trim()) return sql;

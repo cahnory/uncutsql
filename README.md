@@ -542,9 +542,15 @@ file before generating a migration:
 
 ```sh
 pnpm cli migration before.sql after.sql --write-decisions choices.json
-# Set each resolution to {"action":"drop"} or {"action":"rename","target":"new_key"}.
+# Edit each resolution, then generate the SQL.
 pnpm cli migration before.sql after.sql --decisions choices.json
 ```
+
+| Resolution                               | Effect                                                                                                                                                      |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{"action":"drop_if_empty"}`             | Drop a table only if it has no rows, or a column only if all its values are NULL. SQLite checks inside the migration transaction and rolls back on failure. |
+| `{"action":"drop"}`                      | Drop even if data is present.                                                                                                                               |
+| `{"action":"rename","target":"new_key"}` | Copy the removed column to a target listed in `candidates`. Available only when the table has an added column.                                              |
 
 `generate desired.sql migrations` supports the same flags against its saved
 baseline. Unresolved, stale and conflicting choices stop generation. Confirmed

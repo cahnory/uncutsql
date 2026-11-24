@@ -77,7 +77,13 @@ export type TableChange =
       readonly after: DatabaseTable;
       readonly changes: readonly TableAlteration[];
     };
+export interface DropGuard {
+  readonly table: TableIdentity;
+  /** Source column name. Omit to require an empty table. */
+  readonly column?: string;
+}
 export interface DatabaseDiff {
+  readonly dropGuards?: readonly DropGuard[];
   readonly changes: readonly TableChange[];
 }
 

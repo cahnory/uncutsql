@@ -1,3 +1,4 @@
+import { identifier } from "./codecs/identifier.ts";
 import { createIndex, type CreateIndex } from "./codecs/create-index.ts";
 import { indexesFromDatabaseSchema } from "./indexes.ts";
 import { Data, Effect } from "effect";
@@ -23,6 +24,12 @@ import { foldIdentifier, tableIdentity, tableKey } from "./schema-identity.ts";
 import type { Expression } from "./codecs/expression.ts";
 
 export type MigrationOperation =
+  | {
+      readonly _tag: "CheckDrop";
+      readonly table: TableIdentity;
+      readonly column?: string;
+      readonly scratch: TableIdentity;
+    }
   | {
       readonly _tag: "CreateIndex";
       readonly table: TableIdentity;
@@ -295,7 +302,13 @@ export const lowerMigration = (
           }
         }
     }
-    operations.unshift(...indexDrops.values());
+    const guards = (procedures.dropGuards ?? []).map((guard): MigrationOperation => ({
+      _tag: "CheckDrop",
+      table: { schema: guard.table.catalog ?? "main", name: guard.table.name },
+      ...(guard.column !== undefined ? { column: guard.column } : {}),
+      scratch: { schema: "temp", name: allocate("temp", "__uncutsql_drop_guard") },
+    }));
+    operations.unshift(...guards, ...indexDrops.values());
     operations.push(...indexCreates.values());
     if (diagnostics.length) return yield* Effect.fail(new MigrationPlanError({ diagnostics }));
     const guardTable = operations.some((operation) => operation._tag === "RebuildTable")
@@ -310,6 +323,22 @@ export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, Enco
     const statements = yield* Effect.forEach(plan.operations, (operation) =>
       Effect.gen(function* () {
         switch (operation._tag) {
+          case "CheckDrop": {
+            const table = yield* qualified(operation.table);
+            const scratch = yield* qualified(operation.scratch);
+            const column =
+              operation.column === undefined
+                ? undefined
+                : yield* identifier.encode(operation.column);
+            const source = column === undefined ? table : `${table}.${column}`;
+            const constraint = yield* identifier.encode(`drop_if_empty: ${source} contains data`);
+            const predicate = column === undefined ? "" : ` WHERE ${source} IS NOT NULL`;
+            return [
+              `CREATE TABLE ${scratch} (violation INTEGER CONSTRAINT ${constraint} CHECK (violation = 0));`,
+              `INSERT OR ROLLBACK INTO ${scratch} SELECT 1 FROM ${table}${predicate} LIMIT 1;`,
+              `DROP TABLE ${scratch};`,
+            ].join("\n");
+          }
           case "CreateIndex":
             return yield* createIndex.encode(operation.definition);
           case "DropIndex":
@@ -337,7 +366,10 @@ export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, Enco
       (warning) => `-- WARNING: ${warning.message.replace(/[\r\n]/g, " ")}`,
     );
     const rebuilds = plan.operations.filter((operation) => operation._tag === "RebuildTable");
-    if (!rebuilds.length) return [...warnings, "BEGIN;", ...statements, "COMMIT;"].join("\n");
+    const begin = plan.operations.some((operation) => operation._tag === "CheckDrop")
+      ? "BEGIN IMMEDIATE;"
+      : "BEGIN;";
+    if (!rebuilds.length) return [...warnings, begin, ...statements, "COMMIT;"].join("\n");
     if (!plan.guardTable)
       return yield* Effect.fail(
         new EncodeError({ message: "A rebuild plan requires a guard table" }),
@@ -382,7 +414,7 @@ export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, Enco
       ...warnings,
       "-- Rebuild: run outside a transaction; stop on error, roll back and restore foreign_keys=ON.",
       "PRAGMA foreign_keys=OFF;",
-      "BEGIN;",
+      begin,
       `CREATE TABLE ${guard} (violations INTEGER CHECK (violations = 0));`,
       ...preflight,
       ...statements,
