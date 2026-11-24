@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { Effect, Result } from "effect";
-import { schema } from "../src/index.ts";
+import { createTable, schema } from "../src/index.ts";
 import { keywords } from "../src/lexer/keywords.ts";
 
 test("column declarations, foreign keys and index targets accept SQLite's bare names", () => {
@@ -45,6 +45,39 @@ test("column declarations, foreign keys and index targets accept SQLite's bare n
         }
       };
       assert.deepEqual(metadata(rendered), metadata(source), source);
+    }
+  }
+});
+
+test("column and table CHECK constraint names match SQLite and retain their spelling", () => {
+  using db = new DatabaseSync(":memory:");
+  const names = [...keywords].map((word) => {
+    const name = word[0] + word.slice(1).toLowerCase();
+    return [name, name] as const;
+  });
+  for (const [token, name] of [...names, ["'owner''s check'", "owner's check"]]) {
+    for (const separator of [" ", ", "]) {
+      const source = `CREATE TABLE t (x${separator}CONSTRAINT ${token} CHECK (x > 0))`;
+      const parsed = Effect.runSync(Effect.result(createTable.decode(source)));
+      try {
+        db.prepare(source);
+      } catch {
+        assert.ok(Result.isFailure(parsed), source);
+        continue;
+      }
+      assert.ok(Result.isSuccess(parsed), source);
+      const constraints =
+        separator === " "
+          ? parsed.success.columns[0]!.constraints
+          : parsed.success.tableConstraints;
+      assert.deepEqual(
+        constraints.map((constraint) => constraint.name),
+        [name],
+        source,
+      );
+      const rendered = Effect.runSync(createTable.encode(parsed.success));
+      db.prepare(rendered);
+      assert.deepEqual(Effect.runSync(createTable.decode(rendered)), parsed.success, source);
     }
   }
 });

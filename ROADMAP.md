@@ -24,7 +24,9 @@ Table declarations and query sources now accept contextual keywords in both part
 
 Table and view column declarations, both sides of foreign keys, and the table after `CREATE INDEX … ON` now accept contextual keywords. The dialect tests compare every keyword with native SQLite and verify that formatting preserves schema metadata. The editor tests cover Outline and foreign key navigation for these names.
 
-Next, extend contextual name support to named column and table constraints. Check both positions against native SQLite. SQLite accepts `CREATE TABLE t (x, CONSTRAINT label)` and records only column `x`. The current constraint model requires a body, so handle this case separately from keyword fallback.
+Named column and table constraints now accept contextual and single-quoted names. The dialect tests compare every keyword in both positions with native SQLite and check that formatting preserves the name.
+
+Next, support trailing constraint labels in column and table declarations. SQLite accepts both `CREATE TABLE t (x CONSTRAINT label)` and `CREATE TABLE t (x, CONSTRAINT label)` and records only column `x`. A table-level label still closes the column list, so a subsequent column must be rejected.
 
 ## VS Code support
 

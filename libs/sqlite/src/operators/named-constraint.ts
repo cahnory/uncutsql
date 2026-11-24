@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { type Codec, commit, make, optional, prefixed, read } from "@uncutsql/codec";
-import { identifier } from "../codecs/identifier.ts";
+import { nameIdentifier } from "../codecs/identifier.ts";
 import { keyword } from "./keyword.ts";
 
 export type Named<A> = A & { readonly name?: string };
@@ -8,7 +8,7 @@ export type Named<A> = A & { readonly name?: string };
 export const namedConstraint = <A extends { readonly _tag: string }>(
   body: Codec<A>,
 ): Codec<Named<A>> => {
-  const name = optional(prefixed(keyword("CONSTRAINT"), identifier, " "));
+  const name = optional(prefixed(keyword("CONSTRAINT"), nameIdentifier, " "));
   return make<Named<A>>({
     decode: (cursor) =>
       Effect.gen(function* () {
@@ -24,7 +24,7 @@ export const namedConstraint = <A extends { readonly _tag: string }>(
       Effect.gen(function* () {
         const sql = yield* body.encode(value);
         if (value.name === undefined) return sql;
-        return `CONSTRAINT ${yield* identifier.encode(value.name)} ${sql}`;
+        return `CONSTRAINT ${yield* nameIdentifier.encode(value.name)} ${sql}`;
       }),
   });
 };
