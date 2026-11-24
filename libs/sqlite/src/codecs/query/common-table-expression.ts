@@ -3,16 +3,16 @@ import { keyword } from "../../operators/keyword.ts";
 import { keywordChoice } from "../../operators/keyword-choice.ts";
 import { parenthesized } from "../../operators/parenthesized.ts";
 import { punctuation } from "../../operators/punctuation.ts";
-import { identifier } from "../identifier.ts";
+import { nameIdentifier } from "../identifier.ts";
 import type { CommonTableExpression, Query } from "./types.ts";
 
 export const commonTableExpression = (query: Codec<Query>): Codec<CommonTableExpression> =>
   transform(
     struct(
       {
-        name: identifier,
+        name: nameIdentifier,
         columns: optional(
-          parenthesized(repeat(identifier, { min: 1, separator: punctuation(",", ", ") })),
+          parenthesized(repeat(nameIdentifier, { min: 1, separator: punctuation(",", ", ") })),
         ),
         definition: prefixed(
           keyword("AS"),

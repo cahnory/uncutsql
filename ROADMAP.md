@@ -36,7 +36,9 @@ Index hints after `INDEXED BY` now accept contextual keywords and single-quoted 
 
 Column names in `JOIN … USING` now accept contextual keywords and single-quoted names. Tests compare bare and single-quoted forms of every dialect keyword with native SQLite and verify that formatted joins match on both columns, including a quoted name containing an apostrophe.
 
-Next, cover common table expression names and their declared columns in `libs/sqlite/src/codecs/query/common-table-expression.ts`. Native SQLite accepts `WITH Abort AS (SELECT 1) SELECT * FROM Abort` and `WITH t('owner''s key') AS (SELECT 1) SELECT * FROM t`. The query codec rejects both. Compare keyword acceptance in each position and preserve the leading modifier boundary. SQLite rejects `WITH Recursive AS (SELECT 1) SELECT 1` but accepts `WITH RECURSIVE Recursive AS (SELECT 1) SELECT 1`.
+Common table expression names and declared columns now accept contextual keywords and single-quoted names. Native SQLite tests cover every dialect keyword immediately after WITH, after RECURSIVE, after a comma introducing another CTE, and in a declared column list. They compare query results before and after formatting, including column labels with an embedded apostrophe.
+
+Next, cover table names before a qualified star in `libs/sqlite/src/codecs/query/result-column.ts`. Native SQLite returns the column `v` for `WITH Abort(v) AS (VALUES(1)) SELECT Abort.* FROM Abort` and also accepts `'Abort'.*` there. The query codec rejects both. Compare keyword acceptance and preserve ordinary string literals such as `SELECT 'Abort' FROM Abort` when the star is absent.
 
 ## VS Code support
 

@@ -3,6 +3,8 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { Effect, Result } from "effect";
 import { sqlQuery, type Query } from "../src/index.ts";
+import { keywords } from "../src/lexer/keywords.ts";
+
 const decode = (sql: string) => Effect.runSync(sqlQuery.decode(sql));
 
 test("WITH supports multiple, recursive, nested and materialized CTEs", () => {
@@ -43,6 +45,35 @@ test("WITH supports multiple, recursive, nested and materialized CTEs", () => {
     );
   } finally {
     db.close();
+  }
+});
+
+test("CTE names and declared columns match SQLite keyword and quoting rules", () => {
+  using db = new DatabaseSync(":memory:");
+  for (const name of [...keywords]
+    .map((word) => word[0] + word.slice(1).toLowerCase())
+    .concat("owner's key")) {
+    for (const token of [name, `'${name.replaceAll("'", "''")}'`]) {
+      for (const source of [
+        `WITH ${token} AS (SELECT 1 AS v) SELECT * FROM "${name}"`,
+        `WITH RECURSIVE ${token} AS (SELECT 1 AS v) SELECT * FROM "${name}"`,
+        `WITH seed AS (SELECT 1), ${token} AS (SELECT * FROM seed) SELECT * FROM "${name}"`,
+        `WITH t(first_col, ${token}) AS (SELECT 1, 2) SELECT * FROM t`,
+      ]) {
+        const parsed = Effect.runSync(Effect.result(sqlQuery.decode(source)));
+        let rows;
+        try {
+          rows = db.prepare(source).all();
+        } catch {
+          assert.ok(Result.isFailure(parsed), source);
+          continue;
+        }
+        assert.ok(Result.isSuccess(parsed), source);
+        const rendered = Effect.runSync(sqlQuery.encode(parsed.success));
+        assert.deepEqual(decode(rendered), parsed.success, source);
+        assert.deepEqual(db.prepare(rendered).all(), rows, source);
+      }
+    }
   }
 });
 
