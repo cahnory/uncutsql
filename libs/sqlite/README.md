@@ -168,6 +168,7 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 2. [x] Make index snapshot ordering reproducible across locales and declaration orders.
 3. [x] Match SQLite tokenization of a trailing bare block-comment opener.
 4. [x] Parse and format view declarations, with explicit diagnostics at the migration boundary.
+5. [x] Reconcile the rebuild and decision-review documentation with the verified behavior.
 
 ### Subsequent milestones
 

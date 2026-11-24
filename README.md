@@ -186,7 +186,7 @@ The planner supports:
 
 Rebuilds create a replacement table, copy matching names and explicitly resolved rename mappings, drop the old
 table, and rename the replacement. New columns use defaults, and generated columns are recomputed. The planner rejects
-a rename from a stored value into a generated column because SQLite computes the target value. Removed columns produce data-loss warnings. Accessible hidden
+converting an ordinary column to a generated column, including during a rename, because the copy would discard its stored values. Removed columns produce data-loss warnings. Accessible hidden
 rowids are copied when both tables support rowids; a changed INTEGER PRIMARY KEY
 can determine a different rowid. Retained AUTOINCREMENT high-water marks are preserved. Column/table removals require explicit decisions in CLI workflows. Rename similarity
 heuristics and custom data transformations are not implemented. Copying can fail when existing

@@ -841,13 +841,14 @@ contexts, source comments, duplicate names and the previous CTAS fixture.
 Structural comparison does not decide whether a removal and addition represent
 a rename. Core prepares structured questions and validates a versioned decision
 document against both normalized schema snapshots. Every removed table/column
-needs an explicit Drop or column Rename resolution. Added-column keys are offered
+needs a reviewed drop, guarded drop or rename resolution. Added-column keys are offered
 without ranking; a target can be mapped only once. The resolver recomputes the
 diff and converts resolved pairs into ColumnRenamed changes, retaining type and
 constraint differences. The low-level logical planner then consumes resolved
 intent; direct callers remain responsible for using this decision boundary.
 
-The CLI supports review files, not terminal prompts yet. It owns filesystem I/O,
+The CLI supports decision files and interactive review during generation. After
+a table rename, it recomputes the column questions against the chosen target. It owns filesystem I/O,
 prepares generation questions under the existing directory lock, and rechecks the
 baseline when generating. A single JSON comment stores sanitized decisions and
 snapshots inside the SQL, preserving the existing atomic publication protocol
