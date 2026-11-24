@@ -4,3 +4,4 @@ libs/*/dist/
 apps/*/dist/
 *.tsbuildinfo
 .DS_Store
+apps/vscode/*.vsix

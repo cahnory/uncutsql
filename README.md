@@ -34,6 +34,7 @@ The [workspace roadmap](ROADMAP.md) tracks shared milestones and their dependenc
 - `libs/sqlite` — `@uncutsql/sqlite`, SQLite AST/model conversion and migration SQL.
 - `libs/cli` — `@uncutsql/cli`, a CLI package with an `uncutsql` executable and API.
 - `libs/sqlite-driver` — `@uncutsql/sqlite-driver`, optional native SQLite execution.
+- [apps/vscode](apps/vscode/README.md) — SQLite schema diagnostics, Outline and foreign key navigation for VS Code.
 - `apps/demo` — `@uncutsql/demo`, an executable consumer of both libraries.
 
 Each library owns its tests; SQLite fixtures stay beside its tests. Shared

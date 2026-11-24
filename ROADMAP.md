@@ -2,7 +2,7 @@
 
 View migrations now run through the CLI and SQLite driver. Snapshots, diffs and generated SQL include views, and the demo exercises a dependent view across a rebuild and a column rename.
 
-The trigger migration milestone is complete. The next milestone is VS Code support for schema files.
+The trigger migration and initial VS Code milestones are complete.
 
 | Step                                          | Handoff                                                                                                                   |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
@@ -14,21 +14,13 @@ SQLite snapshots now round-trip triggers on tables and views through JSON. Gener
 
 SQLite contextual keyword and legacy quoting work can proceed independently of these handoffs.
 
-## VS Code support after trigger migrations
+## VS Code support
 
-Ship a first VS Code extension for SQLite schema files managed by UncutSQL.
+The [VS Code extension](apps/vscode/README.md) reports parser errors, shows declarations and explicit columns in Outline, and resolves foreign key table and column definitions across the configured SQLite schema. The providers use an editor-independent language service.
 
-- Report syntax errors at the location returned by the parser.
-- Show schema declarations and their columns in the document Outline.
-- Support Go to Definition (F12) on the target table and column of a foreign key across schema files.
+The extension-host test exercises F12 on both names in `REFERENCES users(id)` in the [multipart demo](apps/demo/examples/multipart/schema/blog/posts.uncut.sql). It checks the closed target on disk, then moves the declaration in an unsaved buffer and verifies the new positions. It also checks Outline, syntax diagnostics and recovery after a correction.
 
-For the first release, use VS Code providers directly and keep symbol extraction and lookup in an editor-independent language service. Follow the CLI's configured schema scope and use the current editor text for open files.
-
-The long-term plan is to expose that service through an UncutSQL language server implementing the Language Server Protocol (LSP). The VS Code extension will become an LSP client, and other editors will be able to use the same server.
-
-Verify navigation with the [multipart demo](apps/demo/examples/multipart/schema/blog/posts.uncut.sql). From `REFERENCES users(id)`, F12 on `users` should reach the table declaration and F12 on `id` should reach its column. Check both with the target file closed and after an unsaved edit moves the declaration.
-
-Use feedback from this release to decide whether to index references next. Revisit project-wide rename and completion inside views after assessing the name resolution they require.
+Use feedback from this milestone to decide whether to index references next. Revisit project-wide rename and completion inside views after assessing name resolution. The long-term plan is to expose the language service through an LSP server for VS Code and other editors.
 
 ## Project roadmaps
 
@@ -40,3 +32,4 @@ Each project maintains its priorities and completion status in its README. Updat
 - [SQLite driver](libs/sqlite-driver/README.md#roadmap)
 - [CLI](libs/cli/README.md#roadmap)
 - [Demo](apps/demo/README.md#roadmap)
+- [VS Code extension](apps/vscode/README.md#roadmap)
