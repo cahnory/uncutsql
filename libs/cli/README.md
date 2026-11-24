@@ -175,3 +175,11 @@ The decisions schema covers the snapshots, pending `{ "action": "pending" }` res
 `drop_if_empty`, `drop`, and `rename` answers. The CLI additionally checks snapshot freshness, decision
 identities, rename candidates, and duplicate targets when consuming answers.
 The generated `uncutsql.lock.json` is managed by the CLI and has no editor schema.
+
+## Roadmap
+
+- [x] Bound concurrent migration-file reads during apply.
+- [x] Reconcile the decision-review documentation with verified behavior.
+- [ ] Verify diff and lock-backed generation for schemas containing views, then exercise apply and drift checks with the SQLite driver. Repeat for triggers when supported.
+
+See the [workspace roadmap](../../ROADMAP.md) for cross-project sequencing.

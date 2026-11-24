@@ -156,34 +156,30 @@ which currently applies migrations to persistent main SQLite databases. See the
 [workspace migration documentation](../../README.md#generate-migration-files-with-a-lock)
 for execution, drift-checking and rebuild limitations.
 
-## Verification and next milestones
+## Verification
 
 Tests combine fixtures from the previous implementation, parse/encode round trips,
 source-map assertions, compile-only type checks and native SQLite behavior checks.
 SQLite is used **in tests**, not imported by the dialect's production code.
 Coverage is evidence for the implemented subset, not an exhaustive conformance score.
 
-### Current work in priority order
+## Roadmap
 
-1. [x] Prevent rebuilds from mapping two independent values onto the same integer primary key.
-2. [x] Validate the reserved history table's column constraints before using it.
-3. [x] Bound concurrent migration-file reads during apply.
-4. [x] Accept SQLite single-quoted query aliases and verify the formatted result with SQLite.
-5. [x] Update the rebuild guides and verify rowid preservation when declared columns shadow all three hidden aliases.
+1. Map view declarations into the shared view model, lower logical changes to SQL and preserve dependent views during table rebuilds.
+2. Parse and format trigger declarations and bodies, then implement trigger model conversion and rebuild preservation.
+3. Extend contextual keyword and legacy quoting compatibility. The lexical and query checklists track individual syntax features.
 
-### Previous pass
+See the [workspace roadmap](../../ROADMAP.md) for the core and executor dependencies.
 
-1. [x] Reject rebuilds that discard ordinary column values on conversion to generated columns.
-2. [x] Make index snapshot ordering reproducible across locales and declaration orders.
-3. [x] Match SQLite tokenization of a trailing bare block-comment opener.
-4. [x] Parse and format view declarations, with explicit diagnostics at the migration boundary.
-5. [x] Reconcile the rebuild and decision-review documentation with the verified behavior.
+### Completed work
 
-### Subsequent milestones
-
-1. Extend the database model, diff, planner and executor to track views and preserve their dependencies during rebuilds.
-2. Add trigger declarations, trigger bodies and preservation during rebuilds.
-3. Improve contextual keyword and legacy quoting compatibility.
+- [x] Prevent rebuilds from mapping two independent values onto the same integer primary key.
+- [x] Accept SQLite single-quoted query aliases and verify the formatted result with SQLite.
+- [x] Verify rowid preservation when declared columns shadow all three hidden aliases and update the rebuild guides.
+- [x] Reject rebuilds that discard ordinary column values on conversion to generated columns.
+- [x] Make index snapshot ordering reproducible across locales and declaration orders.
+- [x] Match SQLite tokenization of a trailing bare block-comment opener.
+- [x] Parse and format view declarations, with explicit diagnostics at the migration boundary.
 
 ```sh
 pnpm --filter @uncutsql/sqlite check

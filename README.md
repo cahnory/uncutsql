@@ -27,6 +27,8 @@ SQLite. Node may print an experimental SQLite warning when running those tests.
 
 ## Workspace
 
+The [workspace roadmap](ROADMAP.md) tracks shared milestones and their dependencies and links to each project’s roadmap.
+
 - `libs/codec` — `@uncutsql/codec`, the generic Effect codec library.
 - `libs/core` — `@uncutsql/core`, shared database models, diff and logical migration procedures.
 - `libs/sqlite` — `@uncutsql/sqlite`, SQLite AST/model conversion and migration SQL.
@@ -531,7 +533,7 @@ conflicting constraints and contextual name resolution.
 | `apps/demo/src/index.ts`                                    | Executable example with JSON logging                                     |
 
 See [architecture notes](docs/architecture.md) for combinator contracts, the
-relationship to the earlier experiments, and the next implementation steps.
+relationship to the earlier experiments, and the history of implementation decisions.
 
 ## Resolve migration intent
 

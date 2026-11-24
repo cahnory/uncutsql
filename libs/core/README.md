@@ -71,3 +71,10 @@ rewrite desired CHECK expressions or foreign-key references. Custom transformati
 Core has no prompts or persistence. `planDatabaseMigration` remains a low-level
 primitive for caller-approved intent; user-facing workflows should resolve
 choices before calling it. The CLI enforces this sequence for migration/generate.
+
+## Roadmap
+
+- [ ] Represent views in serializable database snapshots, validate restored snapshots, and describe view changes in the diff and logical plan.
+- [ ] Extend those contracts to triggers after the view milestone.
+
+See the [workspace roadmap](../../ROADMAP.md) for cross-project sequencing.

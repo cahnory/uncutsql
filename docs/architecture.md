@@ -233,8 +233,7 @@ including quoted names containing dots and tables with namesakes in other schema
 
 ## Original implementation sequence
 
-The following list records the plan at the table-reference milestone. For current
-coverage, see the [SQLite package roadmap](../libs/sqlite/README.md).
+The following list records the plan at the table-reference milestone. For current priorities and dependencies, see the [workspace roadmap](../ROADMAP.md).
 
 1. Extend expressions with the remaining SQLite operator families.
 2. Add further DDL variants to the schema statement union.

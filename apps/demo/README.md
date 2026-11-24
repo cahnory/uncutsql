@@ -104,3 +104,9 @@ pnpm demo:cli apply .local/app.sqlite .local/migrations
 
 Decisions are saved inside the generated migration. Editing the schema or
 advancing the baseline invalidates an old decision file.
+
+## Roadmap
+
+- [ ] Extend the migration walkthrough with a dependent view once the CLI supports generating and applying the migration.
+
+See the [workspace roadmap](../../ROADMAP.md) for cross-project sequencing.
