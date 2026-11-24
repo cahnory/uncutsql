@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -161,5 +161,35 @@ test("CLI migration emits complete scripts or errors without partial output", ()
     assert.equal(readFileSync(before, "utf8"), "CREATE TABLE t (a)");
   } finally {
     rmSync(directory, { recursive: true });
+  }
+});
+
+test("configured multipart schemas use config-relative paths and retain part diagnostics", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "uncutsql-parts-"));
+  try {
+    mkdirSync(join(cwd, "project/schema/nested"), { recursive: true });
+    writeFileSync(
+      join(cwd, "project/settings.json"),
+      JSON.stringify({ schema: "schema", migrations: "history" }),
+    );
+    const put = (name: string, sql: string) =>
+      writeFileSync(join(cwd, "project/schema", name), sql);
+    const invoke = (...args: string[]) =>
+      run(["--config", "project/settings.json", ...args], "", cwd);
+    assert.match(invoke("generate").stderr, /no \*\.uncut\.sql/);
+    put("nested/t.uncut.sql", "CREATE TABLE t (id) -- no terminator");
+    put("index.uncut.sql", "CREATE INDEX idx ON t(id)");
+    put("ignored.sql", "invalid");
+    const generated = invoke("generate");
+    assert.equal(generated.status, 0, generated.stderr);
+    assert.match(readFileSync(join(cwd, "project/history/000001.sql"), "utf8"), /CREATE INDEX/);
+    const applied = invoke("apply", "db.sqlite");
+    assert.equal(applied.status, 0, applied.stderr);
+    put("nested/t.uncut.sql", "-- line one\ninvalid");
+    const invalid = invoke("format");
+    assert.equal(invalid.stdout, "");
+    assert.match(invalid.stderr, /t\.uncut\.sql:2:1/);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
   }
 });

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, readdir, stat } from "node:fs/promises";
+import { join } from "node:path";
 import { Data, Effect, Result } from "effect";
 import { SchemaDiffError, MigrationDecisionError, prepareMigrationDecisions } from "@uncutsql/core";
 import { ParseError } from "@uncutsql/codec";
@@ -13,14 +14,17 @@ import { compareSchemas, renderMigration } from "./workflow.ts";
 
 const help = `Usage: pnpm cli <check|format> [file|-]
        pnpm cli <diff|decisions|migration> <before-file|-> <after-file|->
-       pnpm cli generate <schema-file|-> [output-dir]
+       pnpm cli generate [schema-path|-] [output-dir]
        pnpm cli apply <database-target> [output-dir]
 
 Options: --config <file>, --dialect <module>, --driver <module>
          --decisions <file>, --write-decisions <new-file> (migration/generate)
 Flags override configuration. Drivers are loaded only for apply.
 
-Read a SQL file, or stdin when file is omitted or '-'.
+Schema paths accept files or directories of **/*.uncut.sql in sorted path order.
+check, format and generate use config.schema when the path is omitted.
+Use '-' for stdin. Without config.schema, check and format default to stdin.
+generate and apply use config.migrations unless an output directory is supplied.
   check   Validate syntax supported by the selected dialect (no execution).
   format  Print canonical SQL to stdout; comments and formatting are discarded.
   diff    Print a structural schema diff as JSON (before -> after).
@@ -36,7 +40,7 @@ Input SQL files are never modified. Unsupported syntax is an error.
 
 class InputError extends Data.TaggedError("InputError")<{ readonly message: string }> {}
 
-const readSchemaWith = (dialect: Dialect<unknown, unknown>, filename: string) =>
+const readFileWith = (dialect: Dialect<unknown, unknown>, filename: string) =>
   Effect.gen(function* () {
     const label = filename === "-" ? "<stdin>" : filename;
     const source = yield* Effect.tryPromise({
@@ -63,6 +67,33 @@ const readSchemaWith = (dialect: Dialect<unknown, unknown>, filename: string) =>
         });
       }),
     );
+  });
+
+const readSchemaWith = (dialect: Dialect<unknown, unknown>, path: string) =>
+  Effect.gen(function* () {
+    if (path === "-") return yield* readFileWith(dialect, path);
+    const files = yield* Effect.tryPromise({
+      try: async () => {
+        if (!(await stat(path)).isDirectory()) return [path];
+        const entries = await readdir(path, { recursive: true, withFileTypes: true });
+        return entries
+          .filter((entry) => entry.isFile() && entry.name.endsWith(".uncut.sql"))
+          .map((entry) => join(entry.parentPath, entry.name))
+          .sort();
+      },
+      catch: (cause) => new InputError({ message: `${path}: ${String(cause)}` }),
+    });
+    if (!files.length)
+      return yield* Effect.fail(
+        new InputError({ message: `${path}: no *.uncut.sql schema files found` }),
+      );
+    if (files.length === 1) return yield* readFileWith(dialect, files[0]!);
+    if (!dialect.combineSchemas)
+      return yield* Effect.fail(
+        new InputError({ message: `Dialect ${dialect.name} does not support multipart schemas` }),
+      );
+    const parts = yield* Effect.forEach(files, (file) => readFileWith(dialect, file));
+    return dialect.combineSchemas(parts);
   });
 
 const validPath = (value: string) => !value.startsWith("-") || value === "-";
@@ -115,7 +146,7 @@ const program = Effect.gen(function* () {
   const dialect = command === "apply" ? undefined : yield* loadDialect(selected.dialect);
   const readSchema = (path: string) => readSchemaWith(dialect!, path);
   if (command === "apply") {
-    const directory = args[2] ?? "migrations";
+    const directory = args[2] ?? selected.migrations ?? "migrations";
     if (
       args.length < 2 ||
       args.length > 3 ||
@@ -136,15 +167,20 @@ const program = Effect.gen(function* () {
       : "Database is up to date.\n";
   }
   if (command === "generate") {
-    const directory = args[2] ?? "migrations";
-    if (args.length < 2 || args.length > 3 || !validPath(filename) || directory.startsWith("-")) {
+    const directory = args[2] ?? selected.migrations ?? "migrations";
+    if (
+      (!args[1] && !selected.schema) ||
+      args.length > 3 ||
+      !validPath(filename) ||
+      directory.startsWith("-")
+    ) {
       return yield* Effect.fail(
         new UsageError({
           message: "generate requires a schema path (or -) and an optional output directory.",
         }),
       );
     }
-    const ast = yield* readSchema(filename);
+    const ast = yield* readSchema(args[1] ?? selected.schema!);
     if (options.writeDecisions)
       return yield* writeDecisions(yield* prepareGeneratedDecisions(dialect!, ast, directory));
     const result = yield* generateMigration(dialect!, ast, directory, decisions);
@@ -206,7 +242,7 @@ const program = Effect.gen(function* () {
       }),
     );
   }
-  const statements = yield* readSchema(filename);
+  const statements = yield* readSchema(args[1] ?? selected.schema ?? "-");
   if (command === "check") return "Valid supported SQL syntax.\n";
   const sql = yield* dialect!.format(statements);
   return sql.length === 0 ? "" : `${sql}\n`;

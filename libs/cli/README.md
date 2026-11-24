@@ -46,3 +46,31 @@ intent again. No dialect or driver dependency was added to the CLI.
 Public API: `prepareGeneratedDecisions(dialect, ast, directory)` prepares a review
 against the locked saved baseline. `generateMigration` and `renderMigration`
 accept an optional decision document as their final argument.
+
+## Keep schema paths in project config
+
+In `uncutsql.config.ts`, use the exported helper for editor completion.
+
+```ts
+import { defineConfig } from "@uncutsql/cli";
+
+export default defineConfig({
+  dialect: "@uncutsql/sqlite",
+  driver: "@uncutsql/sqlite-driver",
+  schema: "./db/schema",
+  migrations: "./db/migrations",
+});
+```
+
+Put declarations in files such as `db/schema/users.uncut.sql` and
+`db/schema/blog/posts.uncut.sql`. Then run `uncutsql check`, `uncutsql format`,
+`uncutsql generate`, or `uncutsql apply app.sqlite`. JSON config accepts the same keys.
+Configured paths resolve from the config file. Positional paths resolve from the
+working directory and override the corresponding settings. Use `--config path`
+to select a project from another directory.
+
+Every schema argument, including either side of a diff, accepts a single file or
+a directory. Directories include regular `*.uncut.sql` files recursively in sorted
+path order. Each file contains complete statements and can omit its final semicolon.
+An empty directory produces an error. Use an empty SQL file to express an empty schema.
+Use an explicit `-` to read stdin when a project schema is configured.

@@ -16,6 +16,7 @@ export const dialect: Dialect<
 > = {
   name: "sqlite",
   parse: schema.decode,
+  combineSchemas: (parts) => parts.flat(),
   format: schema.encode,
   toDatabaseSchema,
   lowerMigration,

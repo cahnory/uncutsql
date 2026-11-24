@@ -55,12 +55,11 @@ Paths in the following demo commands are relative to `apps/demo`:
 ```sh
 pnpm demo:cli check examples/schema.sql
 pnpm demo:cli format examples/schema.sql
-cat apps/demo/examples/schema.sql | pnpm demo:cli format
+cat apps/demo/examples/schema.sql | pnpm demo:cli format -
 pnpm cli --help
 ```
 
-Both commands accept a file path relative to your current directory, or stdin
-when the path is omitted or `-`. `check` validates supported syntax without
+Both commands accept a file path relative to your current directory, a schema directory, or stdin via `-`. An omitted path uses the configured schema or falls back to stdin. `check` validates supported syntax without
 executing SQL or checking database semantics. `format` writes canonical SQL to
 stdout after the entire input succeeds; input files are never modified.
 Canonical output does not preserve comments or formatting, except significant
@@ -321,6 +320,8 @@ Install chosen plugins in the calling project and configure module specifiers:
   "driver": "@uncutsql/sqlite-driver"
 }
 ```
+
+Set `schema` and `migrations` to use project defaults for the input and output paths. See the [multipart schema example](libs/cli/README.md#keep-schema-paths-in-project-config).
 
 Save this as `uncutsql.config.json` (or use `.uncutsqlrc.json`, a default-exported
 `uncutsql.config.{js,cjs,mjs,ts,cts,mts}`, or the `uncutsql` object in package.json).

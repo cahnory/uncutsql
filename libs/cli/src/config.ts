@@ -4,6 +4,10 @@ import { pathToFileURL } from "node:url";
 import { Data, Effect } from "effect";
 
 export interface UncutConfig {
+  /** Schema file or directory of *.uncut.sql files, relative to this config. */
+  readonly schema?: string;
+  /** Directory containing numbered migrations and the lock, relative to this config. */
+  readonly migrations?: string;
   readonly dialect?: string;
   readonly driver?: string;
 }
@@ -17,10 +21,10 @@ const record = (value: unknown): value is Record<string, unknown> =>
 const validate = (value: unknown): UncutConfig => {
   if (!record(value)) throw new Error("Expected a configuration object");
   for (const key of Object.keys(value)) {
-    if (key !== "dialect" && key !== "driver")
+    if (key !== "dialect" && key !== "driver" && key !== "schema" && key !== "migrations")
       throw new Error(`Unknown configuration option: ${key}`);
     if (typeof value[key] !== "string" || !value[key].trim())
-      throw new Error(`${key} must be a nonempty module specifier`);
+      throw new Error(`${key} must be a nonempty string`);
   }
   return value as UncutConfig;
 };
@@ -126,7 +130,12 @@ export const resolveConfig = (
         const specifier = config[key];
         return specifier === undefined ? undefined : { specifier, directory };
       };
-      return { dialect: select("dialect"), driver: select("driver") };
+      return {
+        dialect: select("dialect"),
+        driver: select("driver"),
+        schema: config.schema && resolve(directory, config.schema),
+        migrations: config.migrations && resolve(directory, config.migrations),
+      };
     },
     catch: (cause) =>
       new ConfigurationError({
