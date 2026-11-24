@@ -32,7 +32,9 @@ Consecutive constraint labels now use the last name. Adjacent bodies inherit it,
 
 Foreign key MATCH names now accept contextual keywords and single-quoted names. Tests compare every dialect keyword with native SQLite and check the option name and order in the AST after formatting. SQLite reports NONE for the mode in foreign_key_list.
 
-Next, cover index names after `INDEXED BY` in `libs/sqlite/src/codecs/query/index-hint.ts`. With an index named `abort`, native SQLite accepts both `INDEXED BY Abort` and `INDEXED BY 'abort'`. The query codec currently rejects both. Exercise the keyword matrix with an existing index for each name and verify that formatted hints still resolve to that index.
+Index hints after `INDEXED BY` now accept contextual keywords and single-quoted index names. Tests create an index for every dialect keyword, compare bare and quoted hint acceptance with native SQLite, and verify that formatting preserves the selected index in the query plan.
+
+Next, cover column names in `JOIN … USING` in `libs/sqlite/src/codecs/query/join-constraint.ts`. With an `abort` column in both tables, native SQLite accepts `USING (Abort)` and `USING ('abort')`. The query codec rejects both. Compare keyword acceptance with SQLite and verify that formatted multi-column joins return the same matching rows.
 
 ## VS Code support
 

@@ -1,9 +1,9 @@
 import { prefixed, taggedUnion, transform } from "@uncutsql/codec";
 import { keywordSequence } from "../../operators/keyword-sequence.ts";
-import { identifier } from "../identifier.ts";
+import { nameIdentifier } from "../identifier.ts";
 
 export const indexHint = taggedUnion({
-  IndexedBy: transform(prefixed(keywordSequence(["INDEXED", "BY"]), identifier, " "), {
+  IndexedBy: transform(prefixed(keywordSequence(["INDEXED", "BY"]), nameIdentifier, " "), {
     decode: (name) => ({ _tag: "IndexedBy" as const, name }),
     encode: (value) => value.name,
   }),
