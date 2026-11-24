@@ -72,6 +72,15 @@ test("implicit keyword aliases preserve spelling and following clause boundaries
   for (const source of [
     'SELECT v KeY FROM t TEMP WHERE "TEMP".v = 1 ORDER BY "KeY"',
     'SELECT "Like".v RoW FROM t Like INDEXED BY ix',
+    "SELECT v WiNdOw, length(v) FiLtEr, count(*) OvEr FROM t",
+    "SELECT count(*) FILTER (WHERE v > 0) OvEr FROM t",
+    "SELECT sum(v) OVER () WiNdOw FROM t",
+    "SELECT (1) filter /* comment */ WINDOW w AS ()",
+    "SELECT 1 over WINDOW w AS ()",
+    "SELECT count(*) window WINDOW /* name */ w /* declaration */ AS ()",
+    'SELECT "over".v FROM t over WINDOW w AS ()',
+    'SELECT "filter".v FROM (SELECT 1 AS v) filter',
+    'SELECT "window".v FROM t window WHERE v = 1',
     "SELECT 1 Current_Date, 2 By LIMIT 1 OFFSET 0",
     "SELECT v LIKE 1 MaTeRiAlIzEd FROM t LEFT JOIN (SELECT 1 AS n) ON n = v",
     "SELECT sum(v) FILTER (WHERE v > 0) OVER w KeY FROM t WINDOW w AS ()",
@@ -81,7 +90,16 @@ test("implicit keyword aliases preserve spelling and following clause boundaries
     assert.deepEqual(decode(rendered), parsed, source);
     assert.deepEqual(db.prepare(rendered).all(), db.prepare(source).all(), source);
   }
-  for (const source of ["SELECT 1 LEFT", "SELECT 1 GLOB", "SELECT * FROM t INDEXED"]) {
+  for (const source of [
+    "SELECT 1 LEFT",
+    "SELECT 1 GLOB",
+    "SELECT * FROM t INDEXED",
+    "SELECT (1) over WINDOW w AS ()",
+    "SELECT count(*) over WINDOW w AS ()",
+    "SELECT count(*) filter (v)",
+    "SELECT count(*) over (",
+    "SELECT * FROM (SELECT 1) over WINDOW w AS ()",
+  ]) {
     assert.throws(() => db.prepare(source), source);
     assert.ok(Result.isFailure(Effect.runSync(Effect.result(sqlQuery.decode(source)))), source);
   }

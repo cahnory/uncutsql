@@ -1,3 +1,4 @@
+import { windowKeyword } from "../../operators/window-keyword.ts";
 import { Effect } from "effect";
 import {
   type Codec,
@@ -52,7 +53,7 @@ export const functionCall = (expression: Codec<Expression>): Codec<FunctionCall>
       tuple([identifier, parenthesized(args)]),
       optional(
         prefixed(
-          keyword("FILTER"),
+          windowKeyword("FILTER"),
           parenthesized(prefixed(keyword("WHERE"), expression, " ")),
           " ",
         ),

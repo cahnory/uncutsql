@@ -16,7 +16,9 @@ SQLite now accepts legacy single quotes around relation names, declared columns 
 
 Explicit result and table aliases now accept SQLite contextual keywords. Tests compare every dialect keyword after `AS` with native SQLite. Implicit aliases now accept unambiguous contextual keywords while preserving join, index-hint and expression boundaries.
 
-Next, distinguish `WINDOW`, `FILTER` and `OVER` used as implicit aliases from the window syntax those words can introduce. Include cases after function calls and before named window declarations.
+Implicit `WINDOW`, `FILTER` and `OVER` aliases now use token lookahead to preserve window clauses after function calls and before named window declarations.
+
+Next, cover contextual and single-quoted names in named window declarations and references.
 
 ## VS Code support
 

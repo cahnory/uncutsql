@@ -1,3 +1,4 @@
+import { windowKeyword } from "../operators/window-keyword.ts";
 import {
   type Codec,
   optional,
@@ -7,7 +8,6 @@ import {
   taggedUnion,
   transform,
 } from "@uncutsql/codec";
-import { keyword } from "../operators/keyword.ts";
 import { keywordSequence } from "../operators/keyword-sequence.ts";
 import { parenthesized } from "../operators/parenthesized.ts";
 import { punctuation } from "../operators/punctuation.ts";
@@ -60,7 +60,7 @@ export const windowDefinition = (expression: Codec<Expression>): Codec<WindowDef
 
 export const overClause = (expression: Codec<Expression>): Codec<WindowReference> =>
   prefixed(
-    keyword("OVER"),
+    windowKeyword("OVER"),
     taggedUnion({
       WindowDefinition: windowDefinition(expression),
       NamedWindow: transform(windowName, {
