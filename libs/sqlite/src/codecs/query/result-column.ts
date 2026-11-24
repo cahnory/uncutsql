@@ -11,11 +11,19 @@ import {
   prefixed,
 } from "@uncutsql/codec";
 import { punctuation } from "../../operators/punctuation.ts";
-import { identifier } from "../identifier.ts";
+import { contextualNameKeywords } from "../../lexer/keywords.ts";
+import { nameWithKeywords } from "../identifier.ts";
 import type { Expression } from "../expression/types.ts";
 import type { ResultColumn } from "./types.ts";
 import { lexeme } from "../../operators/lexeme.ts";
 import { resultAlias, resultAliasAfter } from "./alias.ts";
+
+// At the start of a result expression, SQLite parses these as expressions before
+// considering whether the token can stand for a table name.
+const tableStarKeywords = new Set(contextualNameKeywords);
+for (const word of ["CAST", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "RAISE"])
+  tableStarKeywords.delete(word);
+const tableStarName = nameWithKeywords(tableStarKeywords);
 
 // SQLite's derived-table column naming ignores COLLATE and likelihood wrappers
 // around a direct column. Top-level result labels instead use their source text.
@@ -35,7 +43,7 @@ export const resultColumn = (
   expression: Codec<Expression>,
   schemaNames = false,
 ): Codec<ResultColumn> => {
-  const qualifiedStar = followedBy(identifier, prefixed(punctuation("."), punctuation("*")));
+  const qualifiedStar = followedBy(tableStarName, prefixed(punctuation("."), punctuation("*")));
   // A failed qualified wildcard must leave ordinary column references available.
   const tableStar = make<string>({
     decode: (cursor) =>

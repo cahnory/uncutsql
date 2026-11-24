@@ -38,7 +38,9 @@ Column names in `JOIN … USING` now accept contextual keywords and single-quote
 
 Common table expression names and declared columns now accept contextual keywords and single-quoted names. Native SQLite tests cover every dialect keyword immediately after WITH, after RECURSIVE, after a comma introducing another CTE, and in a declared column list. They compare query results before and after formatting, including column labels with an embedded apostrophe.
 
-Next, cover table names before a qualified star in `libs/sqlite/src/codecs/query/result-column.ts`. Native SQLite returns the column `v` for `WITH Abort(v) AS (VALUES(1)) SELECT Abort.* FROM Abort` and also accepts `'Abort'.*` there. The query codec rejects both. Compare keyword acceptance and preserve ordinary string literals such as `SELECT 'Abort' FROM Abort` when the star is absent.
+Qualified stars now accept contextual and single-quoted table names. Native SQLite tests cover every dialect keyword and the five contextual names that require quotes before `.*` (CAST, RAISE, CURRENT_DATE, CURRENT_TIME and CURRENT_TIMESTAMP). A query selecting both `'Abort'` and `'Abort'.*` verifies that the standalone string retains its value and label after formatting.
+
+Next, cover qualified column references in `libs/sqlite/src/codecs/expression/column-reference.ts`. Native SQLite returns column `v` with value 1 for `WITH Abort(v) AS (VALUES(1)) SELECT Abort.v FROM Abort` and for the same query with `'Abort'.v`. The codec currently rejects both. Compare SQLite's keyword and quoting rules separately for the first name and names following a dot, including three-part references. Preserve standalone string and contextual literal behavior.
 
 ## VS Code support
 

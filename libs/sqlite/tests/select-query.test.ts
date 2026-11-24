@@ -15,6 +15,7 @@ test("SELECT cores preserve native results, aliases and window names", () => {
   try {
     for (const source of [
       "SELECT 1 AS value",
+      "WITH Abort(v) AS (VALUES(1)) SELECT 'Abort', 'Abort'.* FROM Abort",
       "SELECT 'value' AS label, value FROM 'main'.'t' ORDER BY value",
       "SELECT x.value AS 'it''s a label' FROM t AS 'x' ORDER BY x.value",
       "SELECT 'literal' 'select' FROM t 'source' ORDER BY source.value",
@@ -38,6 +39,28 @@ test("SELECT cores preserve native results, aliases and window names", () => {
     }
   } finally {
     db.close();
+  }
+});
+
+test("qualified stars match SQLite for bare and quoted keyword table names", () => {
+  using db = new DatabaseSync(":memory:");
+  for (const word of [...keywords, "owner's table"]) {
+    const name = word[0] + word.slice(1).toLowerCase();
+    for (const token of [name, `'${name.replaceAll("'", "''")}'`]) {
+      const source = `SELECT ${token}.* FROM (SELECT 1 AS v, 2 AS w) AS "${name}"`;
+      const parsed = Effect.runSync(Effect.result(sqlQuery.decode(source)));
+      let rows;
+      try {
+        rows = db.prepare(source).all();
+      } catch {
+        assert.ok(Result.isFailure(parsed), source);
+        continue;
+      }
+      assert.ok(Result.isSuccess(parsed), source);
+      const rendered = Effect.runSync(sqlQuery.encode(parsed.success));
+      assert.deepEqual(decode(rendered), parsed.success, source);
+      assert.deepEqual(db.prepare(rendered).all(), rows, source);
+    }
   }
 });
 
