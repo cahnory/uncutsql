@@ -45,10 +45,7 @@ export const resolveProcedures = (
     const next = new Map(after.map((table) => [tableKey(tableIdentity(table)), table]));
     const procedures: NativeProcedure[] = [];
     for (const procedure of migration.procedures) {
-      if ("trigger" in procedure || procedure._tag === "ReplaceTrigger")
-        return yield* Effect.fail(
-          new EncodeError({ message: "SQLite trigger migrations are not supported yet" }),
-        );
+      if ("trigger" in procedure || procedure._tag === "ReplaceTrigger") continue;
       if ("view" in procedure || procedure._tag === "ReplaceView") continue;
       const identity = "after" in procedure ? procedure.after.identity : procedure.table.identity;
       const table = { schema: identity.catalog ?? "", name: identity.name };

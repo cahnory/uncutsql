@@ -7,10 +7,10 @@ The next workspace milestone is to preserve triggers during migrations.
 | Step                                   | Handoff                                                                                                                   |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | 1. Represent and parse triggers (done) | Core models and compares triggers. SQLite parses and formats declarations with SELECT, INSERT, UPDATE and DELETE actions. |
-| 2. Generate trigger migrations         | SQLite maps declarations to the core model and orders trigger removal and recreation around table and view changes.       |
+| 2. Generate trigger migrations (done)  | SQLite maps declarations to the core model and orders trigger removal and recreation around table and view changes.       |
 | 3. Apply and verify trigger migrations | The driver inspects live triggers. The CLI and demo exercise generation, rebuild preservation and drift detection.        |
 
-SQLite snapshots now round-trip triggers on tables and views through JSON. Next, lower trigger changes and suspend triggers while rebuilding their dependencies.
+SQLite snapshots now round-trip triggers on tables and views through JSON. Generated migrations now suspend triggers before rebuilding tables or replacing their views. Next, inspect live triggers and exercise apply and drift detection through the CLI.
 
 SQLite contextual keyword and legacy quoting work can proceed independently of these handoffs.
 

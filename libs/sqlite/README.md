@@ -149,7 +149,7 @@ for them. For example, generating ALTER TABLE ADD COLUMN does **not** mean that
 - [ ] Infer rename candidates by similarity or define custom data transformations.
 - [x] Parse and model standalone indexes, including unique, expression and partial indexes. Recreate desired indexes after rebuilds.
 - [x] Model and preserve views during rebuilds.
-- [ ] Model and preserve triggers during rebuilds.
+- [x] Model and preserve triggers during rebuilds.
 - [ ] General cross-dialect conversion or arbitrary migration-script parsing.
 
 Core owns comparison and logical planning; this dialect lowers those procedures
@@ -167,7 +167,7 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 
 ## Roadmap
 
-1. Convert parsed trigger declarations to and from snapshots, then implement rebuild preservation. Declaration and body parsing, formatting and identifier source ranges are covered by the trigger codec tests.
+1. Trigger snapshots and migration lowering now cover table and view owners, including partial logical plans.
 2. Extend contextual keyword and legacy quoting compatibility. The lexical and query checklists track individual syntax features.
 
 See the [workspace roadmap](../../ROADMAP.md) for the core and executor dependencies.

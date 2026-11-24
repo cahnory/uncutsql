@@ -1,3 +1,6 @@
+import { createTrigger, type CreateTrigger } from "./codecs/create-trigger.ts";
+import { triggersFromDatabaseSchema } from "./triggers.ts";
+import { planDeclarations } from "./plan-declarations.ts";
 import { planViewOperations, viewsFromDatabaseSchema } from "./views.ts";
 import { createView, type CreateView } from "./codecs/create-view.ts";
 import { identifier } from "./codecs/identifier.ts";
@@ -26,6 +29,12 @@ import { foldIdentifier, tableIdentity, tableKey } from "./schema-identity.ts";
 import type { Expression } from "./codecs/expression.ts";
 
 export type MigrationOperation =
+  | { readonly _tag: "DropTrigger"; readonly table: TableIdentity; readonly owner: TableIdentity }
+  | {
+      readonly _tag: "CreateTrigger";
+      readonly table: TableIdentity;
+      readonly definition: CreateTrigger;
+    }
   | { readonly _tag: "DropView"; readonly table: TableIdentity }
   | { readonly _tag: "VerifyView"; readonly table: TableIdentity }
   | { readonly _tag: "CreateView"; readonly table: TableIdentity; readonly definition: CreateView }
@@ -141,10 +150,8 @@ export const lowerMigration = (
   next: DatabaseSchema,
 ): Effect.Effect<MigrationPlan, SchemaDiffError | EncodeError | MigrationPlanError> =>
   Effect.gen(function* () {
-    if (previous.triggers?.length || next.triggers?.length)
-      return yield* Effect.fail(
-        new EncodeError({ message: "SQLite trigger snapshots are not supported yet" }),
-      );
+    const beforeTriggers = yield* triggersFromDatabaseSchema(previous);
+    const afterTriggers = yield* triggersFromDatabaseSchema(next);
     const before = yield* tablesFromDatabaseSchema(previous);
     const after = yield* tablesFromDatabaseSchema(next);
     const beforeViews = yield* viewsFromDatabaseSchema(previous);
@@ -352,14 +359,53 @@ export const lowerMigration = (
       afterViews,
       affectedSchemas,
     );
+    const droppedOwners = new Set(
+      [...viewSteps.drops, ...operations.filter((op) => op._tag === "DropTable")].map((op) =>
+        tableKey(op.table),
+      ),
+    );
+    const ownerOf = (trigger: CreateTrigger) => ({
+      schema: trigger.target.schema!,
+      name: foldIdentifier(trigger.target.name),
+    });
+    const triggerSteps = yield* planDeclarations(
+      beforeTriggers,
+      afterTriggers,
+      procedures.procedures.flatMap((p) => {
+        if (p._tag === "ReplaceTrigger")
+          return [{ identity: p.before.identity, drop: true, create: true }];
+        if ("trigger" in p)
+          return [
+            {
+              identity: p.trigger.identity,
+              drop: p._tag === "DropTrigger",
+              create: p._tag === "CreateTrigger",
+            },
+          ];
+        return [];
+      }),
+      (trigger) =>
+        affectedSchemas.has(tableIdentity(trigger).schema) ||
+        droppedOwners.has(tableKey(ownerOf(trigger))),
+    );
+    const triggerDrops = triggerSteps.drops.map((trigger) => ({
+      _tag: "DropTrigger" as const,
+      table: tableIdentity(trigger),
+      owner: ownerOf(trigger),
+    }));
+    const triggerCreates = triggerSteps.creates.map((definition) => ({
+      _tag: "CreateTrigger" as const,
+      table: tableIdentity(definition),
+      definition,
+    }));
     const guards = (procedures.dropGuards ?? []).map((guard): MigrationOperation => ({
       _tag: "CheckDrop",
       table: { schema: guard.table.catalog ?? "main", name: guard.table.name },
       ...(guard.column !== undefined ? { column: guard.column } : {}),
       scratch: { schema: "temp", name: allocate("temp", "__uncutsql_drop_guard") },
     }));
-    operations.unshift(...guards, ...viewSteps.drops, ...indexDrops.values());
-    operations.push(...indexCreates.values(), ...viewSteps.creates);
+    operations.unshift(...guards, ...triggerDrops, ...viewSteps.drops, ...indexDrops.values());
+    operations.push(...indexCreates.values(), ...viewSteps.creates, ...triggerCreates);
     if (operations.length)
       for (const view of viewSteps.retained)
         operations.push({ _tag: "VerifyView", table: tableIdentity(view) });
@@ -394,6 +440,10 @@ export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, Enco
               `DROP TABLE ${scratch};`,
             ].join("\n");
           }
+          case "CreateTrigger":
+            return yield* createTrigger.encode(operation.definition);
+          case "DropTrigger":
+            return `DROP TRIGGER ${yield* qualified(operation.table)};`;
           case "CreateView":
             return yield* createView.encode(operation.definition);
           case "DropView":
@@ -441,12 +491,25 @@ export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, Enco
       );
     const guard = yield* qualified(plan.guardTable);
     const preflight: string[] = [];
+    const triggerDrops = plan.operations.filter((op) => op._tag === "DropTrigger");
+    const unknownTrigger = (schema: string, owner: TableIdentity) =>
+      Effect.gen(function* () {
+        const known = yield* Effect.forEach(
+          triggerDrops.filter(
+            (op) => op.table.schema === schema && tableKey(op.owner) === tableKey(owner),
+          ),
+          (op) => sqlString(op.table.name),
+        );
+        return known.length
+          ? `(type = 'trigger' AND name COLLATE NOCASE NOT IN (${known.join(", ")}))`
+          : "type = 'trigger'";
+      });
     for (const view of droppedViews) {
       const name = yield* sqlString(view.table.name);
       for (const schema of new Set([view.table.schema, "temp"])) {
         const catalog = yield* qualified({ schema, name: "sqlite_schema" });
         preflight.push(
-          `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM ${catalog} WHERE type = 'trigger' AND tbl_name = ${name} COLLATE NOCASE;`,
+          `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM ${catalog} WHERE ${yield* unknownTrigger(schema, view.table)} AND tbl_name = ${name} COLLATE NOCASE;`,
         );
       }
     }
@@ -470,14 +533,14 @@ export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, Enco
         ? ` AND name COLLATE NOCASE NOT IN (${known.join(", ")})`
         : "";
       preflight.push(
-        `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM ${catalog} WHERE ${yield* unknownViews(operation.table.schema)} OR (tbl_name = ${name} COLLATE NOCASE AND (type = 'trigger' OR (type = 'index' AND sql IS NOT NULL${unknownIndex})));`,
+        `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM ${catalog} WHERE ${yield* unknownViews(operation.table.schema)} OR (tbl_name = ${name} COLLATE NOCASE AND (${yield* unknownTrigger(operation.table.schema, operation.table)} OR (type = 'index' AND sql IS NOT NULL${unknownIndex})));`,
       );
       if (known.length)
         preflight.push(
           `INSERT OR ROLLBACK INTO ${guard} SELECT abs(count(*) - ${known.length}) FROM ${catalog} WHERE type = 'index' AND sql IS NOT NULL AND tbl_name = ${name} COLLATE NOCASE AND name COLLATE NOCASE IN (${known.join(", ")});`,
         );
       preflight.push(
-        `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM temp.sqlite_schema WHERE ${yield* unknownViews("temp")} OR (type = 'trigger' AND tbl_name = ${name} COLLATE NOCASE);`,
+        `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM temp.sqlite_schema WHERE ${yield* unknownViews("temp")} OR (${yield* unknownTrigger("temp", operation.table)} AND tbl_name = ${name} COLLATE NOCASE);`,
       );
     }
     if (!rebuilds.length)

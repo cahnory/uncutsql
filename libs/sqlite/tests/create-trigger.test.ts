@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { Effect } from "effect";
+import { diffDatabases, planDatabaseMigration } from "@uncutsql/core";
+import { lowerMigration, encodeMigration } from "../src/index.ts";
 import type { SourceNode } from "@uncutsql/codec";
 import { createTrigger, fromDatabaseSchema, schema, toDatabaseSchema } from "../src/index.ts";
 
@@ -87,5 +89,42 @@ test("table and view triggers survive JSON restoration with resolved owners and 
     assert.equal(db.prepare("SELECT n FROM Items").get(), undefined);
   } finally {
     db.close();
+  }
+});
+
+test("rebuilds suspend triggers before copying and restore only requested definitions", () => {
+  const declarations = (unique: string, value: number) => `
+    CREATE TABLE t(n INT ${unique}); CREATE TABLE log(n);
+    CREATE VIEW v AS SELECT n FROM t;
+    CREATE TRIGGER audit AFTER INSERT ON t BEGIN INSERT INTO log VALUES (NEW.n + ${value}); END;
+    CREATE TRIGGER add_row INSTEAD OF INSERT ON v BEGIN INSERT INTO t VALUES (NEW.n); END;`;
+  const beforeSql = declarations("", 1);
+  const model = (sql: string) =>
+    Effect.runSync(Effect.flatMap(schema.decode(sql), toDatabaseSchema));
+  const before = model(beforeSql);
+  const after = model(declarations("UNIQUE", 2));
+  const all = planDatabaseMigration(Effect.runSync(diffDatabases(before, after)));
+  for (const partial of [true, false]) {
+    const procedures = all.procedures.filter((p) => !partial || p._tag !== "ReplaceTrigger");
+    const plan = Effect.runSync(lowerMigration({ procedures }, before, after));
+    const sql = Effect.runSync(encodeMigration(plan));
+    const db = new DatabaseSync(":memory:");
+    try {
+      db.exec(beforeSql + "INSERT INTO v VALUES (1);");
+      db.exec("CREATE TRIGGER unknown_trigger AFTER DELETE ON t BEGIN SELECT 1; END");
+      assert.throws(() => db.exec(sql), /CHECK/);
+      db.exec("DROP TRIGGER unknown_trigger");
+      db.exec(sql);
+      db.exec("INSERT INTO v VALUES (3)");
+      assert.deepEqual(
+        db
+          .prepare("SELECT n FROM log ORDER BY rowid")
+          .all()
+          .map((r) => r.n),
+        [2, partial ? 4 : 5],
+      );
+    } finally {
+      db.close();
+    }
   }
 });
