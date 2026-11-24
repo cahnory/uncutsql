@@ -42,8 +42,9 @@ SQLite conformance.** Update this checklist when adding a grammar feature.
 - [x] Single-quoted result and table aliases, including doubled apostrophes. Formatting emits double-quoted aliases.
 - [x] Single-quoted schema and relation names in declarations and query table sources.
 - [x] Single-quoted table and view column declarations and foreign key names on both sides of a reference.
+- [x] Explicit result and table aliases accept SQLite contextual keywords and preserve their spelling.
 - [ ] General contextual keyword fallbacks and SQLite's legacy quote reinterpretation.
-      Reserved-word identifiers require quotes, except the built-in `temp` schema
+      Reserved-word identifiers require quotes, except in explicit aliases and the built-in `temp` schema
       before a dot. TRUE/FALSE retain their contextual expression semantics.
 
 Most remaining work is in grammar and semantics rather than token scanning:

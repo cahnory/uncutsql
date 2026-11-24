@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { Effect, Result } from "effect";
 import { sqlQuery } from "../src/index.ts";
+import { keywords } from "../src/lexer/keywords.ts";
 const decode = (source: string) => Effect.runSync(sqlQuery.decode(source));
 
 test("SELECT cores preserve native results, aliases and window names", () => {
@@ -37,6 +38,31 @@ test("SELECT cores preserve native results, aliases and window names", () => {
     }
   } finally {
     db.close();
+  }
+});
+
+test("explicit result and source aliases match SQLite for every dialect keyword", () => {
+  using db = new DatabaseSync(":memory:");
+  for (const keyword of keywords) {
+    const name = keyword[0] + keyword.slice(1).toLowerCase();
+    for (const source of [
+      `SELECT 1 AS ${name}`,
+      `SELECT "${name}".v FROM (SELECT 1 AS v) AS ${name}`,
+    ]) {
+      const parsed = Effect.runSync(Effect.result(sqlQuery.decode(source)));
+      let native;
+      try {
+        native = db.prepare(source);
+      } catch {
+        assert.ok(Result.isFailure(parsed), source);
+        continue;
+      }
+      assert.ok(Result.isSuccess(parsed), source);
+      const rendered = Effect.runSync(sqlQuery.encode(parsed.success));
+      assert.ok(rendered.includes(`AS "${name}"`), rendered);
+      assert.deepEqual(decode(rendered), parsed.success, source);
+      assert.deepEqual(db.prepare(rendered).all(), native.all(), source);
+    }
   }
 });
 

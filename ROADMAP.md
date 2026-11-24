@@ -14,7 +14,7 @@ SQLite snapshots now round-trip triggers on tables and views through JSON. Gener
 
 SQLite now accepts legacy single quotes around relation names, declared columns and foreign key targets. The driver verifies these names when applying and resuming a migration, and the editor resolves quoted foreign key targets across documents.
 
-Next, extend contextual keyword support in explicit alias positions. Test implicit aliases separately because a following keyword can also introduce a query clause.
+Explicit result and table aliases now accept SQLite contextual keywords. Tests compare every dialect keyword after `AS` with native SQLite. Next, check implicit aliases separately because a following keyword can also introduce a query clause.
 
 ## VS Code support
 
