@@ -16,7 +16,7 @@ import { resolveMigrationDecisions, planDatabaseMigration } from "@uncutsql/core
 
 const { diff } = yield * resolveMigrationDecisions(beforeDatabase, afterDatabase, decisions);
 const migration = planDatabaseMigration(diff);
-// migration.procedures: CreateTable | DropTable | AlterTable
+// migration.procedures: CreateTable | DropTable | AlterTable | RenameTable
 ```
 
 The logical procedures express requested changes. Each dialect chooses physical

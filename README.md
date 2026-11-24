@@ -69,7 +69,7 @@ with a filename, line, column and source excerpt. Exit codes are 0 for success,
 
 Files can contain multiple supported CREATE TABLE and CREATE INDEX statements, separated by
 semicolons. The final semicolon is optional; empty statements and empty files
-are accepted. See the SQLite package roadmap for supported query forms.
+are accepted. The [SQLite package roadmap](libs/sqlite/README.md) lists the supported query forms.
 
 The library exposes the same file grammar through `Sqlite.schema.decode(sql)`,
 `encode(statements)` and `decodeWithSourceMap(sql)`. It returns an ordered
@@ -185,8 +185,8 @@ The planner supports:
   table options, and additions SQLite cannot perform with ADD COLUMN.
 
 Rebuilds create a replacement table, copy matching names and explicitly resolved rename mappings, drop the old
-table, and rename the replacement. New columns use defaults; generated columns
-are recomputed. Removed columns produce data-loss warnings. Accessible hidden
+table, and rename the replacement. New columns use defaults, and generated columns are recomputed. The planner rejects
+a rename from a stored value into a generated column because SQLite computes the target value. Removed columns produce data-loss warnings. Accessible hidden
 rowids are copied when both tables support rowids; a changed INTEGER PRIMARY KEY
 can determine a different rowid. Retained AUTOINCREMENT high-water marks are preserved. Column/table removals require explicit decisions in CLI workflows. Rename similarity
 heuristics and custom data transformations are not implemented. Copying can fail when existing
@@ -446,7 +446,10 @@ Signs are unary-expression nodes. Blob values contain hexadecimal byte pairs.
 
 ## Supported SQLite slice
 
-- One `CREATE [TEMP | TEMPORARY] TABLE [IF NOT EXISTS] [schema.]name (...)` statement.
+- `createTable` accepts one explicit-column table declaration. `createTableStatement`
+  also accepts `CREATE TABLE ... AS` with a supported query. `schema` accepts
+  multiple table and index declarations. Schema comparison and migration generation
+  require explicit column definitions.
 - Bare non-keyword identifiers and double-quoted, backtick or bracket identifiers.
   Output always uses escaped double quotes.
 - One or more columns, with optional custom, multiword or parameterized types.
@@ -484,8 +487,8 @@ Signs are unary-expression nodes. Blob values contain hexadecimal byte pairs.
 - LIKE, GLOB, REGEXP and MATCH with NOT forms and optional ESCAPE syntax.
   SQLite validates pattern-function availability and escape values at execution time.
 - `BETWEEN` and `NOT BETWEEN` range expressions, including nested bounds.
-- `IN` and `NOT IN` with parenthesized expression lists, including empty lists.
-  Subquery, table-name and table-function targets are not implemented.
+- `IN` and `NOT IN` with expression lists (including empty lists), subqueries,
+  table names and table-valued functions. Scalar subqueries and `EXISTS` are also supported.
 - `RAISE(IGNORE)` and `RAISE(ROLLBACK | ABORT | FAIL, expression)`; SQLite enforces
   trigger context, and the schema parser does not yet accept CREATE TRIGGER.
 - Simple and searched `CASE` expressions with ordered branches, optional ELSE and nesting.
@@ -504,9 +507,8 @@ contract for supported, valid ASTs is `decode(encode(ast))` equal to `ast`.
 
 This grammar deliberately requires quoting reserved words used as identifiers.
 The built-in `temp` schema is accepted unquoted before a dot; other contextual
-keyword fallbacks are not implemented. Unsupported syntax
-fails: subqueries are not yet implemented. Neither are `AS SELECT` or statement kinds other than CREATE TABLE. Database semantics such as duplicate columns,
-conflicting constraints and contextual name resolution remain SQLite's responsibility.
+keyword fallbacks are limited. SQLite validates database semantics such as duplicate columns,
+conflicting constraints and contextual name resolution.
 
 ## Code layout
 

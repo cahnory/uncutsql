@@ -136,7 +136,7 @@ for them. For example, generating ALTER TABLE ADD COLUMN does **not** mean that
 ## Model and migration coverage
 
 - [x] Convert supported table ASTs to/from serializable core database models.
-- [x] Render table creation and dependency-ordered drops.
+- [x] Render table creation, explicit table renames and dependency-ordered drops.
 - [x] Append eligible columns with ALTER TABLE ADD COLUMN.
 - [x] Rebuild tables for supported column, constraint and table-option changes.
       Copy matching names, use defaults for new columns, recompute generated values,
@@ -193,7 +193,7 @@ are documented in the [workspace README](../../README.md).
 - [x] WITH/recursive CTEs, multiple definitions, column lists and MATERIALIZED/NOT MATERIALIZED hints.
 
 `sqlQuery` parses one query with an optional final semicolon and emits a canonical
-semicolon. `queryGrammar` exposes the body for future composition in subqueries.
+semicolon. `queryGrammar` supplies the query body used by subquery codecs.
 Query ASTs stay separate from `schema`, which represents declarations used for
 schema comparison and migrations. SQLite validates row widths and execution
 context. Standalone VALUES does not permit ORDER BY or LIMIT.
