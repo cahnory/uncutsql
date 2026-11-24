@@ -30,7 +30,9 @@ Trailing constraint labels are accepted in column and table declarations. Canoni
 
 Consecutive constraint labels now use the last name. Adjacent bodies inherit it, including the first table constraint after the final column. A new column or a comma between table constraints clears the label. The formatter preserves these boundaries, and native SQLite tests exercise each CHECK failure before and after formatting.
 
-Next, cover foreign key MATCH names in `libs/sqlite/src/codecs/foreign-key/action.ts`. Native SQLite accepts both `MATCH 'mode'` and `MATCH abort`, while the current codec uses the strict identifier parser and a dialect test expects single quotes to fail. Compare contextual keywords with SQLite and check that the parsed MATCH option survives formatting. SQLite reports NONE for the match mode in foreign_key_list, so check the AST for the spelling.
+Foreign key MATCH names now accept contextual keywords and single-quoted names. Tests compare every dialect keyword with native SQLite and check the option name and order in the AST after formatting. SQLite reports NONE for the mode in foreign_key_list.
+
+Next, cover index names after `INDEXED BY` in `libs/sqlite/src/codecs/query/index-hint.ts`. With an index named `abort`, native SQLite accepts both `INDEXED BY Abort` and `INDEXED BY 'abort'`. The query codec currently rejects both. Exercise the keyword matrix with an existing index for each name and verify that formatted hints still resolve to that index.
 
 ## VS Code support
 

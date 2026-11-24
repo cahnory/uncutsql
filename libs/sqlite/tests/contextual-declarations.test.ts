@@ -81,3 +81,33 @@ test("column and table CHECK constraint names match SQLite and retain their spel
     }
   }
 });
+
+test("foreign key MATCH names agree with SQLite and survive formatting", () => {
+  using db = new DatabaseSync(":memory:");
+  const names = [...keywords].map((word) => word[0] + word.slice(1).toLowerCase());
+  for (const token of [...names, "'owner''s mode'"]) {
+    const name = token === "'owner''s mode'" ? "owner's mode" : token;
+    const source = `CREATE TABLE t (x REFERENCES p MATCH ${token} ON DELETE CASCADE)`;
+    const parsed = Effect.runSync(Effect.result(createTable.decode(source)));
+    try {
+      db.prepare(source);
+    } catch {
+      assert.ok(Result.isFailure(parsed), source);
+      continue;
+    }
+    assert.ok(Result.isSuccess(parsed), source);
+    const constraint = parsed.success.columns[0]!.constraints[0]!;
+    assert.equal(constraint._tag, "References");
+    assert.deepEqual(
+      constraint.references.options,
+      [
+        { _tag: "Match", name },
+        { _tag: "OnDelete", action: "CASCADE" },
+      ],
+      source,
+    );
+    const rendered = Effect.runSync(createTable.encode(parsed.success));
+    db.prepare(rendered);
+    assert.deepEqual(Effect.runSync(createTable.decode(rendered)), parsed.success, source);
+  }
+});

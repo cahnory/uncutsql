@@ -109,7 +109,7 @@ context restrictions, including prohibiting subqueries.
       PRIMARY KEY, NOT NULL and UNIQUE.
 - [x] Table PRIMARY KEY, UNIQUE, CHECK and FOREIGN KEY, optionally named.
       Key columns support collation/order, and table keys support ON CONFLICT.
-- [x] Foreign-key target columns, ON DELETE/UPDATE, MATCH and deferrability.
+- [x] Foreign-key target columns, ON DELETE/UPDATE, MATCH with contextual or quoted names, and deferrability.
       Reference options retain their original order.
 - [x] `[GENERATED ALWAYS] AS (expression) [VIRTUAL | STORED]`.
 - [x] STRICT and WITHOUT ROWID, retaining order and repeated options.

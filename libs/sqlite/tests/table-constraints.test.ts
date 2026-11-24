@@ -188,16 +188,7 @@ test("remaining reference actions and deferral modes round-trip", () => {
     "DEFERRABLE",
     "DEFERRABLE INITIALLY IMMEDIATE",
     "NOT DEFERRABLE",
-    "MATCH 'bad'",
   ]) {
-    if (ending === "MATCH 'bad'") {
-      assert.ok(
-        failure(
-          createTable.decode(`CREATE TABLE child (id REFERENCES parent ${ending})`),
-        ) instanceof ParseError,
-      );
-      continue;
-    }
     for (const sql of versions(`CREATE TABLE child (id REFERENCES parent ${ending})`)) {
       const database = new DatabaseSync(":memory:");
       try {
