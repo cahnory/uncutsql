@@ -164,7 +164,7 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 ### Current work in priority order
 
 1. [x] Reject rebuilds that discard ordinary column values on conversion to generated columns.
-2. [ ] Make index snapshot ordering reproducible across locales and declaration orders.
+2. [x] Make index snapshot ordering reproducible across locales and declaration orders.
 3. [ ] Match SQLite tokenization of a trailing bare block-comment opener.
 4. [ ] Parse and format view declarations, with explicit diagnostics at the migration boundary.
 

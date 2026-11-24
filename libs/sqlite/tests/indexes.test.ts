@@ -247,3 +247,9 @@ for (const category of readdirSync(root))
         );
       }
     });
+
+test("distinct Unicode index names have stable snapshot order", () => {
+  const composed = 'CREATE INDEX "é" ON t(name);';
+  const decomposed = 'CREATE INDEX "e\u0301" ON t(name);';
+  assert.deepEqual(model(table + composed + decomposed), model(table + decomposed + composed));
+});

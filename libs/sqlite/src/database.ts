@@ -106,7 +106,7 @@ export const toDatabaseSchema = (
                 indexes: indexGroups
                   .get(JSON.stringify(identity))!
                   .map(indexModel)
-                  .sort((a, b) => a.key.localeCompare(b.key)),
+                  .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)),
               }
             : {}),
           columns: table.columns.map((column) => ({
