@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { alternatives, make, parseError, prefixed } from "@uncutsql/codec";
+import { type Read, alternatives, make, parseError, prefixed } from "@uncutsql/codec";
 import { uppercaseAscii } from "../../lexer/characters.ts";
 import { explicitAliasKeywords } from "../../lexer/keywords.ts";
 import { keyword } from "../../operators/keyword.ts";
@@ -18,7 +18,7 @@ for (const word of "CROSS FULL INDEXED INNER LEFT NATURAL OUTER RIGHT".split(" "
 const resultKeywords = new Set(sourceKeywords);
 for (const word of ["GLOB", "LIKE", "MATCH", "REGEXP"]) resultKeywords.delete(word);
 
-const implicit = (keywords: ReadonlySet<string>) => {
+const implicit = (keywords: ReadonlySet<string>, afterParameter = false) => {
   const name = nameWithKeywords(keywords);
   return make<string>({
     decode: (cursor) =>
@@ -27,7 +27,7 @@ const implicit = (keywords: ReadonlySet<string>) => {
         const start = skipSqliteTrivia(cursor.source, cursor.offset);
         const word = uppercaseAscii(cursor.source.slice(start, result.next.offset));
         if (
-          (word === "WINDOW" || word === "OVER" || word === "FILTER") &&
+          (word === "WINDOW" || (!afterParameter && (word === "OVER" || word === "FILTER"))) &&
           (yield* startsWindowSyntax(word, cursor, result.next))
         )
           return yield* Effect.fail(parseError(cursor, "implicit alias"));
@@ -39,3 +39,19 @@ const implicit = (keywords: ReadonlySet<string>) => {
 
 export const sourceAlias = alternatives(explicit, implicit(sourceKeywords));
 export const resultAlias = alternatives(explicit, implicit(resultKeywords));
+
+const parameterAlias = alternatives(explicit, implicit(resultKeywords, true));
+
+// The closing character of $name(suffix) belongs to the parameter token, even
+// when the parameter is the right operand of a larger expression.
+export const resultAliasAfter = (expression: Read<unknown>) => {
+  const { source, offset } = expression.next;
+  if (source[offset - 1] === ")") {
+    let node = expression.nodes.at(-1);
+    while (node?.end === offset) {
+      if (node.kind === "BindParameter") return parameterAlias;
+      node = node.children.at(-1);
+    }
+  }
+  return resultAlias;
+};
