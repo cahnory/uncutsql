@@ -91,7 +91,7 @@ pnpm demo:cli generate examples/schema-renamed.sql .local/migrations --write-dec
 ```
 
 In `.local/rename.json`, set the question's `resolution` to
-`{"_tag":"Rename","target":"display_name"}`. Choosing `{"_tag":"Drop"}` instead
+`{"action":"rename","target":"display_name"}`. Choosing `{"action":"drop"}` instead
 means removing the old data and treating the new column as unrelated; because
 this example's new column is NOT NULL without a default, that choice cannot
 populate existing rows successfully.

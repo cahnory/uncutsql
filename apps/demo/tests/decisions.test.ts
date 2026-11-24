@@ -40,9 +40,12 @@ test("CLI requires reviewable decisions, persists them, and applies renamed data
     assert.equal(existsSync(join(cwd, "migrations", "000002.sql")), false);
     const prepared = run(cwd, ["generate", "-", "--write-decisions"], after);
     assert.equal(prepared.status, 0, prepared.stderr);
-    const pending = JSON.parse(readFileSync(decisions, "utf8")) as MigrationDecisions;
+    const pending = JSON.parse(readFileSync(decisions, "utf8")) as MigrationDecisions & {
+      $schema: string;
+    };
+    assert.equal(pending.$schema, "./node_modules/@uncutsql/cli/schemas/decisions.schema.json");
     assert.deepEqual(pending.decisions[0]!.candidates, ["new"]);
-    assert.equal(pending.decisions[0]!.resolution, null);
+    assert.deepEqual(pending.decisions[0]!.resolution, { action: "pending" });
     const second = run(cwd, ["generate", "-", "--write-decisions"], after);
     assert.equal(second.status, 1);
     assert.deepEqual(JSON.parse(readFileSync(decisions, "utf8")), pending);
@@ -52,7 +55,7 @@ test("CLI requires reviewable decisions, persists them, and applies renamed data
         ...pending,
         decisions: pending.decisions.map((item) => ({
           ...item,
-          resolution: { _tag: "Rename", target: "new" },
+          resolution: { action: "rename", target: "new" },
         })),
       }),
     );
@@ -60,7 +63,7 @@ test("CLI requires reviewable decisions, persists them, and applies renamed data
     assert.equal(generated.status, 0, generated.stderr);
     const sql = readFileSync(join(cwd, "migrations", "000002.sql"), "utf8");
     assert.match(sql, /uncutsql-decisions:/);
-    assert.match(sql, /"Rename"/);
+    assert.match(sql, /"action":"rename"/);
     const applied = run(cwd, ["apply", dbPath]);
     assert.equal(applied.status, 0, applied.stderr);
     const actual = new DatabaseSync(dbPath);
@@ -87,12 +90,13 @@ test("migration decision output and explicit drop preserve add-default semantics
     writeFileSync(after, "CREATE TABLE t(id, new DEFAULT 'fresh')");
     const result = run(cwd, ["decisions", before, after]);
     assert.equal(result.status, 0, result.stderr);
-    const pending = JSON.parse(result.stdout) as MigrationDecisions;
+    const pending = JSON.parse(result.stdout) as MigrationDecisions & { $schema: string };
+    assert.equal(pending.$schema, "./node_modules/@uncutsql/cli/schemas/decisions.schema.json");
     writeFileSync(
       choices,
       JSON.stringify({
         ...pending,
-        decisions: pending.decisions.map((item) => ({ ...item, resolution: { _tag: "Drop" } })),
+        decisions: pending.decisions.map((item) => ({ ...item, resolution: { action: "drop" } })),
       }),
     );
     const script = run(cwd, ["migration", before, after, "--decisions", choices]);
@@ -133,7 +137,10 @@ test("default and configured decision files can be prepared and loaded without p
       const prepared = run(cwd, [...args, "--write-decisions"]);
       assert.equal(prepared.status, 0, prepared.stderr);
       const path = join(cwd, "project", configured ? "review.json" : "uncutsql.decisions.json");
-      const pending = JSON.parse(readFileSync(path, "utf8")) as MigrationDecisions;
+      const pending = JSON.parse(readFileSync(path, "utf8")) as MigrationDecisions & {
+        $schema: string;
+      };
+      assert.equal(pending.$schema, "../node_modules/@uncutsql/cli/schemas/decisions.schema.json");
       assert.equal(run(cwd, [...args, "--write-decisions"]).status, 1);
       writeFileSync(
         path,
@@ -141,13 +148,13 @@ test("default and configured decision files can be prepared and loaded without p
           ...pending,
           decisions: pending.decisions.map((item) => ({
             ...item,
-            resolution: { _tag: "Rename", target: "new" },
+            resolution: { action: "rename", target: "new" },
           })),
         }),
       );
       const rendered = run(cwd, args);
       assert.equal(rendered.status, 0, rendered.stderr);
-      assert.match(rendered.stdout, /"_tag":"Rename"/);
+      assert.match(rendered.stdout, /"action":"rename"/);
       writeFileSync(path, "invalid json");
       assert.match(run(cwd, args).stderr, /Cannot read decisions/);
       assert.equal(run(cwd, [...prefix, "format", before]).status, 0);
@@ -158,7 +165,7 @@ test("default and configured decision files can be prepared and loaded without p
           ...pending,
           decisions: pending.decisions.map((item) => ({
             ...item,
-            resolution: { _tag: "Drop" },
+            resolution: { action: "drop" },
           })),
         }),
       );
@@ -168,5 +175,30 @@ test("default and configured decision files can be prepared and loaded without p
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
+  }
+});
+
+test("decision schema paths use the nearest installed package for nested output files", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "uncutsql-decision-schema-"));
+  try {
+    const project = join(cwd, "project");
+    const schema = join(project, "node_modules/@uncutsql/cli/schemas");
+    mkdirSync(schema, { recursive: true });
+    writeFileSync(join(schema, "decisions.schema.json"), "{}");
+    mkdirSync(join(project, "review"));
+    writeFileSync(join(cwd, "before.sql"), "CREATE TABLE t(old)");
+    writeFileSync(join(cwd, "after.sql"), "CREATE TABLE t(new)");
+    const result = run(cwd, [
+      "migration",
+      "before.sql",
+      "after.sql",
+      "--write-decisions",
+      "project/review/choices.json",
+    ]);
+    assert.equal(result.status, 0, result.stderr);
+    const pending = JSON.parse(readFileSync(join(project, "review/choices.json"), "utf8"));
+    assert.equal(pending.$schema, "../node_modules/@uncutsql/cli/schemas/decisions.schema.json");
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
   }
 });

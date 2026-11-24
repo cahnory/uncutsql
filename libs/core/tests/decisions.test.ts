@@ -31,8 +31,8 @@ test("ambiguities remain unresolved until explicit drop or rename choices", () =
   assert.equal(failure().pending.decisions.length, 1);
   const pending = prepare();
   assert.deepEqual(pending.decisions[0]!.candidates, ["new"]);
-  assert.equal(pending.decisions[0]!.resolution, null);
-  for (const resolution of [{ _tag: "Drop" }, { _tag: "Rename", target: "new" }]) {
+  assert.deepEqual(pending.decisions[0]!.resolution, { action: "pending" });
+  for (const resolution of [{ action: "drop" }, { action: "rename", target: "new" }]) {
     const resolved = Effect.runSync(
       resolveMigrationDecisions(before, after, {
         ...pending,
@@ -44,7 +44,7 @@ test("ambiguities remain unresolved until explicit drop or rename choices", () =
     if (change._tag !== "TableChanged") throw new Error("Expected table change");
     assert.deepEqual(
       change.changes.map((item) => item._tag),
-      resolution._tag === "Drop" ? ["ColumnRemoved", "ColumnAdded"] : ["ColumnRenamed"],
+      resolution.action === "drop" ? ["ColumnRemoved", "ColumnAdded"] : ["ColumnRenamed"],
     );
     if (change.changes[0]!._tag === "ColumnRenamed")
       assert.deepEqual(change.changes[0]!.fields, ["dataType"]);
@@ -59,18 +59,31 @@ test("decisions reject stale, missing, duplicated and invalid resolutions", () =
     { ...pending, before: model(["different"]) },
     { ...pending, decisions: [] },
     pending,
-    { ...pending, decisions: [{ ...first, resolution: { _tag: "Rename", target: "missing" } }] },
+    { ...pending, decisions: [{ ...first, resolution: { action: "rename", target: "missing" } }] },
     {
       ...pending,
       decisions: [
-        { ...first, resolution: { _tag: "Drop" } },
-        { ...first, resolution: { _tag: "Drop" } },
+        { ...first, resolution: { action: "drop" } },
+        { ...first, resolution: { action: "drop" } },
       ],
     },
-    { ...pending, decisions: [{ ...first, id: "unknown", resolution: { _tag: "Drop" } }] },
-    { ...pending, decisions: [{ ...first, column: "other", resolution: { _tag: "Drop" } }] },
+    { ...pending, decisions: [{ ...first, id: "unknown", resolution: { action: "drop" } }] },
+    { ...pending, decisions: [{ ...first, column: "other", resolution: { action: "drop" } }] },
   ])
     failure(document);
+  for (const resolution of [
+    null,
+    {},
+    { action: "pending" },
+    { action: "rename" },
+    { action: "drop", target: "new" },
+    { action: "rename", target: "new", extra: true },
+    { action: "other" },
+    { _tag: "Drop" },
+  ]) {
+    failure({ ...pending, decisions: [{ ...first, resolution }] });
+  }
+  assert.match(failure(pending).message, /Unresolved decision/);
   const a = model(["a", "b"]),
     b = model(["x"]);
   const doc = Effect.runSync(prepareMigrationDecisions(a, b));
@@ -82,7 +95,7 @@ test("decisions reject stale, missing, duplicated and invalid resolutions", () =
             ...doc,
             decisions: doc.decisions.map((item) => ({
               ...item,
-              resolution: { _tag: "Rename", target: "x" },
+              resolution: { action: "rename", target: "x" },
             })),
           }),
         ),
@@ -105,7 +118,7 @@ test("table drops require consent but additions need no decisions", () => {
     Effect.runSync(
       resolveMigrationDecisions(before, empty, {
         ...doc,
-        decisions: doc.decisions.map((item) => ({ ...item, resolution: { _tag: "Drop" } })),
+        decisions: doc.decisions.map((item) => ({ ...item, resolution: { action: "drop" } })),
       }),
     ).diff.changes[0]!._tag,
     "TableRemoved",
@@ -131,7 +144,7 @@ test("mixed rename/drop decisions retain other additions and accompanying constr
       decisions: doc.decisions.map((item) => ({
         ...item,
         resolution:
-          item.column === "old_a" ? { _tag: "Rename", target: "new_a" } : { _tag: "Drop" },
+          item.column === "old_a" ? { action: "rename", target: "new_a" } : { action: "drop" },
       })),
     }),
   );

@@ -143,7 +143,7 @@ test("CLI migration emits complete scripts or errors without partial output", ()
         ...pending,
         decisions: pending.decisions.map((item: object) => ({
           ...item,
-          resolution: { _tag: "Drop" },
+          resolution: { action: "drop" },
         })),
       }),
     );

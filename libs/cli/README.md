@@ -19,9 +19,20 @@ is resolved. Use `decisions before.sql after.sql` to print the review JSON, or:
 
 ```sh
 uncutsql migration before.sql after.sql --write-decisions choices.json
-# Edit each resolution: {"_tag":"Drop"} or {"_tag":"Rename","target":"new_key"}
+# Edit each resolution: {"action":"drop"} or {"action":"rename","target":"new_key"}
 uncutsql migration before.sql after.sql --decisions choices.json
 ```
+
+Each generated resolution starts as an object:
+
+```json
+{ "action": "pending" }
+```
+
+Change `action` to `drop` or `rename`. For `rename`, add `target` with a column
+key from `candidates`. Table removals offer only `pending` and `drop`. Pending
+actions stop migration generation until reviewed. The schema declares the action
+choices together so editors can suggest `rename` before its target is filled in.
 
 For a saved generation baseline:
 
@@ -122,3 +133,34 @@ configured paths resolve from the config directory. Preparation never overwrites
 an existing file and never loads the old answers. After generation, remove or
 archive the review file before preparing the next change: its snapshots describe
 only the reviewed baseline and target.
+
+## JSON schemas
+
+JSON config and decision files support an optional `$schema` property for editor
+completion and validation. The CLI package includes and exports both schemas:
+
+- `@uncutsql/cli/schemas/config.schema.json`
+- `@uncutsql/cli/schemas/decisions.schema.json`
+
+For example, in a project's `uncutsql.config.json`:
+
+```json
+{
+  "$schema": "./node_modules/@uncutsql/cli/schemas/config.schema.json",
+  "dialect": "@uncutsql/sqlite",
+  "schema": "./db/schema",
+  "migrations": "./db/migrations"
+}
+```
+
+Generated decisions include `$schema` automatically. The CLI looks for the schema
+in an ancestor’s `node_modules`, falling back to the working directory’s
+`node_modules`, and writes a path relative to the decision file. The `decisions`
+command uses the working directory for its JSON output. Schema paths in config
+resolve relative to the JSON file; adjust the path for files in subdirectories. In this repository, the schemas live in
+[`schemas`](./schemas).
+
+The decisions schema covers the snapshots, pending `{ "action": "pending" }` resolutions, and
+`drop`/`rename` answers. The CLI additionally checks snapshot freshness, decision
+identities, rename candidates, and duplicate targets when consuming answers.
+The generated `uncutsql.lock.json` is managed by the CLI and has no editor schema.

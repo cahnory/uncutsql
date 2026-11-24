@@ -1,4 +1,5 @@
 {
+  "$schema": "../../node_modules/@uncutsql/cli/schemas/config.schema.json",
   "dialect": "@uncutsql/sqlite",
   "driver": "@uncutsql/sqlite-driver",
   "schema": "./schema",

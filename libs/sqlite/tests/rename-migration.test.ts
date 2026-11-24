@@ -18,7 +18,7 @@ const plan = (beforeSql: string, afterSql: string, rename: boolean) => {
       ...doc,
       decisions: doc.decisions.map((item) => ({
         ...item,
-        resolution: rename ? { _tag: "Rename", target: "new" } : { _tag: "Drop" },
+        resolution: rename ? { action: "rename", target: "new" } : { action: "drop" },
       })),
     }),
   );

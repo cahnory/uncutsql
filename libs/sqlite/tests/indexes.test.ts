@@ -149,7 +149,7 @@ test("renamed columns and changed index expressions use the desired definitions"
       ...pending,
       decisions: pending.decisions.map((item) => ({
         ...item,
-        resolution: { _tag: "Rename", target: "title" },
+        resolution: { action: "rename", target: "title" },
       })),
     }),
   );

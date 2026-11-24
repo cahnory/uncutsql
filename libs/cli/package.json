@@ -6,13 +6,16 @@
     "uncutsql": "./src/index.ts"
   },
   "files": [
-    "dist"
+    "dist",
+    "schemas"
   ],
   "type": "module",
   "exports": {
     ".": "./src/api.ts",
     "./bin": "./src/index.ts",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./schemas/config.schema.json": "./schemas/config.schema.json",
+    "./schemas/decisions.schema.json": "./schemas/decisions.schema.json"
   },
   "publishConfig": {
     "bin": {
@@ -21,7 +24,9 @@
     "exports": {
       ".": "./dist/api.mjs",
       "./bin": "./dist/index.mjs",
-      "./package.json": "./package.json"
+      "./package.json": "./package.json",
+      "./schemas/config.schema.json": "./schemas/config.schema.json",
+      "./schemas/decisions.schema.json": "./schemas/decisions.schema.json"
     }
   },
   "scripts": {
@@ -38,7 +43,10 @@
     "import-meta-resolve": "^4.2.0"
   },
   "devDependencies": {
-    "tsdown": "^0.23.2"
+    "ajv": "^8.20.0",
+    "tsdown": "^0.23.2",
+    "vscode-json-languageservice": "6.0.0-next.3",
+    "vscode-languageserver-textdocument": "^1.0.16"
   },
   "engines": {
     "node": ">=24.11.0"

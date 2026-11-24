@@ -1,0 +1,285 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "UncutSQL migration decisions",
+  "description": "Review document. Edit resolutions only. The CLI also checks snapshot freshness, decision identities, candidate targets and duplicate renames.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "version": {
+      "const": 1
+    },
+    "before": {
+      "$ref": "#/definitions/database"
+    },
+    "after": {
+      "$ref": "#/definitions/database"
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/decision"
+      }
+    }
+  },
+  "required": ["version", "before", "after", "decisions"],
+  "additionalProperties": false,
+  "definitions": {
+    "value": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/value"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/value"
+          }
+        }
+      ]
+    },
+    "identity": {
+      "type": "object",
+      "properties": {
+        "catalog": {
+          "type": "string"
+        },
+        "schema": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    },
+    "constraint": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/value"
+          }
+        }
+      },
+      "required": ["kind", "properties"],
+      "additionalProperties": false
+    },
+    "column": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "dataType": {
+          "$ref": "#/definitions/value"
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/constraint"
+          }
+        }
+      },
+      "required": ["key", "name", "dataType", "constraints"],
+      "additionalProperties": false
+    },
+    "index": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "unique": {
+          "type": "boolean"
+        },
+        "terms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/value"
+          }
+        },
+        "where": {
+          "$ref": "#/definitions/value"
+        }
+      },
+      "required": ["key", "name", "unique", "terms", "where"],
+      "additionalProperties": false
+    },
+    "table": {
+      "type": "object",
+      "properties": {
+        "identity": {
+          "$ref": "#/definitions/identity"
+        },
+        "name": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/column"
+          }
+        },
+        "indexes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/index"
+          }
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/constraint"
+          }
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/value"
+          }
+        }
+      },
+      "required": ["identity", "name", "columns", "constraints", "options"],
+      "additionalProperties": false
+    },
+    "database": {
+      "type": "object",
+      "properties": {
+        "tables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/table"
+          }
+        }
+      },
+      "required": ["tables"],
+      "additionalProperties": false
+    },
+    "decision": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Generated identity; do not edit."
+        },
+        "table": {
+          "$ref": "#/definitions/identity"
+        },
+        "column": {
+          "type": "string"
+        },
+        "question": {
+          "type": "string"
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "resolution": {
+          "type": "object",
+          "description": "Review this action before migration generation. Pending decisions cannot be applied."
+        }
+      },
+      "required": ["id", "table", "question", "candidates", "resolution"],
+      "additionalProperties": false,
+      "if": {
+        "required": ["column"],
+        "properties": {
+          "column": {}
+        }
+      },
+      "then": {
+        "properties": {
+          "resolution": {
+            "$ref": "#/definitions/columnResolution"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "resolution": {
+            "$ref": "#/definitions/tableResolution"
+          }
+        }
+      }
+    },
+    "columnResolution": {
+      "type": "object",
+      "description": "Choose drop or rename. Pending requires an explicit decision before migration generation. Rename targets must be listed in candidates.",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["pending", "drop", "rename"],
+          "description": "Leave pending until reviewed; drop removes data, rename preserves the source column as target."
+        },
+        "target": {
+          "type": "string",
+          "description": "An added column key from candidates. Required only for rename."
+        }
+      },
+      "required": ["action"],
+      "additionalProperties": false,
+      "if": {
+        "properties": {
+          "action": {
+            "const": "rename"
+          }
+        }
+      },
+      "then": {
+        "required": ["target"],
+        "properties": {
+          "target": {}
+        }
+      },
+      "else": {
+        "properties": {
+          "target": false
+        }
+      }
+    },
+    "tableResolution": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["pending", "drop"],
+          "description": "Leave pending until reviewed, or choose drop to remove the table and its data."
+        }
+      },
+      "required": ["action"],
+      "additionalProperties": false
+    }
+  }
+}

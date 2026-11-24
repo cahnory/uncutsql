@@ -4,6 +4,8 @@ import { pathToFileURL } from "node:url";
 import { Data, Effect } from "effect";
 
 export interface UncutConfig {
+  /** JSON Schema location for editor tooling. */
+  readonly $schema?: string;
   /** Schema file or directory of *.uncut.sql files, relative to this config. */
   readonly schema?: string;
   /** Directory containing numbered migrations and the lock, relative to this config. */
@@ -23,7 +25,7 @@ const record = (value: unknown): value is Record<string, unknown> =>
 const validate = (value: unknown): UncutConfig => {
   if (!record(value)) throw new Error("Expected a configuration object");
   for (const key of Object.keys(value)) {
-    if (!["dialect", "driver", "schema", "migrations", "decisions"].includes(key))
+    if (!["$schema", "dialect", "driver", "schema", "migrations", "decisions"].includes(key))
       throw new Error(`Unknown configuration option: ${key}`);
     if (typeof value[key] !== "string" || !value[key].trim())
       throw new Error(`${key} must be a nonempty string`);

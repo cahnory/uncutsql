@@ -331,6 +331,8 @@ invocation reports a usage error.
 
 Set `schema` and `migrations` to use project defaults for the input and output paths. See the [multipart schema example](libs/cli/README.md#keep-schema-paths-in-project-config).
 
+JSON config and decision files have [JSON schemas](libs/cli/README.md#json-schemas) for editor completion and validation.
+
 Save this as `uncutsql.config.json` (or use `.uncutsqlrc.json`, a default-exported
 `uncutsql.config.{js,cjs,mjs,ts,cts,mts}`, or the `uncutsql` object in package.json).
 The package.json field takes precedence over discovered config files. An explicit
@@ -540,7 +542,7 @@ file before generating a migration:
 
 ```sh
 pnpm cli migration before.sql after.sql --write-decisions choices.json
-# Set each resolution to {"_tag":"Drop"} or {"_tag":"Rename","target":"new_key"}.
+# Set each resolution to {"action":"drop"} or {"action":"rename","target":"new_key"}.
 pnpm cli migration before.sql after.sql --decisions choices.json
 ```
 

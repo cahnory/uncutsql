@@ -53,10 +53,10 @@ syntax dialect; core itself has no database driver or filesystem dependency.
 `prepareMigrationDecisions(before, after)` returns a versioned JSON document with
 both schema snapshots and structured questions for removed tables and columns.
 Column questions list all added keys in that table as candidates; no similarity
-heuristic selects a rename. Each `resolution` starts as `null`.
+heuristic selects a rename. Each `resolution` starts as `{ "action": "pending" }`.
 
-Consumers collect `{"_tag":"Drop"}` or, for a column,
-`{"_tag":"Rename","target":"new-column-key"}`. Then
+Consumers collect `{"action":"drop"}` or, for a column,
+`{"action":"rename","target":"new-column-key"}`. Then
 `resolveMigrationDecisions(before, after, document)` validates the untrusted
 answers and snapshots and returns a resolved diff and sanitized decision record.
 Missing, stale, duplicate or conflicting answers fail with MigrationDecisionError;

@@ -16,9 +16,9 @@ export interface MigrationDecision {
   /** Added column keys, not guesses: no candidate is selected automatically. */
   readonly candidates: readonly string[];
   readonly resolution:
-    | null
-    | { readonly _tag: "Drop" }
-    | { readonly _tag: "Rename"; readonly target: string };
+    | { readonly action: "pending" }
+    | { readonly action: "drop" }
+    | { readonly action: "rename"; readonly target: string };
 }
 export interface MigrationDecisions {
   readonly version: 1;
@@ -44,7 +44,7 @@ const questions = (diff: DatabaseDiff): readonly MigrationDecision[] =>
           table: change.table,
           question: `Drop table ${tableKey(change.table)} and its data?`,
           candidates: [],
-          resolution: null,
+          resolution: { action: "pending" },
         },
       ];
     if (change._tag !== "TableChanged") return [];
@@ -59,7 +59,7 @@ const questions = (diff: DatabaseDiff): readonly MigrationDecision[] =>
         column: item.column.key,
         question: `Drop column ${JSON.stringify(item.column.name)} in ${tableKey(change.table)}, or rename it to an added column?`,
         candidates,
-        resolution: null,
+        resolution: { action: "pending" },
       }));
   });
 export const prepareMigrationDecisions = (before: DatabaseSchema, after: DatabaseSchema) =>
@@ -105,11 +105,12 @@ export const resolveMigrationDecisions = (
       if (!equal(input.table, question.table) || input.column !== question.column)
         return yield* fail(`Decision identity changed: ${input.id}`);
       const resolution = input.resolution;
-      if (!record(resolution)) return yield* fail(`Unresolved decision: ${question.question}`);
-      if (resolution._tag === "Drop" && Object.keys(resolution).length === 1) {
-        answers.set(input.id, { ...question, resolution: { _tag: "Drop" } });
+      if (!record(resolution) || resolution.action === "pending")
+        return yield* fail(`Unresolved decision: ${question.question}`);
+      if (resolution.action === "drop" && Object.keys(resolution).length === 1) {
+        answers.set(input.id, { ...question, resolution: { action: "drop" } });
       } else if (
-        resolution._tag === "Rename" &&
+        resolution.action === "rename" &&
         Object.keys(resolution).length === 2 &&
         typeof resolution.target === "string" &&
         question.column !== undefined &&
@@ -121,7 +122,7 @@ export const resolveMigrationDecisions = (
         targets.add(target);
         answers.set(input.id, {
           ...question,
-          resolution: { _tag: "Rename", target: resolution.target },
+          resolution: { action: "rename", target: resolution.target },
         });
       } else return yield* fail(`Invalid resolution for ${question.question}`);
     }
@@ -137,7 +138,7 @@ export const resolveMigrationDecisions = (
         for (const item of change.changes) {
           if (item._tag !== "ColumnRemoved") continue;
           const answer = answers.get(idFor(change.table, item.column.key))!;
-          if (answer.resolution?._tag !== "Rename") continue;
+          if (answer.resolution.action !== "rename") continue;
           const targetKey = answer.resolution.target;
           const afterColumn = change.after.columns.find((column) => column.key === targetKey)!;
           renamedTargets.add(afterColumn.key);
@@ -155,7 +156,7 @@ export const resolveMigrationDecisions = (
                 !(item._tag === "ColumnAdded" && renamedTargets.has(item.column.key)) &&
                 !(
                   item._tag === "ColumnRemoved" &&
-                  answers.get(idFor(change.table, item.column.key))?.resolution?._tag === "Rename"
+                  answers.get(idFor(change.table, item.column.key))?.resolution.action === "rename"
                 ),
             ),
           ],

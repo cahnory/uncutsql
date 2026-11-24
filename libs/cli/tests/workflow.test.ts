@@ -38,7 +38,7 @@ test("consumer workflow swaps dialect adapters without changing its diff or plan
   const pending = Effect.runSync(prepareMigrationDecisions(comparison.before, comparison.after));
   const choices = {
     ...pending,
-    decisions: pending.decisions.map((item) => ({ ...item, resolution: { _tag: "Drop" } })),
+    decisions: pending.decisions.map((item) => ({ ...item, resolution: { action: "drop" } })),
   };
   assert.match(
     Effect.runSync(renderMigration(adapter, comparison, choices)),

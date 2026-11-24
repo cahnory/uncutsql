@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-import { readFile, writeFile, readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile, writeFile, readdir, stat, realpath } from "node:fs/promises";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { Data, Effect, Result } from "effect";
 import { SchemaDiffError, MigrationDecisionError, prepareMigrationDecisions } from "@uncutsql/core";
 import { ParseError } from "@uncutsql/codec";
-import type { Dialect } from "@uncutsql/core";
+import type { Dialect, MigrationDecisions } from "@uncutsql/core";
 import { parseOptions, resolveConfig, UsageError } from "./config.ts";
 import { loadDialect, loadDriver } from "./plugins.ts";
 import { applyGenerated } from "./apply.ts";
@@ -15,6 +15,30 @@ import {
   prepareGeneratedDecisions,
 } from "./generate.ts";
 import { compareSchemas, renderMigration } from "./workflow.ts";
+
+const decisionDocument = async (document: MigrationDecisions, output?: string) => {
+  const directory = await realpath(output === undefined ? process.cwd() : dirname(resolve(output)));
+  const schemaPath = "node_modules/@uncutsql/cli/schemas/decisions.schema.json";
+  let root = directory;
+  let schema = resolve(process.cwd(), schemaPath);
+  // Keep the node_modules path instead of resolving the package's symlink.
+  while (true) {
+    const candidate = join(root, schemaPath);
+    try {
+      if ((await stat(candidate)).isFile()) {
+        schema = candidate;
+        break;
+      }
+    } catch (cause) {
+      if (!(cause instanceof Error && "code" in cause && cause.code === "ENOENT")) throw cause;
+    }
+    const parent = dirname(root);
+    if (parent === root) break;
+    root = parent;
+  }
+  const path = relative(directory, schema).split(sep).join("/");
+  return { $schema: path.startsWith(".") ? path : `./${path}`, ...document };
+};
 
 const help = `Usage: pnpm cli <check|format> [file|-]
        pnpm cli diff [schema-path|-]
@@ -162,13 +186,17 @@ const program = Effect.gen(function* () {
               message: `Cannot read decisions ${selected.decisions}: ${String(cause)}`,
             }),
         });
-  const writeDecisions = (document: unknown) =>
+  const writeDecisions = (document: MigrationDecisions) =>
     Effect.tryPromise({
       try: async () => {
-        await writeFile(decisionOutput!, JSON.stringify(document, null, 2) + "\n", {
-          flag: "wx",
-        });
-        return `Wrote ${decisionOutput}. Set each resolution to {"_tag":"Drop"} or {"_tag":"Rename","target":"column-key"}, then rerun without --write-decisions (use --decisions with this path if it differs from the configured/default file).\n`;
+        await writeFile(
+          decisionOutput!,
+          JSON.stringify(await decisionDocument(document, decisionOutput), null, 2) + "\n",
+          {
+            flag: "wx",
+          },
+        );
+        return `Wrote ${decisionOutput}. Set each resolution to {"action":"drop"} or {"action":"rename","target":"column-key"}, then rerun without --write-decisions (use --decisions with this path if it differs from the configured/default file).\n`;
       },
       catch: (cause) =>
         new InputError({ message: `Cannot create decision file: ${String(cause)}` }),
@@ -265,7 +293,9 @@ const program = Effect.gen(function* () {
     if (command === "decisions")
       return (
         JSON.stringify(
-          yield* prepareMigrationDecisions(comparison.before, comparison.after),
+          yield* prepareMigrationDecisions(comparison.before, comparison.after).pipe(
+            Effect.flatMap((document) => Effect.promise(() => decisionDocument(document))),
+          ),
           null,
           2,
         ) + "\n"
