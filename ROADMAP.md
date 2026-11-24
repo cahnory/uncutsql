@@ -34,7 +34,9 @@ Foreign key MATCH names now accept contextual keywords and single-quoted names. 
 
 Index hints after `INDEXED BY` now accept contextual keywords and single-quoted index names. Tests create an index for every dialect keyword, compare bare and quoted hint acceptance with native SQLite, and verify that formatting preserves the selected index in the query plan.
 
-Next, cover column names in `JOIN … USING` in `libs/sqlite/src/codecs/query/join-constraint.ts`. With an `abort` column in both tables, native SQLite accepts `USING (Abort)` and `USING ('abort')`. The query codec rejects both. Compare keyword acceptance with SQLite and verify that formatted multi-column joins return the same matching rows.
+Column names in `JOIN … USING` now accept contextual keywords and single-quoted names. Tests compare bare and single-quoted forms of every dialect keyword with native SQLite and verify that formatted joins match on both columns, including a quoted name containing an apostrophe.
+
+Next, cover common table expression names and their declared columns in `libs/sqlite/src/codecs/query/common-table-expression.ts`. Native SQLite accepts `WITH Abort AS (SELECT 1) SELECT * FROM Abort` and `WITH t('owner''s key') AS (SELECT 1) SELECT * FROM t`. The query codec rejects both. Compare keyword acceptance in each position and preserve the leading modifier boundary. SQLite rejects `WITH Recursive AS (SELECT 1) SELECT 1` but accepts `WITH RECURSIVE Recursive AS (SELECT 1) SELECT 1`.
 
 ## VS Code support
 

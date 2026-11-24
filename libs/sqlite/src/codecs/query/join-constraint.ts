@@ -2,7 +2,7 @@ import { type Codec, prefixed, repeat, taggedUnion, transform } from "@uncutsql/
 import { keyword } from "../../operators/keyword.ts";
 import { parenthesized } from "../../operators/parenthesized.ts";
 import { punctuation } from "../../operators/punctuation.ts";
-import { identifier } from "../identifier.ts";
+import { nameIdentifier } from "../identifier.ts";
 import type { Expression } from "../expression/types.ts";
 import type { JoinConstraint } from "./types.ts";
 
@@ -15,7 +15,7 @@ export const joinConstraint = (expression: Codec<Expression>): Codec<JoinConstra
     Using: transform(
       prefixed(
         keyword("USING"),
-        parenthesized(repeat(identifier, { min: 1, separator: punctuation(",", ", ") })),
+        parenthesized(repeat(nameIdentifier, { min: 1, separator: punctuation(",", ", ") })),
         " ",
       ),
       {

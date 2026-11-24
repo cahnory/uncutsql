@@ -4,6 +4,8 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { Effect, Result } from "effect";
 import { sqlQuery } from "../src/index.ts";
+import { keywords } from "../src/lexer/keywords.ts";
+
 const decode = (sql: string) => Effect.runSync(sqlQuery.decode(sql));
 
 test("joins preserve SQLite outer rows, constraints, order and planner choices", () => {
@@ -47,6 +49,40 @@ test("joins preserve SQLite outer rows, constraints, order and planner choices",
     }
   } finally {
     db.close();
+  }
+});
+
+test("USING column names match SQLite and preserve multi-column join results", () => {
+  using db = new DatabaseSync(":memory:");
+  const names = [...keywords].map((word) => word[0] + word.slice(1).toLowerCase());
+  for (const name of [...names, "owner's key"]) {
+    db.exec(`
+      CREATE TABLE a("${name}", group_id);
+      CREATE TABLE b("${name}", group_id, marker);
+      INSERT INTO a VALUES (1, 2);
+      INSERT INTO b VALUES (1, 1, 'group differs'), (2, 2, 'name differs'), (1, 2, 'both match');
+    `);
+    for (const token of [name, `'${name.replaceAll("'", "''")}'`]) {
+      const source = `SELECT marker FROM a JOIN b USING (group_id, ${token})`;
+      const parsed = Effect.runSync(Effect.result(sqlQuery.decode(source)));
+      let rows;
+      try {
+        rows = db.prepare(source).all();
+      } catch {
+        assert.ok(Result.isFailure(parsed), source);
+        continue;
+      }
+      assert.ok(Result.isSuccess(parsed), source);
+      assert.deepEqual(
+        rows.map((row) => row.marker),
+        ["both match"],
+        source,
+      );
+      const rendered = Effect.runSync(sqlQuery.encode(parsed.success));
+      assert.deepEqual(decode(rendered), parsed.success, source);
+      assert.deepEqual(db.prepare(rendered).all(), rows, source);
+    }
+    db.exec("DROP TABLE a; DROP TABLE b");
   }
 });
 
