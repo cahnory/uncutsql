@@ -285,6 +285,8 @@ export const lowerMigration = (
         .map((operation) => tableKey(operation.table)),
     );
     for (const procedure of procedures.procedures) {
+      if ("view" in procedure || procedure._tag === "ReplaceView")
+        return yield* Effect.fail(new EncodeError({ message: "View lowering is unsupported" }));
       const model = "after" in procedure ? procedure.after : procedure.table;
       const table = { schema: model.identity.catalog!, name: model.identity.name };
       const source = "before" in procedure ? procedure.before.identity : model.identity;

@@ -24,7 +24,7 @@ test("diff ignores formatting, table order, creation guards and table/column ASC
 test("table additions and removals carry definitions and never infer renames", () => {
   const result = diff("CREATE TABLE old (x)", "CREATE TABLE fresh (x)");
   assert.deepEqual(
-    result.changes.map((change) => [change._tag, change.table]),
+    result.changes.map((change) => [change._tag, "table" in change && change.table]),
     [
       ["TableRemoved", { catalog: "main", name: "old" }],
       ["TableAdded", { catalog: "main", name: "fresh" }],

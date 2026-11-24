@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { Effect, Result } from "effect";
 import {
   diffDatabases,
+  decodeDatabaseSchema,
   planDatabaseMigration,
   SchemaDiffError,
   type DatabaseSchema,
@@ -138,4 +139,23 @@ test("logical procedures describe intent without imposing dialect execution stra
   );
   assert.deepEqual(planDatabaseMigration(diff(database(), database())), { procedures: [] });
   assert.equal(JSON.stringify(result).includes("RebuildTable"), false);
+});
+
+test("view changes survive JSON restoration and lower to logical procedures", () => {
+  const view = { identity: { name: "v" }, name: "v", query: { select: 1 } };
+  const first = { tables: [], views: [view] };
+  const second = { tables: [], views: [{ ...view, columns: ["n"] }] };
+  for (const [before, after, tag] of [
+    [database(), first, "CreateView"],
+    [first, second, "ReplaceView"],
+    [second, database(), "DropView"],
+  ] as const) {
+    const restored = Effect.runSync(decodeDatabaseSchema(JSON.parse(JSON.stringify(after))));
+    assert.equal(planDatabaseMigration(diff(before, restored)).procedures[0]?._tag, tag);
+  }
+  assert.throws(
+    () => Effect.runSync(decodeDatabaseSchema({ tables: [], views: [{ ...view, columns: [1] }] })),
+    /columns/,
+  );
+  assert.throws(() => diff(database(), { tables: [], views: [view, view] }), /Duplicate view/);
 });

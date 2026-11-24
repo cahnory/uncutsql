@@ -54,7 +54,7 @@ export const applyGenerated = <E extends Error, R>(
           if (diff.changes.length)
             return yield* Effect.fail(
               new ApplicationError({
-                message: `Database schema differs from the ${stage === "applied" ? "last applied snapshot" : "generation lock"}: ${diff.changes.map((change) => `${change._tag} ${JSON.stringify(change.table)}`).join(", ")}`,
+                message: `Database schema differs from the ${stage === "applied" ? "last applied snapshot" : "generation lock"}: ${diff.changes.map((change) => `${change._tag} ${JSON.stringify("table" in change ? change.table : "view" in change ? change.view.identity : change.after.identity)}`).join(", ")}`,
               }),
             );
         }),

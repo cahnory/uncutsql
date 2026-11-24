@@ -71,7 +71,7 @@ const questions = (diff: DatabaseDiff): readonly MigrationDecision[] =>
         },
       ];
     }
-    if (change._tag === "TableAdded") return [];
+    if (!("changes" in change)) return [];
     const candidates = change.changes
       .filter((item) => item._tag === "ColumnAdded")
       .map((item) => item.column.key);
@@ -296,7 +296,7 @@ export const resolveMigrationDecisions = (
     const answers = reviewed.answers;
     const dropGuards: DropGuard[] = [];
     const changes = reviewed.diff.changes.map((change) => {
-      if (change._tag === "TableRemoved" || change._tag === "TableAdded") {
+      if (!("changes" in change)) {
         if (
           change._tag === "TableRemoved" &&
           answers.get(idFor(change.table))?.resolution.action === "drop_if_empty"

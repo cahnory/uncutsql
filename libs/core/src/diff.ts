@@ -5,6 +5,7 @@ import {
   type DatabaseTable,
   type DatabaseColumn,
   type DatabaseIndex,
+  type DatabaseView,
   type TableIdentity,
   type SchemaValue,
   tableKey,
@@ -78,6 +79,10 @@ export type TableChange =
     }
   | (TableChanges & { readonly _tag: "TableChanged" })
   | (TableChanges & { readonly _tag: "TableRenamed" });
+export type ViewChange =
+  | { readonly _tag: "ViewAdded" | "ViewRemoved"; readonly view: DatabaseView }
+  | { readonly _tag: "ViewChanged"; readonly before: DatabaseView; readonly after: DatabaseView };
+
 export interface DropGuard {
   readonly table: TableIdentity;
   /** Source column name. Omit to require an empty table. */
@@ -85,7 +90,7 @@ export interface DropGuard {
 }
 export interface DatabaseDiff {
   readonly dropGuards?: readonly DropGuard[];
-  readonly changes: readonly TableChange[];
+  readonly changes: readonly (TableChange | ViewChange)[];
 }
 
 export const validateDatabase = (
@@ -137,6 +142,18 @@ export const validateDatabase = (
           message: `Index ${id} requires at least one term`,
         });
     }
+  const views = new Set<string>();
+  for (const view of database.views ?? []) {
+    const id = tableKey(view.identity);
+    if (views.has(id))
+      diagnostics.push({
+        code: "DuplicateView",
+        side,
+        table: view.identity,
+        message: `Duplicate view ${id}`,
+      });
+    views.add(id);
+  }
   return diagnostics;
 };
 const constraintsEqual = (before: readonly Constraint[], after: readonly Constraint[]): boolean =>
@@ -214,7 +231,7 @@ export const diffDatabases = (
     if (diagnostics.length) return yield* Effect.fail(new SchemaDiffError({ diagnostics }));
     const previous = new Map(before.tables.map((table) => [tableKey(table.identity), table]));
     const next = new Map(after.tables.map((table) => [tableKey(table.identity), table]));
-    const changes: TableChange[] = [];
+    const changes: (TableChange | ViewChange)[] = [];
     for (const [key, table] of previous)
       if (!next.has(key))
         changes.push({ _tag: "TableRemoved", table: table.identity, definition: table });
@@ -232,6 +249,19 @@ export const diffDatabases = (
             changes: alterations,
           });
       }
+    }
+    const oldViews = new Map((before.views ?? []).map((view) => [tableKey(view.identity), view]));
+    const newViews = new Map((after.views ?? []).map((view) => [tableKey(view.identity), view]));
+    for (const [key, view] of oldViews)
+      if (!newViews.has(key)) changes.push({ _tag: "ViewRemoved", view });
+    for (const [key, view] of newViews) {
+      const old = oldViews.get(key);
+      if (!old) changes.push({ _tag: "ViewAdded", view });
+      else if (
+        !schemaValueEqual(old.columns ?? null, view.columns ?? null) ||
+        !schemaValueEqual(old.query, view.query)
+      )
+        changes.push({ _tag: "ViewChanged", before: old, after: view });
     }
     return { changes };
   });

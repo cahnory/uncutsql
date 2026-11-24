@@ -45,7 +45,15 @@ export interface DatabaseTable {
   readonly options: { readonly [key: string]: SchemaValue };
 }
 
+export interface DatabaseView {
+  readonly identity: TableIdentity;
+  readonly name: string;
+  readonly columns?: readonly string[];
+  readonly query: SchemaValue;
+}
+
 export interface DatabaseSchema {
+  readonly views?: readonly DatabaseView[];
   readonly tables: readonly DatabaseTable[];
 }
 

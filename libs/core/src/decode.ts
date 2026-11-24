@@ -79,14 +79,25 @@ const index = (value: unknown, path: string) => {
   array(item.terms, `${path}.terms`, semanticValue);
   semanticValue(item.where, `${path}.where`);
 };
+const identity = (value: unknown, path: string) => {
+  const identity = record(value, path);
+  fields(identity, ["catalog", "schema", "name"], path);
+  text(identity.name, `${path}.name`);
+  for (const key of ["catalog", "schema"])
+    if (Object.hasOwn(identity, key)) text(identity[key], `${path}.${key}`);
+};
+const view = (value: unknown, path: string) => {
+  const item = record(value, path);
+  fields(item, ["identity", "name", "columns", "query"], path);
+  identity(item.identity, `${path}.identity`);
+  text(item.name, `${path}.name`);
+  if (Object.hasOwn(item, "columns")) array(item.columns, `${path}.columns`, text);
+  semanticValue(item.query, `${path}.query`);
+};
 const table = (value: unknown, path: string) => {
   const item = record(value, path);
   fields(item, ["identity", "name", "columns", "constraints", "options", "indexes"], path);
-  const identity = record(item.identity, `${path}.identity`);
-  fields(identity, ["catalog", "schema", "name"], `${path}.identity`);
-  text(identity.name, `${path}.identity.name`);
-  for (const key of ["catalog", "schema"])
-    if (Object.hasOwn(identity, key)) text(identity[key], `${path}.identity.${key}`);
+  identity(item.identity, `${path}.identity`);
   text(item.name, `${path}.name`);
   array(item.columns, `${path}.columns`, column);
   if (Object.hasOwn(item, "indexes")) array(item.indexes, `${path}.indexes`, index);
@@ -101,8 +112,9 @@ export const decodeDatabaseSchema = (
   Effect.try({
     try: () => {
       const database = record(value, "$database");
-      fields(database, ["tables"], "$database");
+      fields(database, ["tables", "views"], "$database");
       array(database.tables, "$database.tables", table);
+      if (Object.hasOwn(database, "views")) array(database.views, "$database.views", view);
       return value as DatabaseSchema;
     },
     catch: (cause) =>

@@ -45,6 +45,8 @@ export const resolveProcedures = (
     const next = new Map(after.map((table) => [tableKey(tableIdentity(table)), table]));
     const procedures: NativeProcedure[] = [];
     for (const procedure of migration.procedures) {
+      if ("view" in procedure || procedure._tag === "ReplaceView")
+        return yield* Effect.fail(new EncodeError({ message: "View lowering is unsupported" }));
       const identity = "after" in procedure ? procedure.after.identity : procedure.table.identity;
       const table = { schema: identity.catalog ?? "", name: identity.name };
       const source = procedure._tag === "RenameTable" ? procedure.before.identity : identity;

@@ -179,6 +179,12 @@
           "items": {
             "$ref": "#/definitions/table"
           }
+        },
+        "views": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/view"
+          }
         }
       },
       "required": ["tables"],
@@ -215,7 +221,10 @@
       "additionalProperties": false,
       "if": {
         "properties": {
-          "candidates": { "type": "array", "minItems": 1 }
+          "candidates": {
+            "type": "array",
+            "minItems": 1
+          }
         }
       },
       "then": {
@@ -278,6 +287,28 @@
         }
       },
       "required": ["action"],
+      "additionalProperties": false
+    },
+    "view": {
+      "type": "object",
+      "properties": {
+        "identity": {
+          "$ref": "#/definitions/identity"
+        },
+        "name": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "query": {
+          "$ref": "#/definitions/value"
+        }
+      },
+      "required": ["identity", "name", "query"],
       "additionalProperties": false
     }
   }

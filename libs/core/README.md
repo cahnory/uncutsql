@@ -74,7 +74,7 @@ choices before calling it. The CLI enforces this sequence for migration/generate
 
 ## Roadmap
 
-- [ ] Represent views in serializable database snapshots, validate restored snapshots, and describe view changes in the diff and logical plan.
+- [x] Represent views in serializable database snapshots, validate restored snapshots, and describe view changes in the diff and logical plan.
 - [ ] Extend those contracts to triggers after the view milestone.
 
 See the [workspace roadmap](../../ROADMAP.md) for cross-project sequencing.
