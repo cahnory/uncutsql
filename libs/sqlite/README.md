@@ -6,20 +6,19 @@ Bidirectional SQLite syntax codecs and migration rendering, built on
 ## Progress at a glance
 
 The current focus is **table-schema management**, not a general-purpose SQLite
-query parser. One input statement family is implemented: `CREATE TABLE` with
-explicit column definitions. Expression support is substantial but incomplete.
+query parser. Schema files support table and standalone index declarations. Expression support is substantial but incomplete.
 
-| Area                   | Status               | Current boundary                                                                                      |
-| ---------------------- | -------------------- | ----------------------------------------------------------------------------------------------------- |
-| Lexical syntax         | Supported subset     | Comments, quoted identifiers, literals and operators; contextual keyword fallbacks remain limited     |
-| Expressions            | Partial              | Arithmetic, comparisons, calls, IN/BETWEEN, COLLATE and JSON extraction; remaining forms listed below |
-| CREATE TABLE           | Supported subset     | Columns, constraints, references, generated columns and table options; including AS queries           |
-| Schema files           | Supported subset     | Ordered CREATE TABLE statements, empty statements and optional final semicolon                        |
-| Queries                | Supported subset     | SELECT/VALUES, joins, compounds, subqueries and WITH/recursive CTEs                                   |
-| Other input statements | Not implemented      | Other DDL, DML and administrative statements                                                          |
-| AST ↔ database model   | Supported for tables | Columns, constraints, options and schema identity; no standalone indexes/views/triggers               |
-| Migration output       | Supported subset     | Create, drop, add column and rebuild; this is separate from input parsing                             |
-| Database execution     | Separate package     | `@uncutsql/sqlite-driver` owns native SQLite access                                                   |
+| Area                   | Status             | Current boundary                                                                                      |
+| ---------------------- | ------------------ | ----------------------------------------------------------------------------------------------------- |
+| Lexical syntax         | Supported subset   | Comments, quoted identifiers, literals and operators; contextual keyword fallbacks remain limited     |
+| Expressions            | Partial            | Arithmetic, comparisons, calls, IN/BETWEEN, COLLATE and JSON extraction; remaining forms listed below |
+| CREATE TABLE           | Supported subset   | Columns, constraints, references, generated columns and table options; including AS queries           |
+| Schema files           | Supported subset   | Ordered table and index declarations, empty statements and optional final semicolon                   |
+| Queries                | Supported subset   | SELECT/VALUES, joins, compounds, subqueries and WITH/recursive CTEs                                   |
+| Other input statements | Not implemented    | Other DDL, DML and administrative statements                                                          |
+| AST ↔ database model   | Tables and indexes | Columns, constraints, options and schema identity; views and triggers pending                         |
+| Migration output       | Supported subset   | Create, drop, add column and rebuild; this is separate from input parsing                             |
+| Database execution     | Separate package   | `@uncutsql/sqlite-driver` owns native SQLite access                                                   |
 
 There is no overall syntax percentage yet: a keyword count would overstate
 coverage, and a grammar-production count would give very different weights to
@@ -125,7 +124,7 @@ and generated-column dependencies remain SQLite's responsibility.
 | Family                  | Remaining input syntax                                                 |
 | ----------------------- | ---------------------------------------------------------------------- |
 | Queries                 | Contextual-keyword/legacy-quoting compatibility and further edge cases |
-| Schema DDL              | ALTER TABLE, DROP TABLE, CREATE/DROP INDEX, VIEW and TRIGGER           |
+| Schema DDL              | ALTER TABLE, DROP TABLE, DROP INDEX, VIEW and TRIGGER                  |
 | Data changes            | INSERT/REPLACE, UPSERT, UPDATE, DELETE and RETURNING                   |
 | Transactions            | BEGIN, COMMIT/END, ROLLBACK, SAVEPOINT and RELEASE                     |
 | Database administration | ATTACH/DETACH, PRAGMA, VACUUM, ANALYZE, REINDEX and EXPLAIN            |
@@ -145,7 +144,8 @@ for them. For example, generating ALTER TABLE ADD COLUMN does **not** mean that
 - [x] Report data-loss warnings and reject unsupported copy/dependency plans.
 - [x] Apply explicit column-rename decisions through rebuild copy mappings, including type/constraint changes.
 - [ ] Infer rename candidates by similarity or define custom data transformations.
-- [ ] Model and preserve standalone indexes, views and triggers during rebuilds.
+- [x] Parse and model standalone indexes, including unique, expression and partial indexes. Recreate desired indexes after rebuilds.
+- [ ] Model and preserve views and triggers during rebuilds.
 - [ ] General cross-dialect conversion or arbitrary migration-script parsing.
 
 Core owns comparison and logical planning; this dialect lowers those procedures
@@ -163,10 +163,9 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 
 Suggested order for further work:
 
-1. Add remaining specialized expressions and aggregate/window syntax.
-2. Add standalone indexes and their model/migration support.
-3. Add views/triggers and safe preservation during table rebuilds.
-4. Expand query grammar and the expression forms that depend on it.
+1. Add view declarations, dependency ordering and preservation during rebuilds.
+2. Add trigger declarations, trigger bodies and preservation during rebuilds.
+3. Improve contextual keyword and legacy quoting compatibility.
 
 ```sh
 pnpm --filter @uncutsql/sqlite check

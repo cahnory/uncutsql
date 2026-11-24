@@ -68,9 +68,9 @@ spelling within type declarations. Unsupported statements and expressions fail
 with a filename, line, column and source excerpt. Exit codes are 0 for success,
 1 for input/SQL failures, and 2 for invalid command usage.
 
-Files can contain multiple supported CREATE TABLE statements, separated by
+Files can contain multiple supported CREATE TABLE and CREATE INDEX statements, separated by
 semicolons. The final semicolon is optional; empty statements and empty files
-are accepted. Subqueries and other statement kinds remain unsupported.
+are accepted. See the SQLite package roadmap for supported query forms.
 
 The library exposes the same file grammar through `Sqlite.schema.decode(sql)`,
 `encode(statements)` and `decodeWithSourceMap(sql)`. It returns an ordered
