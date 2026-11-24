@@ -217,3 +217,31 @@ test("CLI diffs, generates and applies view-only revisions from the lock", () =>
     rmSync(cwd, { recursive: true });
   }
 });
+
+test("demo apply preserves view trigger behavior across a rebuild and detects body drift", () => {
+  const cwd = directory();
+  const path = join(cwd, "app.sqlite");
+  try {
+    for (const revision of ["expand", "next"]) {
+      const fixture = fileURLToPath(new URL(`../examples/schema-${revision}.sql`, import.meta.url));
+      const generate = run(cwd, ["generate", fixture]);
+      assert.equal(generate.status, 0, generate.stderr);
+      const apply = run(cwd, ["apply", path]);
+      assert.equal(apply.status, 0, apply.stderr);
+      exec(path, "INSERT INTO users(name) VALUES ('Ada'); DELETE FROM active_users");
+    }
+    assert.deepEqual(rows(path, "SELECT status FROM users ORDER BY id"), [
+      { status: "disabled" },
+      { status: "disabled" },
+    ]);
+    exec(
+      path,
+      "DROP TRIGGER deactivate_user; CREATE TRIGGER deactivate_user INSTEAD OF DELETE ON active_users BEGIN SELECT 1; END",
+    );
+    const drift = run(cwd, ["apply", path]);
+    assert.equal(drift.status, 1);
+    assert.match(drift.stderr, /TriggerChanged.*deactivate_user/);
+  } finally {
+    rmSync(cwd, { recursive: true });
+  }
+});

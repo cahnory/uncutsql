@@ -108,8 +108,13 @@ pnpm demo:cli apply .local/app.sqlite .local/migrations
 Decisions are saved inside the generated migration. Editing the schema or
 advancing the baseline invalidates an old decision file.
 
+The expand, next and renamed schemas declare an INSTEAD OF DELETE trigger on
+`active_users`. Deleting a row through the view sets the user’s status to
+`disabled` and preserves the row in `users`.
+
 ## Roadmap
 
+- [x] Verify a view trigger fires after a rebuild and report a changed live body.
 - [x] Exercise a dependent view across a table rebuild and a column rename.
 
 See the [workspace roadmap](../../ROADMAP.md) for cross-project sequencing.

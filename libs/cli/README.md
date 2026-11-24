@@ -181,6 +181,6 @@ The generated `uncutsql.lock.json` is managed by the CLI and has no editor schem
 - [x] Bound concurrent migration-file reads during apply.
 - [x] Reconcile the decision-review documentation with verified behavior.
 - [x] Verify diff, lock-backed generation, apply and drift checks for schemas containing views.
-- [ ] Repeat the migration workflow for triggers when supported.
+- [x] Generate and apply trigger migrations and report live trigger drift.
 
 See the [workspace roadmap](../../ROADMAP.md) for cross-project sequencing.

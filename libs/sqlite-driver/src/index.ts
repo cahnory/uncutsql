@@ -34,12 +34,16 @@ const inspectDatabase = (database: DatabaseSync) =>
     const objects = yield* native("Inspect schema", () =>
       database
         .prepare(
-          "SELECT type, name, sql FROM main.sqlite_schema WHERE name NOT GLOB 'sqlite_*' AND name <> ? COLLATE NOCASE ORDER BY name",
+          "SELECT type, name, sql FROM main.sqlite_schema WHERE name NOT GLOB 'sqlite_*' AND NOT (type = 'table' AND name = ? COLLATE NOCASE) ORDER BY name",
         )
         .all(historyName),
     );
     const unsupported = objects.find(
-      (object) => object.type !== "table" && object.type !== "index" && object.type !== "view",
+      (object) =>
+        object.type !== "table" &&
+        object.type !== "index" &&
+        object.type !== "view" &&
+        object.type !== "trigger",
     );
     if (unsupported)
       return yield* Effect.fail(
@@ -149,7 +153,7 @@ export const applyMigrations = <V extends Error, RV>(
   Effect.gen(function* () {
     if (
       target === ":memory:" ||
-      [...desired.tables, ...(desired.views ?? [])].some(
+      [...desired.tables, ...(desired.views ?? []), ...(desired.triggers ?? [])].some(
         (table) =>
           table.identity.catalog !== "main" ||
           table.identity.schema !== undefined ||

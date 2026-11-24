@@ -203,8 +203,8 @@ Simple migrations retain the existing foreign-key setting.
 Standalone indexes, including unique, expression and partial indexes, are modeled
 separately from PRIMARY KEY/UNIQUE constraints. Index-only changes use DROP/CREATE
 INDEX; rebuilds recreate all desired indexes after copying the table.
-Runtime checks refuse unrepresented or missing explicit indexes, triggers on rebuilt
-tables, triggers on views scheduled for removal, and undeclared views in affected schemas (including temporary views). The planner drops declared views before a rebuild and recreates them afterward. It checks that desired views resolve before committing. Rebuilds with an inaccessible rowid, no writable copy mapping, retained references to removed
+Runtime checks refuse unrepresented or missing explicit indexes, undeclared triggers on rebuilt
+tables or views scheduled for removal, and undeclared views in affected schemas (including temporary views). The planner drops declared triggers before their views and recreates them after the rebuilt tables and views are in place. It checks that desired views resolve before committing. Rebuilds with an inaccessible rowid, no writable copy mapping, retained references to removed
 tables, and cyclic/self-referential table drops still produce planning errors.
 The baseline must cover all table declarations involved; a live database can still
 have drift or other semantic errors that cause execution to fail.
@@ -292,7 +292,7 @@ pending file commits, the CLI also verifies its schema against the generation lo
 The first executor uses Node's SQLite support and accepts a persistent **main
 SQLite database file only**. It refuses to adopt an existing nonempty database
 without application history. Attached/temporary database migrations, baseline
-adoption, rollback/down migrations and triggers are not
+adoption and rollback/down migrations are not
 yet supported. `__uncutsql_migrations` is reserved for application metadata.
 Migration scripts must use the generated BEGIN/COMMIT envelope; PRAGMAs outside
 it are limited to the emitted foreign-key settings. An initial failed attempt can
@@ -488,7 +488,7 @@ Signs are unary-expression nodes. Blob values contain hexadecimal byte pairs.
 - `IN` and `NOT IN` with expression lists (including empty lists), subqueries,
   table names and table-valued functions. Scalar subqueries and `EXISTS` are also supported.
 - `RAISE(IGNORE)` and `RAISE(ROLLBACK | ABORT | FAIL, expression)`; SQLite enforces
-  trigger context, and the schema parser does not yet accept CREATE TRIGGER.
+  trigger context when an action runs.
 - Simple and searched `CASE` expressions with ordered branches, optional ELSE and nesting.
 - `CAST(expression AS type)` with nested expressions and validated type declarations.
 - Expression-level `COLLATE name`, including nested clauses and quoted/custom

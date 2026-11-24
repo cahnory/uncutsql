@@ -15,3 +15,7 @@ create table posts (
 
 create view active_users as
   select id, name as user_name from users where status = 'active';
+
+create trigger deactivate_user instead of delete on active_users begin
+  update users set status = 'disabled' where id = OLD.id;
+end;
