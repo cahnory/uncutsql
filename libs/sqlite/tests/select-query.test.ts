@@ -66,6 +66,27 @@ test("explicit result and source aliases match SQLite for every dialect keyword"
   }
 });
 
+test("implicit keyword aliases preserve spelling and following clause boundaries", () => {
+  using db = new DatabaseSync(":memory:");
+  db.exec("CREATE TABLE t(v); INSERT INTO t VALUES (1); CREATE INDEX ix ON t(v)");
+  for (const source of [
+    'SELECT v KeY FROM t TEMP WHERE "TEMP".v = 1 ORDER BY "KeY"',
+    'SELECT "Like".v RoW FROM t Like INDEXED BY ix',
+    "SELECT 1 Current_Date, 2 By LIMIT 1 OFFSET 0",
+    "SELECT v LIKE 1 MaTeRiAlIzEd FROM t LEFT JOIN (SELECT 1 AS n) ON n = v",
+    "SELECT sum(v) FILTER (WHERE v > 0) OVER w KeY FROM t WINDOW w AS ()",
+  ]) {
+    const parsed = decode(source);
+    const rendered = Effect.runSync(sqlQuery.encode(parsed));
+    assert.deepEqual(decode(rendered), parsed, source);
+    assert.deepEqual(db.prepare(rendered).all(), db.prepare(source).all(), source);
+  }
+  for (const source of ["SELECT 1 LEFT", "SELECT 1 GLOB", "SELECT * FROM t INDEXED"]) {
+    assert.throws(() => db.prepare(source), source);
+    assert.ok(Result.isFailure(Effect.runSync(Effect.result(sqlQuery.decode(source)))), source);
+  }
+});
+
 test("SELECT rejects incomplete clauses ", () => {
   for (const source of [
     "SELECT",

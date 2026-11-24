@@ -15,7 +15,7 @@ import { identifier } from "../identifier.ts";
 import type { Expression } from "../expression/types.ts";
 import type { ResultColumn } from "./types.ts";
 import { lexeme } from "../../operators/lexeme.ts";
-import { alias } from "./alias.ts";
+import { resultAlias } from "./alias.ts";
 
 // SQLite's derived-table column naming ignores COLLATE and likelihood wrappers
 // around a direct column. Top-level result labels instead use their source text.
@@ -56,7 +56,7 @@ export const resultColumn = (
         decode: (cursor) =>
           Effect.gen(function* () {
             const value = yield* expression.decode(cursor);
-            const name = yield* optional(alias).decode(value.next);
+            const name = yield* optional(resultAlias).decode(value.next);
             const resultName =
               name.value ??
               ((
@@ -79,7 +79,9 @@ export const resultColumn = (
         encode: (value) =>
           Effect.gen(function* () {
             const sql = yield* expression.encode(value.expression);
-            return value.alias === undefined ? sql : `${sql} ${yield* alias.encode(value.alias)}`;
+            return value.alias === undefined
+              ? sql
+              : `${sql} ${yield* resultAlias.encode(value.alias)}`;
           }),
       }),
     ),

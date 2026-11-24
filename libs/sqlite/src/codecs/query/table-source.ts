@@ -16,7 +16,7 @@ import type { Query, TableSource, FromClause } from "./types.ts";
 import { query } from "./query.ts";
 import { indexHint } from "./index-hint.ts";
 import { fromClause } from "./from-clause.ts";
-import { alias } from "./alias.ts";
+import { sourceAlias } from "./alias.ts";
 
 export const tableSource = (expression: Codec<Expression>): Codec<TableSource> => {
   // Defer recursive grammar construction until reading/writing a derived table.
@@ -53,7 +53,7 @@ export const tableSource = (expression: Codec<Expression>): Codec<TableSource> =
     ),
   });
   const syntax = transform(
-    struct({ target, alias: optional(alias), indexHint: optional(indexHint) }, " "),
+    struct({ target, alias: optional(sourceAlias), indexHint: optional(indexHint) }, " "),
     {
       decode: ({ target, alias, indexHint }): TableSource => ({
         ...(target._tag === "Table" ? target.target : target.source),
