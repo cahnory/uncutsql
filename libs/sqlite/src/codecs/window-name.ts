@@ -1,6 +1,6 @@
 import { Effect, Result } from "effect";
 import { type Codec, document, EncodeError, make, read } from "@uncutsql/codec";
-import { explicitAliasKeywords, windowLookaheadKeywords } from "../lexer/keywords.ts";
+import { contextualNameKeywords, windowLookaheadKeywords } from "../lexer/keywords.ts";
 import { nameWithKeywords } from "./identifier.ts";
 import { lexeme } from "../operators/lexeme.ts";
 
@@ -26,9 +26,9 @@ const rawName = (keywords: ReadonlySet<string>): Codec<string> => {
 };
 
 export const windowNameAfterKeyword = rawName(windowLookaheadKeywords);
-export const windowName = rawName(explicitAliasKeywords);
+export const windowName = rawName(contextualNameKeywords);
 
 // At the start of a definition these tokens introduce clauses.
-const baseKeywords = new Set(explicitAliasKeywords);
+const baseKeywords = new Set(contextualNameKeywords);
 for (const word of ["PARTITION", "RANGE", "ROWS", "GROUPS"]) baseKeywords.delete(word);
 export const baseWindowName = rawName(baseKeywords);

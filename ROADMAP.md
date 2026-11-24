@@ -20,7 +20,9 @@ Implicit `WINDOW`, `FILTER` and `OVER` aliases now use token lookahead to preser
 
 Named window declarations, references and base windows now accept contextual keywords and single-quoted names according to their grammar position. Tests compare keyword names with native SQLite and verify that formatting preserves the spelling of each window name.
 
-Next, extend contextual keyword support to relation names in table declarations and query sources, checking qualified names and join boundaries against SQLite.
+Table declarations and query sources now accept contextual keywords in both parts of a qualified relation name. Tests compare every dialect keyword with native SQLite, including names beside a join. A leading `IF` in a declaration starts `IF NOT EXISTS`. After the clause or a schema qualifier, `If` can name the relation.
+
+Next, extend contextual keyword support to table and view column declarations and foreign key targets. Compare bare names with native SQLite where a keyword can also start a column or table constraint.
 
 ## VS Code support
 

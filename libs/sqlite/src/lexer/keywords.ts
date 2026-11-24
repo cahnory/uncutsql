@@ -13,8 +13,8 @@ ROW ROWS SAVEPOINT SELECT SET TABLE TEMP TEMPORARY THEN TIES TO TRANSACTION TRIG
 UNIQUE UPDATE USING VACUUM VALUES VIEW VIRTUAL WHEN WHERE WINDOW WITH WITHOUT`.split(/\s+/),
 );
 
-// SQLite accepts these keyword tokens as unquoted names after AS in SELECT queries.
-export const explicitAliasKeywords = new Set(
+// SQLite accepts these keyword tokens as unquoted relation names and explicit aliases.
+export const contextualNameKeywords = new Set(
   `ABORT ACTION AFTER ALWAYS ANALYZE ASC ATTACH BEFORE BEGIN BY CASCADE CAST COLUMN CONFLICT
 CROSS CURRENT CURRENT_DATE CURRENT_TIME CURRENT_TIMESTAMP DATABASE DEFERRED DESC DETACH DO EACH END
 EXCLUDE EXCLUSIVE EXPLAIN FAIL FILTER FIRST FOLLOWING FOR FULL GENERATED GLOB GROUPS IF IGNORE
@@ -26,6 +26,6 @@ UNBOUNDED VACUUM VIEW VIRTUAL WINDOW WITH WITHOUT`.split(/\s+/),
 
 // SQLite's tokenizer counts string tokens, join modifiers and fallback names in
 // this lookahead. FILTER and INDEXED can be aliases but do not count as names here.
-export const windowLookaheadKeywords = new Set(explicitAliasKeywords);
+export const windowLookaheadKeywords = new Set(contextualNameKeywords);
 windowLookaheadKeywords.delete("FILTER");
 windowLookaheadKeywords.delete("INDEXED");

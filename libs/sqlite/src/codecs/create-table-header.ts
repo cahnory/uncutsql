@@ -1,5 +1,5 @@
 import { type Codec, alternatives, prefixed, struct, transform } from "@uncutsql/codec";
-import { flag } from "../operators/flag.ts";
+import { flag, ifNotExists } from "../operators/flag.ts";
 import { keyword } from "../operators/keyword.ts";
 import { tableReference } from "./table-reference.ts";
 
@@ -20,9 +20,7 @@ export const createRelationHeader = (
         {
           temporary: flag(alternatives(keyword("TEMPORARY"), keyword("TEMP"))),
           kindKeyword: keyword(kind),
-          ifNotExists: flag(
-            prefixed(keyword("IF"), prefixed(keyword("NOT"), keyword("EXISTS"), " "), " "),
-          ),
+          ifNotExists,
           reference: tableReference,
         },
         " ",

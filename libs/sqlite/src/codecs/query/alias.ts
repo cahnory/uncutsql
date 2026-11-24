@@ -1,16 +1,16 @@
 import { Effect } from "effect";
 import { type Read, alternatives, make, parseError, prefixed } from "@uncutsql/codec";
 import { uppercaseAscii } from "../../lexer/characters.ts";
-import { explicitAliasKeywords } from "../../lexer/keywords.ts";
+import { contextualNameKeywords } from "../../lexer/keywords.ts";
 import { keyword } from "../../operators/keyword.ts";
 import { nameWithKeywords } from "../identifier.ts";
 import { startsWindowSyntax } from "../../operators/window-keyword.ts";
 import { skipSqliteTrivia } from "../../operators/trivia.ts";
 
-const explicit = prefixed(keyword("AS"), nameWithKeywords(explicitAliasKeywords), " ");
+const explicit = prefixed(keyword("AS"), nameWithKeywords(contextualNameKeywords), " ");
 
 // Leave join modifiers and index hints for their clause codecs.
-const sourceKeywords = new Set(explicitAliasKeywords);
+const sourceKeywords = new Set(contextualNameKeywords);
 for (const word of "CROSS FULL INDEXED INNER LEFT NATURAL OUTER RIGHT".split(" "))
   sourceKeywords.delete(word);
 

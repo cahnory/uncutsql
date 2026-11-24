@@ -9,9 +9,8 @@ import {
   transform,
 } from "@uncutsql/codec";
 import { keyword } from "../operators/keyword.ts";
-import { keywordSequence } from "../operators/keyword-sequence.ts";
 import { keywordChoice } from "../operators/keyword-choice.ts";
-import { flag } from "../operators/flag.ts";
+import { flag, ifNotExists } from "../operators/flag.ts";
 import { parenthesized } from "../operators/parenthesized.ts";
 import { punctuation } from "../operators/punctuation.ts";
 import { terminator } from "../operators/terminator.ts";
@@ -52,7 +51,7 @@ export const createIndexBodyGrammar: Codec<CreateIndex> = prefixed(
       {
         unique: flag(keyword("UNIQUE")),
         indexKeyword: keyword("INDEX"),
-        ifNotExists: flag(keywordSequence(["IF", "NOT", "EXISTS"])),
+        ifNotExists,
         reference: tableReference,
         table: prefixed(keyword("ON"), nameIdentifier, " "),
         terms: parenthesized(repeat(indexTerm, { min: 1, separator: punctuation(",", ", ") })),

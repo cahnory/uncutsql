@@ -46,8 +46,9 @@ SQLite conformance.** Update this checklist when adding a grammar feature.
 - [x] Implicit result and table aliases accept unambiguous contextual keywords. Pattern operators such as `LIKE` are also valid implicit table aliases.
 - [x] Distinguish implicit `WINDOW`, `FILTER` and `OVER` aliases from window syntax.
 - [x] Contextual and single-quoted window names in declarations, OVER references and base windows.
+- [x] Contextual schema and relation names in table declarations and query sources, including joins.
 - [ ] General contextual keyword fallbacks and SQLite's legacy quote reinterpretation.
-      Reserved-word identifiers require quotes outside supported alias and window-name positions and the built-in `temp` schema before a dot. TRUE/FALSE retain their contextual expression semantics.
+      Column declarations and foreign key targets still require quotes around keywords. TRUE/FALSE retain their contextual expression semantics.
 
 Most remaining work is in grammar and semantics rather than token scanning:
 recognizing a keyword does not imply support for the construct it introduces.

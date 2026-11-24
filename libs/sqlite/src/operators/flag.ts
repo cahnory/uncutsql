@@ -1,4 +1,5 @@
-import { type Codec, optional, transform } from "@uncutsql/codec";
+import { type Codec, optional, prefixed, transform } from "@uncutsql/codec";
+import { keyword } from "./keyword.ts";
 
 export const flag = (syntax: Codec<void>): Codec<boolean> =>
   transform(
@@ -13,3 +14,7 @@ export const flag = (syntax: Codec<void>): Codec<boolean> =>
       encode: (value: boolean) => (value ? (true as const) : undefined),
     },
   );
+
+export const ifNotExists = flag(
+  prefixed(keyword("IF"), prefixed(keyword("NOT"), keyword("EXISTS"), " "), " "),
+);

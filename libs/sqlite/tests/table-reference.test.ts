@@ -3,7 +3,8 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { Effect, Result } from "effect";
 import { document, EncodeError, ParseError, type SourceNode } from "@uncutsql/codec";
-import { createTable, tableReference } from "../src/index.ts";
+import { createIndex, createTable, sqlQuery, tableReference } from "../src/index.ts";
+import { keywords } from "../src/lexer/keywords.ts";
 import { trivia } from "../src/operators/trivia.ts";
 
 const reference = document(tableReference, trivia);
@@ -117,4 +118,63 @@ test("qualified names retain separate identifier source spans", () => {
   );
   const node = nodes.find((n) => n.kind === "TableReference")!;
   assert.equal(source.slice(node.start, node.end), "[main] /*between*/ . `t`");
+});
+
+test("contextual relation names match SQLite in declarations and joined sources", () => {
+  for (const keyword of keywords) {
+    using db = new DatabaseSync(":memory:");
+    const name = keyword[0] + keyword.slice(1).toLowerCase();
+    if (keyword !== "TEMP") db.exec(`ATTACH ':memory:' AS "${name}"`);
+    for (const target of [name, `main.${name}`, `${name}.t`, `IF NOT EXISTS ${name}`]) {
+      const source = `CREATE TABLE ${target} (v)`;
+      const parsed = Effect.runSync(Effect.result(createTable.decode(source)));
+      try {
+        db.prepare(source);
+      } catch {
+        assert.ok(Result.isFailure(parsed), source);
+        continue;
+      }
+      assert.ok(Result.isSuccess(parsed), source);
+      assert.equal(parsed.success.name, target.endsWith(".t") ? "t" : name);
+      const rendered = Effect.runSync(createTable.encode(parsed.success));
+      db.prepare(rendered);
+      assert.deepEqual(Effect.runSync(createTable.decode(rendered)), parsed.success);
+    }
+
+    db.exec(`CREATE TABLE main."${name}" (v); INSERT INTO main."${name}" VALUES (4);
+             CREATE TABLE "${name}".t (v); INSERT INTO "${name}".t VALUES (7)`);
+    for (const source of [
+      `SELECT * FROM ${name}`,
+      `SELECT * FROM main.${name}`,
+      `SELECT * FROM ${name} LEFT JOIN ${name}.t USING (v)`,
+      `SELECT a.v AS lhs, b.v AS rhs FROM ${name}.t a LEFT JOIN ${name} b ON 1`,
+    ]) {
+      const parsed = Effect.runSync(Effect.result(sqlQuery.decode(source)));
+      let native;
+      try {
+        native = db.prepare(source);
+      } catch {
+        assert.ok(Result.isFailure(parsed), source);
+        continue;
+      }
+      assert.ok(Result.isSuccess(parsed), source);
+      const rendered = Effect.runSync(sqlQuery.encode(parsed.success));
+      assert.deepEqual(db.prepare(rendered).all(), native.all(), source);
+      assert.deepEqual(Effect.runSync(sqlQuery.decode(rendered)), parsed.success);
+    }
+  }
+});
+
+test("a leading IF commits an index declaration to IF NOT EXISTS", () => {
+  using db = new DatabaseSync(":memory:");
+  db.exec("CREATE TABLE t(v)");
+  const invalid = "CREATE INDEX If ON t(v)";
+  assert.throws(() => db.prepare(invalid));
+  assert.ok(Result.isFailure(Effect.runSync(Effect.result(createIndex.decode(invalid)))));
+  for (const source of ["CREATE INDEX main.If ON t(v)", "CREATE INDEX IF NOT EXISTS If ON t(v)"]) {
+    const parsed = Effect.runSync(createIndex.decode(source));
+    assert.equal(parsed.name, "If");
+    db.prepare(source);
+    db.prepare(Effect.runSync(createIndex.encode(parsed)));
+  }
 });
