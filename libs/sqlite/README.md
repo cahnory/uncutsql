@@ -48,7 +48,7 @@ SQLite conformance.** Update this checklist when adding a grammar feature.
 - [x] Contextual and single-quoted window names in declarations, OVER references and base windows.
 - [x] Contextual schema and relation names in table declarations and query sources, including joins.
 - [x] Contextual table and view column names, foreign key columns and target tables, and CREATE INDEX target tables.
-- [x] Contextual and single-quoted names for column and table constraints. Trailing labels with no constraint body are accepted and omitted when formatting.
+- [x] Contextual and single-quoted names for column and table constraints. Consecutive labels use the last name, and formatting preserves the effective names of adjacent constraints, including across the final column and first table constraint.
 - [ ] General contextual keyword fallbacks and SQLite's legacy quote reinterpretation.
       TRUE/FALSE retain their contextual expression semantics.
 

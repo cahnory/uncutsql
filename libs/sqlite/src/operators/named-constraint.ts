@@ -1,53 +1,54 @@
 import { Effect, Result } from "effect";
-import { type Codec, commit, make, optional, prefixed, read } from "@uncutsql/codec";
+import { type Codec, commit, make, prefixed, read, repeat } from "@uncutsql/codec";
 import { nameIdentifier } from "../codecs/identifier.ts";
 import { keyword } from "./keyword.ts";
 import { skipSqliteTrivia } from "./trivia.ts";
 
-const label = prefixed(keyword("CONSTRAINT"), nameIdentifier, " ");
+export const constraintLabel = prefixed(keyword("CONSTRAINT"), nameIdentifier, " ");
+const labels = repeat(constraintLabel);
 
 export type Named<A> = A & { readonly name?: string };
 
 export const namedConstraint = <A extends { readonly _tag: string }>(
   body: Codec<A>,
-): Codec<Named<A>> => {
-  const name = optional(label);
-  return make<Named<A>>({
+): Codec<Named<A>> =>
+  make<Named<A>>({
     decode: (cursor) =>
       Effect.gen(function* () {
-        const prefix = yield* name.decode(cursor);
-        const result = yield* (prefix.value === undefined ? body : commit(body)).decode(
-          prefix.next,
-        );
-        const value =
-          prefix.value === undefined ? result.value : { ...result.value, name: prefix.value };
-        return read(value, result.next, [...prefix.nodes, ...result.nodes]);
+        const parsed = yield* labels.decode(cursor);
+        const name = parsed.value.at(-1);
+        const result = yield* (name === undefined ? body : commit(body)).decode(parsed.next);
+        const value = name === undefined ? result.value : { ...result.value, name };
+        return read(value, result.next, [...parsed.nodes, ...result.nodes]);
       }),
     encode: (value) =>
       Effect.gen(function* () {
         const sql = yield* body.encode(value);
         if (value.name === undefined) return sql;
-        return `CONSTRAINT ${yield* nameIdentifier.encode(value.name)} ${sql}`;
+        return `${yield* constraintLabel.encode(value.name)} ${sql}`;
       }),
   });
-};
 
 /** A label at the end of a definition item contributes no constraint to the schema. */
-export const constraintEntry = <A>(constraint: Codec<A>): Codec<A | undefined> =>
-  make<A | undefined>({
+export const constraintEntry = <A extends Named<{ readonly _tag: string }>>(
+  constraint: Codec<A>,
+): Codec<A | string> =>
+  make<A | string>({
     decode: (cursor) =>
       Effect.gen(function* () {
         const parsed = yield* Effect.result(constraint.decode(cursor));
         if (Result.isSuccess(parsed)) return parsed.success;
         if (parsed.failure.committed) {
-          const prefix = yield* Effect.result(label.decode(cursor));
-          if (Result.isSuccess(prefix)) {
+          const prefix = yield* Effect.result(labels.decode(cursor));
+          if (Result.isSuccess(prefix) && prefix.success.value.length > 0) {
             const { next, nodes } = prefix.success;
             const delimiter = next.source[skipSqliteTrivia(next.source, next.offset)];
-            if (delimiter === "," || delimiter === ")") return read(undefined, next, nodes);
+            if (delimiter === "," || delimiter === ")")
+              return read(prefix.success.value.at(-1)!, next, nodes);
           }
         }
         return yield* Effect.fail(parsed.failure);
       }),
-    encode: (value) => (value === undefined ? Effect.succeed("") : constraint.encode(value)),
+    encode: (value) =>
+      typeof value === "string" ? constraintLabel.encode(value) : constraint.encode(value),
   });

@@ -26,9 +26,11 @@ Table and view column declarations, both sides of foreign keys, and the table af
 
 Named column and table constraints now accept contextual and single-quoted names. The dialect tests compare every keyword in both positions with native SQLite and check that formatting preserves the name.
 
-Trailing constraint labels are now accepted in column and table declarations and omitted from canonical SQL. Native SQLite tests check column metadata and the names reported for neighboring CHECK failures. A table-level label still closes the column list.
+Trailing constraint labels are accepted in column and table declarations. Canonical SQL drops labels that have no effect on neighboring constraints. Native SQLite tests check column metadata and the names reported for neighboring CHECK failures. A table-level label still closes the column list.
 
-Next, cover consecutive constraint labels. Native SQLite accepts `x CONSTRAINT a CONSTRAINT b CHECK (x)` and the table-level equivalent, and reports `b` on failure. Check label scope across adjacent constraints and commas before changing how the parser assigns names. The relevant codecs are in `libs/sqlite/src/operators/named-constraint.ts` and `libs/sqlite/src/codecs/table-definition.ts`.
+Consecutive constraint labels now use the last name. Adjacent bodies inherit it, including the first table constraint after the final column. A new column or a comma between table constraints clears the label. The formatter preserves these boundaries, and native SQLite tests exercise each CHECK failure before and after formatting.
+
+Next, cover foreign key MATCH names in `libs/sqlite/src/codecs/foreign-key/action.ts`. Native SQLite accepts both `MATCH 'mode'` and `MATCH abort`, while the current codec uses the strict identifier parser and a dialect test expects single quotes to fail. Compare contextual keywords with SQLite and check that the parsed MATCH option survives formatting. SQLite reports NONE for the match mode in foreign_key_list, so check the AST for the spelling.
 
 ## VS Code support
 

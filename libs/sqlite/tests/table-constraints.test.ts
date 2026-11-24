@@ -213,6 +213,8 @@ test("remaining reference actions and deferral modes round-trip", () => {
 test("trailing labels add no schema constraint and leave neighboring checks intact", () => {
   for (const [body, canonical] of [
     ["a CONSTRAINT c", "a"],
+    ["a CONSTRAINT c CONSTRAINT d", "a"],
+    ["a, CONSTRAINT c CONSTRAINT d, CHECK (a)", "a, CHECK (a)"],
     ["a, CONSTRAINT c", "a"],
     ["a CONSTRAINT c /* trailing */, b", "a, b"],
     ["a CHECK (a) CONSTRAINT c", "a CHECK (a)"],
@@ -241,6 +243,48 @@ test("trailing labels add no schema constraint and leave neighboring checks inta
   }
 });
 
+test("constraint labels persist across adjacent bodies until another label or comma", () => {
+  for (const start of ["x", "x,"]) {
+    const source = `CREATE TABLE t (${start} CONSTRAINT old /* gap */ CONSTRAINT 'first' CHECK (x != 1)
+      CHECK (x != 2) CONSTRAINT second CHECK (x != 3), CHECK (x))`;
+    const ast = decode(source);
+    assert.deepEqual(
+      [...ast.columns[0]!.constraints, ...ast.tableConstraints].map((entry) => entry.name),
+      ["first", "first", "second", start === "x" ? "second" : undefined],
+    );
+    for (const sql of versions(source)) {
+      using db = new DatabaseSync(":memory:");
+      db.exec(sql);
+      for (const [value, name] of [
+        [1, "first"],
+        [2, "first"],
+        [3, "second"],
+        [0, start === "x" ? "second" : "x"],
+      ] as const) {
+        assert.throws(() => db.exec(`INSERT INTO t VALUES (${value})`), {
+          message: `CHECK constraint failed: ${name}`,
+        });
+      }
+    }
+  }
+});
+
+test("the first table check inherits the last column label, including a trailing label", () => {
+  for (const [body, name] of [
+    ["x CONSTRAINT old NOT NULL CONSTRAINT a CONSTRAINT b, CHECK (x)", "b"],
+    ["x CONSTRAINT old NOT NULL, CONSTRAINT a CONSTRAINT b, CHECK (x)", "x"],
+    ["x CONSTRAINT old NOT NULL, y, CHECK (x)", "x"],
+  ] as const) {
+    for (const sql of versions(`CREATE TABLE t (${body})`)) {
+      using db = new DatabaseSync(":memory:");
+      db.exec(sql);
+      assert.throws(() => db.exec("INSERT INTO t (x) VALUES (0)"), {
+        message: `CHECK constraint failed: ${name}`,
+      });
+    }
+  }
+});
+
 for (const source of [
   "CREATE TABLE t (PRIMARY KEY (a))",
   "CREATE TABLE t (a, PRIMARY KEY ())",
@@ -252,6 +296,8 @@ for (const source of [
   "CREATE TABLE t (a, CONSTRAINT c, b)",
   "CREATE TABLE t (a, CONSTRAINT c,)",
   "CREATE TABLE t (a CONSTRAINT c CHECK)",
+  "CREATE TABLE t (a CONSTRAINT c CONSTRAINT)",
+  "CREATE TABLE t (a, CONSTRAINT c CONSTRAINT d, b)",
   "CREATE TABLE t (a CONSTRAINT CHECK (a))",
   "CREATE TABLE t (a REFERENCES)",
   "CREATE TABLE t (a REFERENCES parent())",
