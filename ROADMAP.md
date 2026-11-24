@@ -22,7 +22,9 @@ Named window declarations, references and base windows now accept contextual key
 
 Table declarations and query sources now accept contextual keywords in both parts of a qualified relation name. Tests compare every dialect keyword with native SQLite, including names beside a join. A leading `IF` in a declaration starts `IF NOT EXISTS`. After the clause or a schema qualifier, `If` can name the relation.
 
-Next, extend contextual keyword support to table and view column declarations and foreign key targets. Compare bare names with native SQLite where a keyword can also start a column or table constraint.
+Table and view column declarations, both sides of foreign keys, and the table after `CREATE INDEX … ON` now accept contextual keywords. The dialect tests compare every keyword with native SQLite and verify that formatting preserves schema metadata. The editor tests cover Outline and foreign key navigation for these names.
+
+Next, extend contextual name support to named column and table constraints. Check both positions against native SQLite. SQLite accepts `CREATE TABLE t (x, CONSTRAINT label)` and records only column `x`. The current constraint model requires a body, so handle this case separately from keyword fallback.
 
 ## VS Code support
 

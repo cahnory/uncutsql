@@ -3,11 +3,11 @@ import { type Read, alternatives, make, parseError, prefixed } from "@uncutsql/c
 import { uppercaseAscii } from "../../lexer/characters.ts";
 import { contextualNameKeywords } from "../../lexer/keywords.ts";
 import { keyword } from "../../operators/keyword.ts";
-import { nameWithKeywords } from "../identifier.ts";
+import { nameIdentifier, nameWithKeywords } from "../identifier.ts";
 import { startsWindowSyntax } from "../../operators/window-keyword.ts";
 import { skipSqliteTrivia } from "../../operators/trivia.ts";
 
-const explicit = prefixed(keyword("AS"), nameWithKeywords(contextualNameKeywords), " ");
+const explicit = prefixed(keyword("AS"), nameIdentifier, " ");
 
 // Leave join modifiers and index hints for their clause codecs.
 const sourceKeywords = new Set(contextualNameKeywords);

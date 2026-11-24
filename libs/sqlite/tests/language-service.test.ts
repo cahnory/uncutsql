@@ -41,3 +41,19 @@ test("resolves single-quoted foreign keys to their original declaration spans", 
     assert.equal(source.slice(span!.start, span!.end), token);
   }
 });
+
+test("outlines contextual column names and resolves contextual foreign keys", () => {
+  const source = "CREATE TABLE Plan (Generated PRIMARY KEY); CREATE VIEW v (Window) AS SELECT 1;";
+  const target = analyzeSchema(source);
+  assert.deepEqual(
+    target.symbols.map((symbol) => symbol.children[0]?.name),
+    ["Generated", "Window"],
+  );
+  const sql = "CREATE TABLE child (x REFERENCES plan(generated));";
+  const child = analyzeSchema(sql);
+  for (const name of ["Plan", "Generated"]) {
+    const ref = referenceAt(child, sql.indexOf(name.toLowerCase()))!;
+    const [span] = definitions(ref, target);
+    assert.equal(source.slice(span!.start, span!.end), name);
+  }
+});

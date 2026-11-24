@@ -47,8 +47,9 @@ SQLite conformance.** Update this checklist when adding a grammar feature.
 - [x] Distinguish implicit `WINDOW`, `FILTER` and `OVER` aliases from window syntax.
 - [x] Contextual and single-quoted window names in declarations, OVER references and base windows.
 - [x] Contextual schema and relation names in table declarations and query sources, including joins.
+- [x] Contextual table and view column names, foreign key columns and target tables, and CREATE INDEX target tables.
 - [ ] General contextual keyword fallbacks and SQLite's legacy quote reinterpretation.
-      Column declarations and foreign key targets still require quotes around keywords. TRUE/FALSE retain their contextual expression semantics.
+      Named constraints still require quotes around keywords. TRUE/FALSE retain their contextual expression semantics.
 
 Most remaining work is in grammar and semantics rather than token scanning:
 recognizing a keyword does not imply support for the construct it introduces.

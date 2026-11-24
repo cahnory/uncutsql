@@ -9,7 +9,7 @@ import {
   read,
 } from "@uncutsql/codec";
 import { identifierStart, identifierPart, uppercaseAscii } from "../lexer/characters.ts";
-import { keywords } from "../lexer/keywords.ts";
+import { contextualNameKeywords, keywords } from "../lexer/keywords.ts";
 import { quoted } from "../lexer/quoted.ts";
 import { lexeme } from "../operators/lexeme.ts";
 
@@ -52,6 +52,6 @@ export const identifier = identifierWithKeywords();
 
 /** SQLite also accepts string tokens in grammar positions that require a name. */
 const stringName = lexeme(located("Identifier", quoted("'")));
-export const nameIdentifier = alternatives(identifier, stringName);
 export const nameWithKeywords = (allowed: ReadonlySet<string>) =>
   alternatives(identifierWithKeywords(allowed), stringName);
+export const nameIdentifier = nameWithKeywords(contextualNameKeywords);
