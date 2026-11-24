@@ -56,17 +56,19 @@ export const rebuildCopy = (
       sources.has(source)
     )
       return "Invalid or conflicting column rename mapping";
-    if (!generated(from) && generated(to))
-      return `Cannot copy ${JSON.stringify(from.name)} into generated column ${JSON.stringify(to.name)}`;
     mapping.set(target, source);
     sources.add(source);
   }
-  const columns = after.columns.flatMap((column) => {
+  const columns: { source: string; target: string }[] = [];
+  for (const column of after.columns) {
     const old = previous.get(
       mapping.get(foldIdentifier(column.name)) ?? foldIdentifier(column.name),
     );
-    return old && !generated(column) ? [{ source: old.name, target: column.name }] : [];
-  });
+    if (!old) continue;
+    if (!generated(column)) columns.push({ source: old.name, target: column.name });
+    else if (!generated(old))
+      return `Cannot copy ${JSON.stringify(old.name)} into generated column ${JSON.stringify(column.name)}`;
+  }
   if (hasRowid(before) && hasRowid(after)) {
     const source = rowidAlias(before);
     const target = rowidAlias(after);

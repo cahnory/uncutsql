@@ -214,3 +214,12 @@ test("ambiguous rowid copying fails planning", () => {
   assert.ok(result.failure instanceof MigrationPlanError);
   assert.equal(result.failure.diagnostics[0]!.code, "UnsupportedRowCopy");
 });
+
+test("ordinary values cannot be silently replaced by a same-name generated column", () => {
+  for (const storage of ["VIRTUAL", "STORED"]) {
+    assert.throws(
+      () => migration("CREATE TABLE t(a, b)", `CREATE TABLE t(a, B AS (a + 1) ${storage})`),
+      /Cannot copy.*b.*generated column.*B/,
+    );
+  }
+});
