@@ -6,14 +6,14 @@ Bidirectional SQLite syntax codecs and migration rendering, built on
 ## Progress at a glance
 
 The current focus is **table-schema management**, not a general-purpose SQLite
-query parser. Schema files support table and standalone index declarations. Expression support is substantial but incomplete.
+query parser. Schema files support table, standalone index and view declarations. Expression support is substantial but incomplete.
 
 | Area                   | Status             | Current boundary                                                                                      |
 | ---------------------- | ------------------ | ----------------------------------------------------------------------------------------------------- |
 | Lexical syntax         | Supported subset   | Comments, quoted identifiers, literals and operators; contextual keyword fallbacks remain limited     |
 | Expressions            | Partial            | Arithmetic, comparisons, calls, IN/BETWEEN, COLLATE and JSON extraction; remaining forms listed below |
 | CREATE TABLE           | Supported subset   | Columns, constraints, references, generated columns and table options; including AS queries           |
-| Schema files           | Supported subset   | Ordered table and index declarations, empty statements and optional final semicolon                   |
+| Schema files           | Supported subset   | Ordered table, index and view declarations, empty statements and optional final semicolon             |
 | Queries                | Supported subset   | SELECT/VALUES, joins, compounds, subqueries and WITH/recursive CTEs                                   |
 | Other input statements | Not implemented    | Other DDL, DML and administrative statements                                                          |
 | AST ↔ database model   | Tables and indexes | Columns, constraints, options and schema identity; views and triggers pending                         |
@@ -108,6 +108,7 @@ context restrictions, including prohibiting subqueries.
 - [x] CREATE TABLE AS SELECT/VALUES/WITH, with schema qualification and TEMP/IF NOT EXISTS.
       Parsing/formatting supports these statements; declarative schema comparison rejects them
       because deriving columns and populating data requires query evaluation.
+- [x] CREATE VIEW, including TEMP, IF NOT EXISTS, schema qualification, optional column names and AS queries. Use `createView` for one declaration. Comparison and migration generation reject views until the database model represents them.
 - [ ] CREATE VIRTUAL TABLE and module-specific arguments.
 - [ ] Remaining SQLite grammar edge cases beyond this explicit subset; this is
       not a claim of exhaustive CREATE TABLE compatibility.
@@ -124,7 +125,7 @@ and generated-column dependencies remain SQLite's responsibility.
 | Family                  | Remaining input syntax                                                 |
 | ----------------------- | ---------------------------------------------------------------------- |
 | Queries                 | Contextual-keyword/legacy-quoting compatibility and further edge cases |
-| Schema DDL              | ALTER TABLE, DROP TABLE, DROP INDEX, VIEW and TRIGGER                  |
+| Schema DDL              | ALTER TABLE, DROP TABLE, DROP INDEX, DROP VIEW and TRIGGER             |
 | Data changes            | INSERT/REPLACE, UPSERT, UPDATE, DELETE and RETURNING                   |
 | Transactions            | BEGIN, COMMIT/END, ROLLBACK, SAVEPOINT and RELEASE                     |
 | Database administration | ATTACH/DETACH, PRAGMA, VACUUM, ANALYZE, REINDEX and EXPLAIN            |
@@ -166,11 +167,11 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 1. [x] Reject rebuilds that discard ordinary column values on conversion to generated columns.
 2. [x] Make index snapshot ordering reproducible across locales and declaration orders.
 3. [x] Match SQLite tokenization of a trailing bare block-comment opener.
-4. [ ] Parse and format view declarations, with explicit diagnostics at the migration boundary.
+4. [x] Parse and format view declarations, with explicit diagnostics at the migration boundary.
 
 ### Subsequent milestones
 
-1. Add view declarations, dependency ordering and preservation during rebuilds.
+1. Extend the database model, diff, planner and executor to track views and preserve their dependencies during rebuilds.
 2. Add trigger declarations, trigger bodies and preservation during rebuilds.
 3. Improve contextual keyword and legacy quoting compatibility.
 

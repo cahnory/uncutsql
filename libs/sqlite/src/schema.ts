@@ -15,13 +15,14 @@ import {
   type CreateTableStatement,
 } from "./codecs/create-table-statement.ts";
 import { createIndexBodyGrammar, type CreateIndex } from "./codecs/create-index.ts";
+import { createViewBodyGrammar, type CreateView } from "./codecs/create-view.ts";
 import { keyword } from "./operators/keyword.ts";
 import { keywordChoice } from "./operators/keyword-choice.ts";
 import { terminator } from "./operators/terminator.ts";
 import { trivia } from "./operators/trivia.ts";
 
 /** Supported schema statements, in source order. Extend this union with further DDL. */
-export type Statement = CreateTableStatement | CreateIndex;
+export type Statement = CreateTableStatement | CreateIndex | CreateView;
 
 const statementBody: Codec<Statement> = make<Statement>({
   decode: (cursor) =>
@@ -30,7 +31,8 @@ const statementBody: Codec<Statement> = make<Statement>({
       const modifier = yield* optional(keywordChoice(["UNIQUE", "TEMP", "TEMPORARY"])).decode(
         start.next,
       );
-      const kind = yield* keywordChoice(["TABLE", "INDEX"]).decode(modifier.next);
+      const kind = yield* keywordChoice(["TABLE", "INDEX", "VIEW"]).decode(modifier.next);
+      if (kind.value === "VIEW") return yield* createViewBodyGrammar.decode(cursor);
       return yield* kind.value === "INDEX"
         ? createIndexBodyGrammar.decode(cursor)
         : createTableStatementBodyGrammar.decode(cursor);
@@ -38,7 +40,9 @@ const statementBody: Codec<Statement> = make<Statement>({
   encode: (value) =>
     value._tag === "CreateIndex"
       ? createIndexBodyGrammar.encode(value)
-      : createTableStatementBodyGrammar.encode(value),
+      : value._tag === "CreateView"
+        ? createViewBodyGrammar.encode(value)
+        : createTableStatementBodyGrammar.encode(value),
 });
 
 const statementList = repeat(followedBy(statementBody, terminator), { join: "\n" });

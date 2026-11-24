@@ -30,7 +30,9 @@ export const toDatabaseSchema = (
   side: DiffDiagnostic["side"] = "after",
 ) =>
   Effect.gen(function* () {
-    const unsupported = statements.filter((statement) => statement._tag === "CreateTableAs");
+    const unsupported = statements.filter(
+      (statement) => statement._tag === "CreateTableAs" || statement._tag === "CreateView",
+    );
     if (unsupported.length)
       return yield* Effect.fail(
         new SchemaDiffError({
@@ -42,7 +44,9 @@ export const toDatabaseSchema = (
               name: statement.name,
             },
             message:
-              "CREATE TABLE AS queries require SQLite evaluation to determine columns and populate data; use an explicit table definition for declarative schema comparison",
+              statement._tag === "CreateView"
+                ? "CREATE VIEW is supported for checking and formatting only; view migration planning is unavailable"
+                : "CREATE TABLE AS queries require SQLite evaluation to determine columns and populate data; use an explicit table definition for declarative schema comparison",
           })),
         }),
       );

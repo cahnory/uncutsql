@@ -89,3 +89,4 @@ export {
 } from "./query.ts";
 
 export { createIndex, type CreateIndex, type IndexTerm } from "./codecs/create-index.ts";
+export { createView, type CreateView } from "./codecs/create-view.ts";
