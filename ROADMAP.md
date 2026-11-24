@@ -26,7 +26,9 @@ Table and view column declarations, both sides of foreign keys, and the table af
 
 Named column and table constraints now accept contextual and single-quoted names. The dialect tests compare every keyword in both positions with native SQLite and check that formatting preserves the name.
 
-Next, support trailing constraint labels in column and table declarations. SQLite accepts both `CREATE TABLE t (x CONSTRAINT label)` and `CREATE TABLE t (x, CONSTRAINT label)` and records only column `x`. A table-level label still closes the column list, so a subsequent column must be rejected.
+Trailing constraint labels are now accepted in column and table declarations and omitted from canonical SQL. Native SQLite tests check column metadata and the names reported for neighboring CHECK failures. A table-level label still closes the column list.
+
+Next, cover consecutive constraint labels. Native SQLite accepts `x CONSTRAINT a CONSTRAINT b CHECK (x)` and the table-level equivalent, and reports `b` on failure. Check label scope across adjacent constraints and commas before changing how the parser assigns names. The relevant codecs are in `libs/sqlite/src/operators/named-constraint.ts` and `libs/sqlite/src/codecs/table-definition.ts`.
 
 ## VS Code support
 

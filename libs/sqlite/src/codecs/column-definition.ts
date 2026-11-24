@@ -1,6 +1,7 @@
-import { type Value, located, optional, repeat, struct } from "@uncutsql/codec";
+import { type Value, located, optional, repeat, struct, transform } from "@uncutsql/codec";
 import { lexeme } from "../operators/lexeme.ts";
-import { columnConstraint } from "./column-constraint.ts";
+import { constraintEntry } from "../operators/named-constraint.ts";
+import { columnConstraint, type ColumnConstraint } from "./column-constraint.ts";
 import { nameIdentifier } from "./identifier.ts";
 import { columnType } from "./type-name.ts";
 
@@ -11,7 +12,10 @@ export const columnDefinition = lexeme(
       {
         name: nameIdentifier,
         typeName: optional(columnType),
-        constraints: repeat(columnConstraint, { join: " " }),
+        constraints: transform(repeat(constraintEntry(columnConstraint), { join: " " }), {
+          decode: (entries) => entries.filter((entry) => entry !== undefined),
+          encode: (constraints: readonly ColumnConstraint[]) => constraints,
+        }),
       },
       " ",
     ),

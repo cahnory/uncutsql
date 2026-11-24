@@ -1,14 +1,17 @@
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { type Codec, commit, make, optional, prefixed, read } from "@uncutsql/codec";
 import { nameIdentifier } from "../codecs/identifier.ts";
 import { keyword } from "./keyword.ts";
+import { skipSqliteTrivia } from "./trivia.ts";
+
+const label = prefixed(keyword("CONSTRAINT"), nameIdentifier, " ");
 
 export type Named<A> = A & { readonly name?: string };
 
 export const namedConstraint = <A extends { readonly _tag: string }>(
   body: Codec<A>,
 ): Codec<Named<A>> => {
-  const name = optional(prefixed(keyword("CONSTRAINT"), nameIdentifier, " "));
+  const name = optional(label);
   return make<Named<A>>({
     decode: (cursor) =>
       Effect.gen(function* () {
@@ -28,3 +31,23 @@ export const namedConstraint = <A extends { readonly _tag: string }>(
       }),
   });
 };
+
+/** A label at the end of a definition item contributes no constraint to the schema. */
+export const constraintEntry = <A>(constraint: Codec<A>): Codec<A | undefined> =>
+  make<A | undefined>({
+    decode: (cursor) =>
+      Effect.gen(function* () {
+        const parsed = yield* Effect.result(constraint.decode(cursor));
+        if (Result.isSuccess(parsed)) return parsed.success;
+        if (parsed.failure.committed) {
+          const prefix = yield* Effect.result(label.decode(cursor));
+          if (Result.isSuccess(prefix)) {
+            const { next, nodes } = prefix.success;
+            const delimiter = next.source[skipSqliteTrivia(next.source, next.offset)];
+            if (delimiter === "," || delimiter === ")") return read(undefined, next, nodes);
+          }
+        }
+        return yield* Effect.fail(parsed.failure);
+      }),
+    encode: (value) => (value === undefined ? Effect.succeed("") : constraint.encode(value)),
+  });

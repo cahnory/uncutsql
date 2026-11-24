@@ -9,6 +9,7 @@ import {
   read,
   transform,
 } from "@uncutsql/codec";
+import { constraintEntry } from "../operators/named-constraint.ts";
 import { punctuation } from "../operators/punctuation.ts";
 import { parenthesized } from "../operators/parenthesized.ts";
 import { columnDefinition, type ColumnDefinition } from "./column-definition.ts";
@@ -18,6 +19,8 @@ export interface TableDefinition {
   readonly columns: readonly ColumnDefinition[];
   readonly tableConstraints: readonly TableConstraint[];
 }
+
+const tableConstraintEntry = constraintEntry(tableConstraint);
 
 const comma = optional(
   transform(punctuation(",", ", "), {
@@ -36,16 +39,19 @@ export const tableDefinition: Codec<TableDefinition> = parenthesized(
         const tableConstraints: TableConstraint[] = [];
         const nodes: SourceNode[] = [...first.nodes];
         let next = first.next;
+        let seenTableConstraint = false;
         while (true) {
           const separator = yield* comma.decode(next);
           if (separator.value === undefined) break;
-          const constraint = yield* Effect.result(tableConstraint.decode(separator.next));
+          const constraint = yield* Effect.result(tableConstraintEntry.decode(separator.next));
           if (Result.isSuccess(constraint)) {
-            tableConstraints.push(constraint.success.value);
+            seenTableConstraint = true;
+            if (constraint.success.value !== undefined)
+              tableConstraints.push(constraint.success.value);
             nodes.push(...constraint.success.nodes);
             next = constraint.success.next;
           } else {
-            if (constraint.failure.committed || tableConstraints.length > 0) {
+            if (constraint.failure.committed || seenTableConstraint) {
               return yield* Effect.fail(constraint.failure);
             }
             const column = yield* commit(columnDefinition).decode(separator.next);

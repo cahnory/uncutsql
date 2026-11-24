@@ -210,6 +210,37 @@ test("remaining reference actions and deferral modes round-trip", () => {
   }
 });
 
+test("trailing labels add no schema constraint and leave neighboring checks intact", () => {
+  for (const [body, canonical] of [
+    ["a CONSTRAINT c", "a"],
+    ["a, CONSTRAINT c", "a"],
+    ["a CONSTRAINT c /* trailing */, b", "a, b"],
+    ["a CHECK (a) CONSTRAINT c", "a CHECK (a)"],
+    ["a, CONSTRAINT 'unused', CONSTRAINT live CHECK (a)", "a, CONSTRAINT live CHECK (a)"],
+    ["a, CONSTRAINT unused, CHECK (a)", "a, CHECK (a)"],
+  ] as const) {
+    const source = `CREATE TABLE t (${body})`;
+    assert.deepEqual(decode(source), decode(`CREATE TABLE t (${canonical})`));
+    for (const sql of versions(source)) {
+      using db = new DatabaseSync(":memory:");
+      db.exec(sql);
+      assert.deepEqual(
+        db
+          .prepare("SELECT name FROM pragma_table_info('t')")
+          .all()
+          .map((row) => row.name),
+        body.endsWith(", b") ? ["a", "b"] : ["a"],
+      );
+      if (body.includes("CHECK")) {
+        assert.throws(
+          () => db.exec("INSERT INTO t VALUES (0)"),
+          body.includes("live") ? /CHECK constraint failed: live$/ : /CHECK constraint failed: a$/,
+        );
+      }
+    }
+  }
+});
+
 for (const source of [
   "CREATE TABLE t (PRIMARY KEY (a))",
   "CREATE TABLE t (a, PRIMARY KEY ())",
@@ -218,8 +249,9 @@ for (const source of [
   "CREATE TABLE t (a, UNIQUE (a), b)",
   "CREATE TABLE t (a, UNIQUE (a),)",
   "CREATE TABLE t (a, UNIQUE (a) ON CONFLICT)",
-  "CREATE TABLE t (a, CONSTRAINT c)",
-  "CREATE TABLE t (a CONSTRAINT c)",
+  "CREATE TABLE t (a, CONSTRAINT c, b)",
+  "CREATE TABLE t (a, CONSTRAINT c,)",
+  "CREATE TABLE t (a CONSTRAINT c CHECK)",
   "CREATE TABLE t (a CONSTRAINT CHECK (a))",
   "CREATE TABLE t (a REFERENCES)",
   "CREATE TABLE t (a REFERENCES parent())",
