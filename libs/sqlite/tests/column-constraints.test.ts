@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import { EncodeError, ParseError } from "@uncutsql/codec";
-import { type CreateTable, createTable } from "../src/index.ts";
+
+import { createTable } from "../src/index.ts";
+import type { CreateTable } from "../src/index.ts";
 
 const failure = <A, E>(effect: Effect.Effect<A, E>): E => {
   const result = Effect.runSync(Effect.result(effect));
@@ -108,27 +112,27 @@ for (const source of [
 test("generated default expressions reject column references through EncodeError", () => {
   const ast: CreateTable = {
     _tag: "CreateTable",
-    tableConstraints: [],
-    name: "t",
-    temporary: false,
-    ifNotExists: false,
     columns: [
       {
-        name: "a",
-        typeName: undefined,
         constraints: [
           {
             _tag: "Default",
             value: {
               _tag: "BinaryExpression",
-              operator: "+",
               left: { _tag: "NumericLiteral", value: "1" },
+              operator: "+",
               right: { _tag: "ColumnReference", parts: ["other"] },
             },
           },
         ],
+        name: "a",
+        typeName: undefined,
       },
     ],
+    ifNotExists: false,
+    name: "t",
+    tableConstraints: [],
+    temporary: false,
   };
   assert.ok(failure(createTable.encode(ast)) instanceof EncodeError);
 });

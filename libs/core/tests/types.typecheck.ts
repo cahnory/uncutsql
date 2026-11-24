@@ -1,10 +1,7 @@
 import type { Effect } from "effect";
-import {
-  diffDatabases,
-  decodeDatabaseSchema,
-  type SchemaModelError,
-  type SchemaDiffError,
-} from "../src/index.ts";
+
+import type { decodeDatabaseSchema, diffDatabases } from "../src/index.ts";
+import type { SchemaDiffError, SchemaModelError } from "../src/index.ts";
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Assert<A extends true> = A;

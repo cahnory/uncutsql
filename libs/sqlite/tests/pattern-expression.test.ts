@@ -1,16 +1,14 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
-import { ParseError, EncodeError } from "@uncutsql/codec";
-import {
-  sqlExpression,
-  createTable,
-  schema,
-  encodeMigration,
-  type Expression,
-} from "../src/index.ts";
+
+import { EncodeError, ParseError } from "@uncutsql/codec";
+
 import { defaultColumnConstraint } from "../src/codecs/column-constraint/default-column-constraint.ts";
+import { createTable, encodeMigration, schema, sqlExpression } from "../src/index.ts";
+import type { Expression } from "../src/index.ts";
 import { planMigration } from "./workflow.ts";
 const decode = (sql: string) => Effect.runSync(sqlExpression.decode(sql));
 const encode = (value: Expression) => Effect.runSync(sqlExpression.encode(value));

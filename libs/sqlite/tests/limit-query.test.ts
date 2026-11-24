@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import { sqlQuery } from "../src/index.ts";
 const decode = (sql: string) => Effect.runSync(sqlQuery.decode(sql));
 
@@ -33,12 +35,13 @@ test("LIMIT preserves count/offset semantics and anonymous binding order", () =>
     }
     const comma = decode("SELECT 1 LIMIT 2, 3");
     assert.equal(comma._tag, "SelectQuery");
-    if (comma._tag === "SelectQuery")
+    if (comma._tag === "SelectQuery") {
       assert.deepEqual(comma.limit, {
         _tag: "CommaLimit",
-        offset: { _tag: "NumericLiteral", value: "2" },
         count: { _tag: "NumericLiteral", value: "3" },
+        offset: { _tag: "NumericLiteral", value: "2" },
       });
+    }
   } finally {
     db.close();
   }

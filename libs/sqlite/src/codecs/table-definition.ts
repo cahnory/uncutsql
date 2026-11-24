@@ -1,19 +1,15 @@
 import { Effect, Result } from "effect";
-import {
-  type Codec,
-  type SourceNode,
-  EncodeError,
-  commit,
-  make,
-  optional,
-  read,
-  transform,
-} from "@uncutsql/codec";
+
+import { commit, EncodeError, make, optional, read, transform } from "@uncutsql/codec";
+import type { Codec, SourceNode } from "@uncutsql/codec";
+
 import { constraintEntry, constraintLabel } from "../operators/named-constraint.ts";
-import { punctuation } from "../operators/punctuation.ts";
 import { parenthesized } from "../operators/parenthesized.ts";
-import { columnDefinition, columnWithLabel, type ColumnDefinition } from "./column-definition.ts";
-import { tableConstraint, type TableConstraint } from "./table-constraint.ts";
+import { punctuation } from "../operators/punctuation.ts";
+import { columnDefinition, columnWithLabel } from "./column-definition.ts";
+import type { ColumnDefinition } from "./column-definition.ts";
+import { tableConstraint } from "./table-constraint.ts";
+import type { TableConstraint } from "./table-constraint.ts";
 
 export interface TableDefinition {
   readonly columns: readonly ColumnDefinition[];
@@ -43,10 +39,14 @@ export const tableDefinition: Codec<TableDefinition> = parenthesized(
         let seenTableConstraint = false;
         while (true) {
           const separator = yield* comma.decode(next);
-          if (separator.value === undefined && !seenTableConstraint) break;
+          if (separator.value === undefined && !seenTableConstraint) {
+            break;
+          }
           const constraint = yield* Effect.result(tableConstraintEntry.decode(separator.next));
           if (Result.isSuccess(constraint)) {
-            if (seenTableConstraint && separator.value !== undefined) label = undefined;
+            if (seenTableConstraint && separator.value !== undefined) {
+              label = undefined;
+            }
             seenTableConstraint = true;
             const value = constraint.success.value;
             if (typeof value === "string") {
@@ -58,7 +58,9 @@ export const tableDefinition: Codec<TableDefinition> = parenthesized(
             nodes.push(...constraint.success.nodes);
             next = constraint.success.next;
           } else {
-            if (separator.value === undefined && !constraint.failure.committed) break;
+            if (separator.value === undefined && !constraint.failure.committed) {
+              break;
+            }
             if (constraint.failure.committed || seenTableConstraint) {
               return yield* Effect.fail(constraint.failure);
             }

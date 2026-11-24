@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
-import { sqlExpression, createTable, type InTableExpression } from "../src/index.ts";
+
+import { createTable, sqlExpression } from "../src/index.ts";
+import type { InTableExpression } from "../src/index.ts";
 const decode = (source: string) => Effect.runSync(sqlExpression.decode(source));
 
 test("IN table and table-function targets retain native SQLite semantics", () => {
@@ -49,7 +52,7 @@ test("table targets distinguish tables from functions with empty arguments", () 
   const table = decode('1 IN "a.b"') as InTableExpression;
   assert.deepEqual(table.target, { table: { name: "a.b" } });
   const call = decode("1 IN main.f()") as InTableExpression;
-  assert.deepEqual(call.target, { table: { schema: "main", name: "f" }, arguments: [] });
+  assert.deepEqual(call.target, { arguments: [], table: { name: "f", schema: "main" } });
   for (const source of ["1 IN f()", "1 IN f(1, 2 + 3)", "1 IN main.f(?)", "1 IN ()"]) {
     const value = decode(source);
     assert.deepEqual(decode(Effect.runSync(sqlExpression.encode(value))), value);

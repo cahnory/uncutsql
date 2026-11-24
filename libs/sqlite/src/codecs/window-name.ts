@@ -1,8 +1,11 @@
 import { Effect, Result } from "effect";
-import { type Codec, document, EncodeError, make, read } from "@uncutsql/codec";
+
+import { document, EncodeError, make, read } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { contextualNameKeywords, windowLookaheadKeywords } from "../lexer/keywords.ts";
-import { nameWithKeywords } from "./identifier.ts";
 import { lexeme } from "../operators/lexeme.ts";
+import { nameWithKeywords } from "./identifier.ts";
 
 /** SQLite compares window-name tokens without removing identifier quotes. */
 const rawName = (keywords: ReadonlySet<string>): Codec<string> => {
@@ -30,5 +33,7 @@ export const windowName = rawName(contextualNameKeywords);
 
 // At the start of a definition these tokens introduce clauses.
 const baseKeywords = new Set(contextualNameKeywords);
-for (const word of ["PARTITION", "RANGE", "ROWS", "GROUPS"]) baseKeywords.delete(word);
+for (const word of ["PARTITION", "RANGE", "ROWS", "GROUPS"]) {
+  baseKeywords.delete(word);
+}
 export const baseWindowName = rawName(baseKeywords);

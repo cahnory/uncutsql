@@ -1,20 +1,19 @@
 import { Effect } from "effect";
+
 import { EncodeError } from "@uncutsql/codec";
-import {
-  SchemaDiffError,
-  validateDatabase,
-  type Constraint,
-  type DatabaseSchema,
-  type DiffDiagnostic,
-} from "@uncutsql/core";
-import { createTable, type CreateTable } from "./create-table.ts";
-import { semanticValue, syntaxValue } from "./schema-value.ts";
-import { createIndex, type CreateIndex } from "./codecs/create-index.ts";
+import { SchemaDiffError, validateDatabase } from "@uncutsql/core";
+import type { Constraint, DatabaseSchema, DiffDiagnostic } from "@uncutsql/core";
+
+import { createIndex } from "./codecs/create-index.ts";
+import type { CreateIndex } from "./codecs/create-index.ts";
+import { createTable } from "./create-table.ts";
+import type { CreateTable } from "./create-table.ts";
 import { indexesFromDatabaseSchema, indexModel } from "./indexes.ts";
+import { foldIdentifier, tableIdentity } from "./schema-identity.ts";
+import { semanticValue, syntaxValue } from "./schema-value.ts";
+import type { Statement } from "./schema.ts";
 import { triggerModel, triggersFromDatabaseSchema } from "./triggers.ts";
 import { viewsFromDatabaseSchema } from "./views.ts";
-import type { Statement } from "./schema.ts";
-import { foldIdentifier, tableIdentity } from "./schema-identity.ts";
 
 /** Structural semantic values, not source text or a parser AST. */
 const constraint = (value: { readonly _tag: string }): Constraint => ({
@@ -33,21 +32,22 @@ export const toDatabaseSchema = (
 ) =>
   Effect.gen(function* () {
     const unsupported = statements.filter((statement) => statement._tag === "CreateTableAs");
-    if (unsupported.length)
+    if (unsupported.length) {
       return yield* Effect.fail(
         new SchemaDiffError({
           diagnostics: unsupported.map((statement) => ({
             code: "UnsupportedSchemaStatement",
+            message:
+              "CREATE TABLE AS queries require SQLite evaluation to determine columns and populate data; use an explicit table definition for declarative schema comparison",
             side,
             table: {
               catalog: statement.schema ?? (statement.temporary ? "temp" : "main"),
               name: statement.name,
             },
-            message:
-              "CREATE TABLE AS queries require SQLite evaluation to determine columns and populate data; use an explicit table definition for declarative schema comparison",
           })),
         }),
       );
+    }
     const tables = statements.filter((statement) => statement._tag === "CreateTable");
     const views = statements.filter((statement) => statement._tag === "CreateView");
     const indexGroups = new Map<string, CreateIndex[]>();
@@ -64,39 +64,43 @@ export const toDatabaseSchema = (
         const preferred =
           candidates.find((table) => tableIdentity(table).schema === "temp") ??
           candidates.find((table) => tableIdentity(table).schema === "main");
-        if (preferred) candidates = [preferred];
+        if (preferred) {
+          candidates = [preferred];
+        }
       }
       if (candidates.length !== 1) {
         indexDiagnostics.push({
           code: "IndexTableResolution",
+          message: `Index ${index.name} requires an unambiguous declared table; qualify the index schema if needed`,
           side,
           table: { catalog: index.schema ?? "main", name: index.table },
-          message: `Index ${index.name} requires an unambiguous declared table; qualify the index schema if needed`,
         });
         continue;
       }
       const table = candidates[0]!;
       const objectKey = JSON.stringify({
-        schema: tableIdentity(table).schema,
         name: foldIdentifier(index.name),
+        schema: tableIdentity(table).schema,
       });
-      if (objectNames.has(objectKey))
+      if (objectNames.has(objectKey)) {
         indexDiagnostics.push({
           code: "DuplicateIndex",
+          message: `Index ${index.name} conflicts with another table or index in its schema`,
           side,
           table: { catalog: tableIdentity(table).schema, name: table.name },
-          message: `Index ${index.name} conflicts with another table or index in its schema`,
         });
+      }
       objectNames.add(objectKey);
       const key = JSON.stringify(tableIdentity(table));
       indexGroups.set(key, [...(indexGroups.get(key) ?? []), index]);
-      if (/^sqlite_/i.test(index.name))
+      if (/^sqlite_/i.test(index.name)) {
         indexDiagnostics.push({
           code: "ReservedIndexName",
+          message: "Standalone index names cannot use SQLite's reserved sqlite_ prefix",
           side,
           table: { catalog: tableIdentity(table).schema, name: table.name },
-          message: "Standalone index names cannot use SQLite's reserved sqlite_ prefix",
         });
+      }
     }
     const relations: DatabaseSchema = {
       ...(views.length
@@ -123,10 +127,10 @@ export const toDatabaseSchema = (
               }
             : {}),
           columns: table.columns.map((column) => ({
+            constraints: column.constraints.map(constraint),
+            dataType: column.typeName ?? null,
             key: foldIdentifier(column.name),
             name: column.name,
-            dataType: column.typeName ?? null,
-            constraints: column.constraints.map(constraint),
           })),
           constraints: table.tableConstraints.map(constraint),
           options: Object.fromEntries(
@@ -145,15 +149,18 @@ export const toDatabaseSchema = (
     const diagnostics = [...indexDiagnostics, ...validateDatabase(database, side)];
     for (const table of [...tables, ...views]) {
       const id = tableIdentity(table);
-      if (table.temporary && id.schema !== "temp")
+      if (table.temporary && id.schema !== "temp") {
         diagnostics.push({
           code: "InvalidTemporarySchema",
+          message: `TEMP declaration ${JSON.stringify([id.schema, id.name])} must use the temp schema`,
           side,
           table: { catalog: id.schema, name: id.name },
-          message: `TEMP declaration ${JSON.stringify([id.schema, id.name])} must use the temp schema`,
         });
+      }
     }
-    if (diagnostics.length) return yield* Effect.fail(new SchemaDiffError({ diagnostics }));
+    if (diagnostics.length) {
+      return yield* Effect.fail(new SchemaDiffError({ diagnostics }));
+    }
     yield* Effect.forEach(tables, createTable.encode, { discard: true });
     yield* Effect.forEach(
       statements.filter((statement) => statement._tag === "CreateIndex"),
@@ -178,7 +185,9 @@ export const tablesFromDatabaseSchema = (
 ): Effect.Effect<readonly CreateTable[], SchemaDiffError | EncodeError> =>
   Effect.gen(function* () {
     const diagnostics = validateDatabase(database, "after");
-    if (diagnostics.length) return yield* Effect.fail(new SchemaDiffError({ diagnostics }));
+    if (diagnostics.length) {
+      return yield* Effect.fail(new SchemaDiffError({ diagnostics }));
+    }
     return yield* Effect.forEach(database.tables, (table) =>
       Effect.gen(function* () {
         if (
@@ -205,16 +214,16 @@ export const tablesFromDatabaseSchema = (
         // adapter boundary. Encoding and reparsing validate it before returning any AST.
         const ast = {
           _tag: "CreateTable",
-          name: table.name,
-          schema: table.identity.catalog,
-          temporary: false,
-          ifNotExists: false,
           columns: table.columns.map((column) => ({
+            constraints: column.constraints.map(syntaxConstraint),
             name: column.name,
             typeName: column.dataType === null ? undefined : column.dataType,
-            constraints: column.constraints.map(syntaxConstraint),
           })),
+          ifNotExists: false,
+          name: table.name,
+          schema: table.identity.catalog,
           tableConstraints: table.constraints.map(syntaxConstraint),
+          temporary: false,
           ...(Object.keys(table.options).length
             ? {
                 options: (["STRICT", "WITHOUT ROWID"] as const).filter(

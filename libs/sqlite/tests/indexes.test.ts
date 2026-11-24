@@ -1,22 +1,25 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import {
+  decodeDatabaseSchema,
   diffDatabases,
   planDatabaseMigration,
-  decodeDatabaseSchema,
   prepareMigrationDecisions,
   resolveMigrationDecisions,
 } from "@uncutsql/core";
+
 import {
   createIndex,
-  schema,
-  toDatabaseSchema,
+  encodeMigration,
   fromDatabaseSchema,
   lowerMigration,
-  encodeMigration,
+  schema,
+  toDatabaseSchema,
 } from "../src/index.ts";
 const model = (sql: string) => Effect.runSync(Effect.flatMap(schema.decode(sql), toDatabaseSchema));
 const plan = (before: string, after: string) =>
@@ -63,8 +66,9 @@ test("index codecs and models preserve ordinary, unique, expression and partial 
     "CREATE INDEX i ON t(name NULLS LAST)",
     "CREATE TEMP INDEX i ON t(name)",
     "CREATE INDEX i ON t(name) WHERE",
-  ])
+  ]) {
     assert.ok(Result.isFailure(Effect.runSync(Effect.result(createIndex.decode(source)))), source);
+  }
 });
 
 test("index-only changes avoid table rebuilds and reordering indexes is not a change", () => {
@@ -217,29 +221,31 @@ test("schema-level index names, target tables and temporary table resolution are
     table + "CREATE INDEX t ON t(name)",
     table + "CREATE INDEX i ON t(name); CREATE INDEX I ON t(active)",
     table + "CREATE INDEX sqlite_bad ON t(name)",
-  ])
+  ]) {
     assert.ok(
       Result.isFailure(
         Effect.runSync(Effect.result(Effect.flatMap(schema.decode(source), toDatabaseSchema))),
       ),
       source,
     );
+  }
   const resolved = model("CREATE TABLE t(a); CREATE TEMP TABLE t(a); CREATE INDEX i ON t(a)");
   assert.equal(resolved.tables.find((t) => t.identity.catalog === "temp")!.indexes!.length, 1);
   assert.equal(resolved.tables.find((t) => t.identity.catalog === "main")!.indexes, undefined);
 });
 
 const root = new URL("./fixtures/previous/indexed-column/", import.meta.url);
-for (const category of readdirSync(root))
-  for (const file of readdirSync(new URL(category + "/", root)))
+for (const category of readdirSync(root)) {
+  for (const file of readdirSync(new URL(category + "/", root))) {
     test(`previous indexed-column/${category}/${file}`, () => {
       const source = readFileSync(new URL(category + "/" + file, root), "utf8");
       const result = Effect.runSync(
         Effect.result(createIndex.decode(`CREATE INDEX i ON t(${source})`)),
       );
       // The old edge fixture uses reserved SELECT as an unquoted collation name.
-      if (category === "invalid" || category === "edge") assert.ok(Result.isFailure(result));
-      else {
+      if (category === "invalid" || category === "edge") {
+        assert.ok(Result.isFailure(result));
+      } else {
         assert.ok(Result.isSuccess(result));
         assert.deepEqual(
           Effect.runSync(createIndex.decode(Effect.runSync(createIndex.encode(result.success)))),
@@ -247,6 +253,8 @@ for (const category of readdirSync(root))
         );
       }
     });
+  }
+}
 
 test("distinct Unicode index names have stable snapshot order", () => {
   const composed = 'CREATE INDEX "é" ON t(name);';

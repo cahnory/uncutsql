@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
-import { document, EncodeError, ParseError, type SourceNode } from "@uncutsql/codec";
+
+import { document, EncodeError, ParseError } from "@uncutsql/codec";
+import type { SourceNode } from "@uncutsql/codec";
+
 import { createIndex, createTable, sqlQuery, tableReference } from "../src/index.ts";
 import { keywords } from "../src/lexer/keywords.ts";
 import { trivia } from "../src/operators/trivia.ts";
@@ -10,12 +14,12 @@ import { trivia } from "../src/operators/trivia.ts";
 const reference = document(tableReference, trivia);
 
 for (const [source, expected] of [
-  ["main.t", { schema: "main", name: "t" }],
-  ["TeMp /* schema */ .t", { schema: "TeMp", name: "t" }],
+  ["main.t", { name: "t", schema: "main" }],
+  ["TeMp /* schema */ .t", { name: "t", schema: "TeMp" }],
   ['"main.t"', { name: "main.t" }],
-  ['"a.b"."c.d"', { schema: "a.b", name: "c.d" }],
-  ["main /* comment */ . -- comment\n t", { schema: "main", name: "t" }],
-  ['"".""', { schema: "", name: "" }],
+  ['"a.b"."c.d"', { name: "c.d", schema: "a.b" }],
+  ["main /* comment */ . -- comment\n t", { name: "t", schema: "main" }],
+  ['"".""', { name: "", schema: "" }],
 ] as const) {
   test(`table reference retains identifier boundaries: ${source}`, () => {
     assert.deepEqual(Effect.runSync(reference.decode(source)), expected);
@@ -67,7 +71,9 @@ for (const source of [
           `ATTACH ':memory:' AS aux; ATTACH ':memory:' AS "a.b"; CREATE TABLE t (sentinel); CREATE TEMP TABLE t (sentinel);`,
         );
         // Leave the target schema empty, while keeping namesakes in other schemas.
-        if (ast.schema === "main" || ast.schema === "temp") db.exec(`DROP TABLE ${ast.schema}.t`);
+        if (ast.schema === "main" || ast.schema === "temp") {
+          db.exec(`DROP TABLE ${ast.schema}.t`);
+        }
         db.exec(sql);
         const schema = '"' + ast.schema!.replaceAll('"', '""') + '"';
         const name = '"' + ast.name.replaceAll('"', '""') + '"';
@@ -124,7 +130,9 @@ test("contextual relation names match SQLite in declarations and joined sources"
   for (const keyword of keywords) {
     using db = new DatabaseSync(":memory:");
     const name = keyword[0] + keyword.slice(1).toLowerCase();
-    if (keyword !== "TEMP") db.exec(`ATTACH ':memory:' AS "${name}"`);
+    if (keyword !== "TEMP") {
+      db.exec(`ATTACH ':memory:' AS "${name}"`);
+    }
     for (const target of [name, `main.${name}`, `${name}.t`, `IF NOT EXISTS ${name}`]) {
       const source = `CREATE TABLE ${target} (v)`;
       const parsed = Effect.runSync(Effect.result(createTable.decode(source)));

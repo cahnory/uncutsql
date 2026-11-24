@@ -1,23 +1,25 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
-import { schemaFiles } from "./schema-files.ts";
+
 import { Data, Effect, Result } from "effect";
-import { SchemaDiffError, MigrationDecisionError, prepareMigrationDecisions } from "@uncutsql/core";
+
 import { ParseError } from "@uncutsql/codec";
+import { MigrationDecisionError, prepareMigrationDecisions, SchemaDiffError } from "@uncutsql/core";
 import type { Dialect, MigrationDecisions } from "@uncutsql/core";
-import { parseOptions, resolveConfig, UsageError } from "./config.ts";
-import { loadDialect, loadDriver } from "./plugins.ts";
+
 import { applyGenerated } from "./apply.ts";
-import { migrationFilename } from "./lock.ts";
+import { parseOptions, resolveConfig, UsageError } from "./config.ts";
+import { decisionDocument, writeDecisionFile } from "./decision-file.ts";
 import {
   compareGeneratedSchema,
   generateMigration,
   prepareGeneratedDecisions,
 } from "./generate.ts";
-import { compareSchemas, renderMigration } from "./workflow.ts";
-
 import { promptDecisions } from "./interactive.ts";
-import { decisionDocument, writeDecisionFile } from "./decision-file.ts";
+import { migrationFilename } from "./lock.ts";
+import { loadDialect, loadDriver } from "./plugins.ts";
+import { schemaFiles } from "./schema-files.ts";
+import { compareSchemas, renderMigration } from "./workflow.ts";
 
 const help = `Usage: pnpm cli <check|format> [file|-]
        pnpm cli diff [schema-path|-]
@@ -61,22 +63,27 @@ const readFileWith = (dialect: Dialect<unknown, unknown>, filename: string) =>
   Effect.gen(function* () {
     const label = filename === "-" ? "<stdin>" : filename;
     const source = yield* Effect.tryPromise({
-      try: async () => {
-        if (filename !== "-") return await readFile(filename, "utf8");
-        process.stdin.setEncoding("utf8");
-        let input = "";
-        for await (const chunk of process.stdin) input += chunk;
-        return input;
-      },
       catch: (cause) =>
         new InputError({
           message: `${label}: ${cause instanceof Error ? cause.message : String(cause)}`,
         }),
+      try: async () => {
+        if (filename !== "-") {
+          return await readFile(filename, "utf8");
+        }
+        process.stdin.setEncoding("utf8");
+        let input = "";
+        for await (const chunk of process.stdin) {
+          input += chunk;
+        }
+        return input;
+      },
     });
     return yield* dialect.parse(source).pipe(
       Effect.mapError((error) => {
-        if (!(error instanceof ParseError))
+        if (!(error instanceof ParseError)) {
           return new InputError({ message: `${label}: ${error.message}` });
+        }
         const line = source.split(/\r\n|\r|\n/)[error.line - 1] ?? "";
         const prefix = line.slice(0, error.column - 1).replace(/[^\t]/g, " ");
         return new InputError({
@@ -88,20 +95,26 @@ const readFileWith = (dialect: Dialect<unknown, unknown>, filename: string) =>
 
 const readSchemaWith = (dialect: Dialect<unknown, unknown>, path: string) =>
   Effect.gen(function* () {
-    if (path === "-") return yield* readFileWith(dialect, path);
+    if (path === "-") {
+      return yield* readFileWith(dialect, path);
+    }
     const files = yield* Effect.tryPromise({
-      try: () => schemaFiles(path),
       catch: (cause) => new InputError({ message: `${path}: ${String(cause)}` }),
+      try: () => schemaFiles(path),
     });
-    if (!files.length)
+    if (!files.length) {
       return yield* Effect.fail(
         new InputError({ message: `${path}: no *.uncut.sql schema files found` }),
       );
-    if (files.length === 1) return yield* readFileWith(dialect, files[0]!);
-    if (!dialect.combineSchemas)
+    }
+    if (files.length === 1) {
+      return yield* readFileWith(dialect, files[0]!);
+    }
+    if (!dialect.combineSchemas) {
       return yield* Effect.fail(
         new InputError({ message: `Dialect ${dialect.name} does not support multipart schemas` }),
       );
+    }
     const parts = yield* Effect.forEach(files, (file) => readFileWith(dialect, file));
     return dialect.combineSchemas(parts);
   });
@@ -109,42 +122,48 @@ const readSchemaWith = (dialect: Dialect<unknown, unknown>, path: string) =>
 const validPath = (value: string) => !value.startsWith("-") || value === "-";
 const program = Effect.gen(function* () {
   const { args, options } = yield* parseOptions(process.argv.slice(2));
-  if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) return help;
+  if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) {
+    return help;
+  }
   const [command = "diff", filename = "-"] = args;
   if (
     !["check", "format", "diff", "decisions", "migration", "generate", "apply"].includes(
       command ?? "",
     )
-  )
+  ) {
     return yield* Effect.fail(
       new UsageError({
         message: "Expected check, format, diff, decisions, migration, generate or apply.",
       }),
     );
+  }
   if (
     (options.decisions || options.decisionWriter) &&
     command !== "migration" &&
     command !== "generate"
-  )
+  ) {
     return yield* Effect.fail(
       new UsageError({ message: "Decision-file options apply only to migration and generate." }),
     );
-  if (options.decisions && options.decisionWriter)
+  }
+  if (options.decisions && options.decisionWriter) {
     return yield* Effect.fail(
       new UsageError({
         message: `Choose only one of --decisions and ${options.decisionWriter.flag}.`,
       }),
     );
+  }
   if (
     options.interactive &&
     (command !== "generate" || options.decisions || options.decisionWriter)
-  )
+  ) {
     return yield* Effect.fail(
       new UsageError({
         message:
           "--interactive requires generate and cannot be combined with decision-file options.",
       }),
     );
+  }
   const selected = yield* resolveConfig(options, process.cwd());
   const decisions: unknown =
     (command !== "generate" && command !== "migration") ||
@@ -152,6 +171,10 @@ const program = Effect.gen(function* () {
     options.interactive
       ? undefined
       : yield* Effect.tryPromise({
+          catch: (cause) =>
+            new InputError({
+              message: `Cannot read decisions ${selected.decisions}: ${String(cause)}`,
+            }),
           try: async () => {
             let source: string;
             try {
@@ -163,26 +186,23 @@ const program = Effect.gen(function* () {
                 typeof cause === "object" &&
                 "code" in cause &&
                 cause.code === "ENOENT"
-              )
+              ) {
                 return undefined;
+              }
               throw cause;
             }
             return JSON.parse(source);
           },
-          catch: (cause) =>
-            new InputError({
-              message: `Cannot read decisions ${selected.decisions}: ${String(cause)}`,
-            }),
         });
   const writeDecisions = (document: MigrationDecisions) => {
     const writer = options.decisionWriter!;
     const path = writer.path ?? selected.decisions;
     return Effect.tryPromise({
-      try: () => writeDecisionFile(document, path, writer.flag),
       catch: (cause) =>
         new InputError({
           message: `${path}: ${cause instanceof Error ? cause.message : String(cause)}`,
         }),
+      try: () => writeDecisionFile(document, path, writer.flag),
     });
   };
   // Apply only needs the driver's dialect ID; it does not load a SQL parser.
@@ -224,16 +244,18 @@ const program = Effect.gen(function* () {
       );
     }
     const path = args[1] ?? selected.schema!;
-    if (options.interactive && path === "-")
+    if (options.interactive && path === "-") {
       return yield* Effect.fail(
         new UsageError({
           message:
             "--interactive reads answers from stdin. Supply the schema as a file or directory.",
         }),
       );
+    }
     const ast = yield* readSchema(path);
-    if (options.decisionWriter)
+    if (options.decisionWriter) {
       return yield* writeDecisions(yield* prepareGeneratedDecisions(dialect!, ast, directory));
+    }
     const reviewed = options.interactive
       ? yield* promptDecisions(
           yield* prepareGeneratedDecisions(dialect!, ast, directory),
@@ -247,12 +269,13 @@ const program = Effect.gen(function* () {
   }
   if (command === "diff" && args.length <= 2) {
     const path = args[1] ?? selected.schema;
-    if (!path || !validPath(path))
+    if (!path || !validPath(path)) {
       return yield* Effect.fail(
         new UsageError({
           message: "diff requires a schema path or config.schema (or --schema).",
         }),
       );
+    }
     const comparison = yield* compareGeneratedSchema(
       dialect!,
       yield* readSchema(path),
@@ -288,7 +311,7 @@ const program = Effect.gen(function* () {
           }),
       ),
     );
-    if (command === "decisions")
+    if (command === "decisions") {
       return (
         JSON.stringify(
           yield* prepareMigrationDecisions(comparison.before, comparison.after).pipe(
@@ -298,11 +321,13 @@ const program = Effect.gen(function* () {
           2,
         ) + "\n"
       );
+    }
     if (command === "migration") {
-      if (options.decisionWriter)
+      if (options.decisionWriter) {
         return yield* writeDecisions(
           yield* prepareMigrationDecisions(comparison.before, comparison.after),
         );
+      }
       const sql = yield* renderMigration(dialect!, comparison, decisions);
       return sql.length ? `${sql}\n` : "";
     }
@@ -317,7 +342,9 @@ const program = Effect.gen(function* () {
     );
   }
   const statements = yield* readSchema(args[1] ?? selected.schema ?? "-");
-  if (command === "check") return "Valid supported SQL syntax.\n";
+  if (command === "check") {
+    return "Valid supported SQL syntax.\n";
+  }
   const sql = yield* dialect!.format(statements);
   return sql.length === 0 ? "" : `${sql}\n`;
 });
@@ -329,9 +356,10 @@ if (Result.isSuccess(result)) {
 } else {
   const error = result.failure;
   process.stderr.write(`${error.message}\n${error instanceof UsageError ? `\n${help}` : ""}`);
-  if (error instanceof MigrationDecisionError)
+  if (error instanceof MigrationDecisionError) {
     process.stderr.write(
       "Use --write-decisions [new-file] to start a review or --merge-decisions [file] to refresh an existing review. No migration was generated.\n",
     );
+  }
   process.exitCode = error instanceof UsageError ? 2 : 1;
 }

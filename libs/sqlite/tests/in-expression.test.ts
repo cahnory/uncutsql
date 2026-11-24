@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import { EncodeError, ParseError } from "@uncutsql/codec";
-import { createTable, sqlExpression, type Expression, type InExpression } from "../src/index.ts";
-import { binaryPrecedence } from "../src/codecs/expression/operators.ts";
+
 import { defaultColumnConstraint } from "../src/codecs/column-constraint/default-column-constraint.ts";
+import { binaryPrecedence } from "../src/codecs/expression/operators.ts";
+import { createTable, sqlExpression } from "../src/index.ts";
+import type { Expression, InExpression } from "../src/index.ts";
 
 const decode = (sql: string) => Effect.runSync(sqlExpression.decode(sql));
 const encode = (value: Expression) => Effect.runSync(sqlExpression.encode(value));
@@ -57,20 +61,20 @@ test("IN retains its semantic tree and nested source spans", () => {
   const parsed = Effect.runSync(sqlExpression.decodeWithSourceMap(source));
   assert.deepEqual(parsed.value, {
     _tag: "InExpression",
-    operator: "NOT IN",
     operand: { _tag: "ColumnReference", parts: ["a"] },
+    operator: "NOT IN",
     values: [
       { _tag: "NumericLiteral", value: "1" },
       {
         _tag: "FunctionCall",
-        name: "abs",
         arguments: [
           {
             _tag: "UnaryExpression",
-            operator: "-",
             operand: { _tag: "NumericLiteral", value: "2" },
+            operator: "-",
           },
         ],
+        name: "abs",
       },
     ],
   });
@@ -129,8 +133,8 @@ test("IN default validation visits the operand and every list item", () => {
 test("IN encoder rejects invalid operators and list payloads", () => {
   const value: InExpression = {
     _tag: "InExpression",
-    operator: "IN",
     operand: decode("1"),
+    operator: "IN",
     values: [],
   };
   for (const invalid of [

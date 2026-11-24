@@ -1,5 +1,8 @@
 import { Effect } from "effect";
-import { type Codec, EncodeError, located, make, parseError, read } from "@uncutsql/codec";
+
+import { EncodeError, located, make, parseError, read } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { lexeme } from "../operators/lexeme.ts";
 
 export interface BlobLiteral {
@@ -17,7 +20,9 @@ export const blobLiteral: Codec<BlobLiteral> = lexeme(
           return Effect.fail(parseError(cursor, "blob literal"));
         }
         let end = cursor.offset + 2;
-        while (/[0-9a-fA-F]/.test(cursor.source[end] ?? "")) end++;
+        while (/[0-9a-fA-F]/.test(cursor.source[end] ?? "")) {
+          end++;
+        }
         const value = cursor.source.slice(cursor.offset + 2, end);
         if (cursor.source[end] !== "'" || value.length % 2 !== 0) {
           return Effect.fail(

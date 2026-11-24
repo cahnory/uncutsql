@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import { sqlQuery } from "../src/index.ts";
 import { keywords } from "../src/lexer/keywords.ts";
 const decode = (source: string) => Effect.runSync(sqlQuery.decode(source));
@@ -171,15 +173,17 @@ test("SELECT rejects incomplete clauses ", () => {
 });
 
 const root = new URL("./fixtures/previous/select-core/", import.meta.url);
-for (const category of readdirSync(root))
+for (const category of readdirSync(root)) {
   for (const file of readdirSync(new URL(category + "/", root))) {
     test(`previous select-core/${category}/${file}`, () => {
       const source = readFileSync(new URL(category + "/" + file, root), "utf8");
       const result = Effect.runSync(Effect.result(sqlQuery.decode(source)));
-      if (category === "invalid") assert.ok(Result.isFailure(result));
-      else {
+      if (category === "invalid") {
+        assert.ok(Result.isFailure(result));
+      } else {
         assert.ok(Result.isSuccess(result));
         assert.deepEqual(decode(Effect.runSync(sqlQuery.encode(result.success))), result.success);
       }
     });
   }
+}

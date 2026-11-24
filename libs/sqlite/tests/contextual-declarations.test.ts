@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import { createTable, schema } from "../src/index.ts";
 import { keywords } from "../src/lexer/keywords.ts";
 

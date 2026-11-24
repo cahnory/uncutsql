@@ -1,5 +1,4 @@
 import {
-  type Value,
   document,
   followedBy,
   optional,
@@ -9,10 +8,12 @@ import {
   taggedUnion,
   transform,
 } from "@uncutsql/codec";
+import type { Value } from "@uncutsql/codec";
+
 import { flag } from "../operators/flag.ts";
-import { keyword } from "../operators/keyword.ts";
 import { keywordChoice } from "../operators/keyword-choice.ts";
 import { keywordSequence } from "../operators/keyword-sequence.ts";
+import { keyword } from "../operators/keyword.ts";
 import { punctuation } from "../operators/punctuation.ts";
 import { terminator } from "../operators/terminator.ts";
 import { trivia } from "../operators/trivia.ts";
@@ -59,7 +60,7 @@ const syntax = struct(
     actions: prefixed(
       keyword("BEGIN"),
       followedBy(
-        repeat(followedBy(triggerAction, punctuation(";")), { min: 1, join: " " }),
+        repeat(followedBy(triggerAction, punctuation(";")), { join: " ", min: 1 }),
         keyword("END"),
         " ",
       ),

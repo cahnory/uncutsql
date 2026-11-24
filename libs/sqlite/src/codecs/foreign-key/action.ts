@@ -1,7 +1,9 @@
-import { type Value, prefixed, taggedUnion, transform } from "@uncutsql/codec";
-import { keyword } from "../../operators/keyword.ts";
+import { prefixed, taggedUnion, transform } from "@uncutsql/codec";
+import type { Value } from "@uncutsql/codec";
+
 import { keywordChoice } from "../../operators/keyword-choice.ts";
 import { keywordSequence } from "../../operators/keyword-sequence.ts";
+import { keyword } from "../../operators/keyword.ts";
 import { nameIdentifier } from "../identifier.ts";
 
 const action = keywordChoice(["SET NULL", "SET DEFAULT", "CASCADE", "RESTRICT", "NO ACTION"]);

@@ -1,4 +1,6 @@
-import { type Codec, located, repeat, transform } from "@uncutsql/codec";
+import { located, repeat, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { parenthesized } from "../../operators/parenthesized.ts";
 import { punctuation } from "../../operators/punctuation.ts";
 import type { Expression, RowValueExpression } from "./types.ts";

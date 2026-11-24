@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import { sqlQuery } from "../src/index.ts";
 import { keywords } from "../src/lexer/keywords.ts";
 
@@ -107,8 +109,9 @@ test("invalid join types and contradictory natural constraints fail", () => {
   }
   const ast = decode("SELECT * FROM a NATURAL JOIN b");
   assert.equal(ast._tag, "SelectQuery");
-  if (ast._tag !== "SelectQuery" || ast.from === undefined || !("_tag" in ast.from))
+  if (ast._tag !== "SelectQuery" || ast.from === undefined || !("_tag" in ast.from)) {
     throw new Error("Expected joined source");
+  }
   assert.ok(
     Result.isFailure(
       Effect.runSync(
@@ -131,7 +134,7 @@ test("invalid join types and contradictory natural constraints fail", () => {
 
 for (const group of ["join-clause", "join-constraint", "join-operator", "table-or-subquery"]) {
   const root = new URL(`./fixtures/previous/${group}/`, import.meta.url);
-  for (const category of readdirSync(root))
+  for (const category of readdirSync(root)) {
     for (const file of readdirSync(new URL(category + "/", root))) {
       test(`previous ${group}/${category}/${file}`, () => {
         const source = readFileSync(new URL(category + "/" + file, root), "utf8");
@@ -142,11 +145,13 @@ for (const group of ["join-clause", "join-constraint", "join-operator", "table-o
               ? `SELECT * FROM a JOIN b ${source}`
               : `SELECT * FROM ${source}`;
         const result = Effect.runSync(Effect.result(sqlQuery.decode(sql)));
-        if (category === "invalid") assert.ok(Result.isFailure(result), source);
-        else {
+        if (category === "invalid") {
+          assert.ok(Result.isFailure(result), source);
+        } else {
           assert.ok(Result.isSuccess(result), source);
           assert.deepEqual(decode(Effect.runSync(sqlQuery.encode(result.success))), result.success);
         }
       });
     }
+  }
 }

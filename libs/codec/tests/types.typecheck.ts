@@ -1,10 +1,8 @@
 // Compile-only regression checks: no casts should hide lost error/service inference.
 import { Context, Data, Effect } from "effect";
+
+import type { EncodeError, ParseError, tuple } from "../src/index.ts";
 import {
-  type Codec,
-  type Value,
-  EncodeError,
-  ParseError,
   document,
   literal,
   make,
@@ -15,8 +13,8 @@ import {
   taggedUnion,
   transform,
   transformEffect,
-  tuple,
 } from "../src/index.ts";
+import type { Codec, Value } from "../src/index.ts";
 
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;

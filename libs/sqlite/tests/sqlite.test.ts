@@ -1,17 +1,21 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
-import { type SourceNode, EncodeError, ParseError, document } from "@uncutsql/codec";
+
+import { document, EncodeError, ParseError } from "@uncutsql/codec";
+import type { SourceNode } from "@uncutsql/codec";
+
 import {
-  type CreateTable,
   createTable,
   identifier,
   literalValue,
-  stringLiteral,
   sqlExpression,
+  stringLiteral,
 } from "../src/index.ts";
+import type { CreateTable } from "../src/index.ts";
 import { trivia } from "../src/tokens.ts";
 
 const failure = <A, E>(effect: Effect.Effect<A, E>): E => {
@@ -103,22 +107,22 @@ test("canonical output normalizes casing, aliases, quoting, comments and termina
 test("generated ASTs need no source metadata and defaults execute correctly in SQLite", () => {
   const ast: CreateTable = {
     _tag: "CreateTable",
-    tableConstraints: [],
-    name: "people",
-    temporary: false,
-    ifNotExists: false,
     columns: [
-      { name: "id", typeName: "INTEGER", constraints: [{ _tag: "PrimaryKey" }] },
+      { constraints: [{ _tag: "PrimaryKey" }], name: "id", typeName: "INTEGER" },
       {
-        name: "name",
-        typeName: "TEXT",
         constraints: [
           { _tag: "Default", value: { _tag: "StringLiteral", value: "O'Brien" } },
           { _tag: "NotNull" },
           { _tag: "Unique" },
         ],
+        name: "name",
+        typeName: "TEXT",
       },
     ],
+    ifNotExists: false,
+    name: "people",
+    tableConstraints: [],
+    temporary: false,
   };
   const sql = Effect.runSync(createTable.encode(ast));
   assert.deepEqual(Effect.runSync(createTable.decode(sql)), ast);
@@ -210,11 +214,11 @@ test("NULL and strings use the same bidirectional union", () => {
 test("encoding rejects empty column lists and unrepresentable NUL characters", () => {
   const empty: CreateTable = {
     _tag: "CreateTable",
-    tableConstraints: [],
-    name: "t",
-    temporary: false,
-    ifNotExists: false,
     columns: [],
+    ifNotExists: false,
+    name: "t",
+    tableConstraints: [],
+    temporary: false,
   };
   assert.ok(failure(createTable.encode(empty)) instanceof EncodeError);
   assert.ok(failure(identifier.encode("a\0b")) instanceof EncodeError);
@@ -259,8 +263,11 @@ test("statement-leading whitespace matches the native SQLite tokenizer", () => {
     for (const prefix of ["\v", "\f", " \v", "\ufeff", "-- comment\n\v", "/* comment */\v"]) {
       const sql = prefix + "CREATE TABLE IF NOT EXISTS t(a)";
       const parsed = Effect.runSync(Effect.result(createTable.decode(sql)));
-      if (Result.isSuccess(parsed)) assert.doesNotThrow(() => db.exec(sql));
-      else assert.throws(() => db.exec(sql));
+      if (Result.isSuccess(parsed)) {
+        assert.doesNotThrow(() => db.exec(sql));
+      } else {
+        assert.throws(() => db.exec(sql));
+      }
     }
   } finally {
     db.close();

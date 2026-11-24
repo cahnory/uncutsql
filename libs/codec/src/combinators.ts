@@ -1,20 +1,15 @@
 import { Effect, Result } from "effect";
+
 import {
-  type AnyCodec,
-  type Codec,
-  type Errors,
-  type Read,
-  type Requirements,
-  type SourceNode,
-  type Value,
-  EncodeError,
-  ParseError,
   commitError,
+  EncodeError,
   make,
   mergeErrors,
+  ParseError,
   parseError,
   read,
 } from "./model.ts";
+import type { AnyCodec, Codec, Errors, Read, Requirements, SourceNode, Value } from "./model.ts";
 
 export const literal = <const S extends string>(text: S): Codec<S> =>
   make({
@@ -136,9 +131,13 @@ export const alternatives = <A, E, R>(
         let best: ParseError | undefined;
         for (const codec of [first, ...rest]) {
           const result = yield* Effect.result(codec.decode(cursor));
-          if (Result.isSuccess(result)) return result.success;
+          if (Result.isSuccess(result)) {
+            return result.success;
+          }
           const error = result.failure;
-          if (!(error instanceof ParseError) || error.committed) return yield* Effect.fail(error);
+          if (!(error instanceof ParseError) || error.committed) {
+            return yield* Effect.fail(error);
+          }
           best = best ? mergeErrors(best, error) : error;
         }
         return yield* Effect.fail(best!);
@@ -156,7 +155,9 @@ export const taggedUnion = <const C extends Readonly<Record<string, AnyCodec>>>(
   type E = Errors<C[keyof C]>;
   type R = Requirements<C[keyof C]>;
   const codecs = Object.values(members) as Codec<A, E, R>[];
-  if (codecs.length === 0) throw new TypeError("taggedUnion requires at least one member");
+  if (codecs.length === 0) {
+    throw new TypeError("taggedUnion requires at least one member");
+  }
   return make({
     decode: alternatives(codecs[0]!, ...codecs.slice(1)).decode,
     encode: (value) => {
@@ -174,9 +175,13 @@ export const optional = <A, E, R>(codec: Codec<A, E, R>): Codec<A | undefined, E
     decode: (cursor) =>
       Effect.gen(function* () {
         const result = yield* Effect.result(codec.decode(cursor));
-        if (Result.isSuccess(result)) return result.success;
+        if (Result.isSuccess(result)) {
+          return result.success;
+        }
         const error = result.failure;
-        if (!(error instanceof ParseError) || error.committed) return yield* Effect.fail(error);
+        if (!(error instanceof ParseError) || error.committed) {
+          return yield* Effect.fail(error);
+        }
         return read(undefined, cursor);
       }),
     encode: (value) => (value === undefined ? Effect.succeed("") : codec.encode(value)),
@@ -205,7 +210,7 @@ export const followedBy = <A, E, R, E2, R2>(
 /** A separator commits to another item: a trailing comma is always an error. */
 export function repeat<A, E, R>(
   item: Codec<A, E, R>,
-  options?: { readonly min?: number; readonly join?: string },
+  options?: { readonly join?: string; readonly min?: number },
 ): Codec<readonly A[], E, R>;
 export function repeat<A, E, R, E2, R2>(
   item: Codec<A, E, R>,
@@ -214,14 +219,15 @@ export function repeat<A, E, R, E2, R2>(
 export function repeat<A, E, R, E2, R2>(
   item: Codec<A, E, R>,
   options: {
+    readonly join?: string;
     readonly min?: number;
     readonly separator?: Codec<void, E2, R2>;
-    readonly join?: string;
   } = {},
 ): Codec<readonly A[], E | E2, R | R2> {
   const min = options.min ?? 0;
-  if (!Number.isSafeInteger(min) || min < 0)
+  if (!Number.isSafeInteger(min) || min < 0) {
     throw new TypeError("min must be a nonnegative integer");
+  }
   return make<readonly A[], E | E2, R | R2>({
     decode: (start) =>
       Effect.gen(function* () {
@@ -248,7 +254,9 @@ export function repeat<A, E, R, E2, R2>(
           const result = yield* Effect.result(item.decode(current));
           if (Result.isFailure(result)) {
             const error = result.failure;
-            if (!(error instanceof ParseError)) return yield* Effect.fail(error);
+            if (!(error instanceof ParseError)) {
+              return yield* Effect.fail(error);
+            }
             if (afterSeparator || error.committed || values.length < min) {
               return yield* Effect.fail(afterSeparator ? commitError(error) : error);
             }
@@ -272,10 +280,11 @@ export function repeat<A, E, R, E2, R2>(
         }
         const chunks: string[] = [];
         for (let index = 0; index < values.length; index++) {
-          if (index > 0)
+          if (index > 0) {
             chunks.push(
               options.separator ? yield* options.separator.encode(undefined) : (options.join ?? ""),
             );
+          }
           const encoded = yield* item.encode(values[index]!);
           if (encoded.length === 0) {
             return yield* Effect.fail(
@@ -294,7 +303,7 @@ export const located = <A, E, R>(kind: string, codec: Codec<A, E, R>): Codec<A, 
     decode: (cursor) =>
       Effect.map(codec.decode(cursor), (result) => ({
         ...result,
-        nodes: [{ kind, start: cursor.offset, end: result.next.offset, children: result.nodes }],
+        nodes: [{ children: result.nodes, end: result.next.offset, kind, start: cursor.offset }],
       })),
     encode: codec.encode,
   });

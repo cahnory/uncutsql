@@ -1,33 +1,29 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
-import { type SourceNode, EncodeError, ParseError, document } from "@uncutsql/codec";
-import {
-  type BinaryOperator,
-  type Expression,
-  type NumericLiteral,
-  type UnaryOperator,
-  blobLiteral,
-  expression,
-  numericLiteral,
-  sqlExpression,
-} from "../src/index.ts";
+
+import { document, EncodeError, ParseError } from "@uncutsql/codec";
+import type { SourceNode } from "@uncutsql/codec";
+
 import { binaryPrecedence, unaryPrecedence } from "../src/codecs/expression/operators.ts";
+import { blobLiteral, expression, numericLiteral, sqlExpression } from "../src/index.ts";
+import type { BinaryOperator, Expression, NumericLiteral, UnaryOperator } from "../src/index.ts";
 
 const decode = (sql: string) => Effect.runSync(sqlExpression.decode(sql));
 const encode = (value: Expression) => Effect.runSync(sqlExpression.encode(value));
 const number = (value: string): NumericLiteral => ({ _tag: "NumericLiteral", value });
 const binary = (operator: BinaryOperator, left: Expression, right: Expression): Expression => ({
   _tag: "BinaryExpression",
-  operator,
   left,
+  operator,
   right,
 });
 const unary = (operator: UnaryOperator, operand: Expression): Expression => ({
   _tag: "UnaryExpression",
-  operator,
   operand,
+  operator,
 });
 const column = (name: string): Expression => ({ _tag: "ColumnReference", parts: [name] });
 
@@ -309,7 +305,7 @@ test("function calls preserve nested arguments, precedence and SQLite results", 
       assert.deepEqual(decode(sql), ast);
       assert.equal(evaluate(database, sql), evaluate(database, source));
     }
-    assert.deepEqual(decode("custom()"), { _tag: "FunctionCall", name: "custom", arguments: [] });
+    assert.deepEqual(decode("custom()"), { _tag: "FunctionCall", arguments: [], name: "custom" });
     assert.equal(encode(decode("abs(-1)")), '"abs"(-1)');
   } finally {
     database.close();

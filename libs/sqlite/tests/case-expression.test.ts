@@ -2,17 +2,15 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
-import { EncodeError, ParseError, type SourceNode } from "@uncutsql/codec";
-import {
-  sqlExpression,
-  createTable,
-  schema,
-  encodeMigration,
-  type Expression,
-  type CaseExpression,
-} from "../src/index.ts";
+
+import { EncodeError, ParseError } from "@uncutsql/codec";
+import type { SourceNode } from "@uncutsql/codec";
+
 import { defaultColumnConstraint } from "../src/codecs/column-constraint/default-column-constraint.ts";
+import { createTable, encodeMigration, schema, sqlExpression } from "../src/index.ts";
+import type { CaseExpression, Expression } from "../src/index.ts";
 import { planMigration } from "./workflow.ts";
 const decode = (sql: string) => Effect.runSync(sqlExpression.decode(sql));
 const encode = (ast: Expression) => Effect.runSync(sqlExpression.encode(ast));
@@ -82,11 +80,13 @@ test("CASE retains native values, NULL semantics, collation and branch evaluatio
       const evaluate = (text: string) => {
         calls = 0;
         const row = db.prepare(`SELECT (${text}) AS value`).get();
-        return { row, calls };
+        return { calls, row };
       };
       const original = evaluate(source);
       assert.deepEqual(evaluate(sql), original, source);
-      if (source.includes("tick()")) assert.equal(original.calls, 1);
+      if (source.includes("tick()")) {
+        assert.equal(original.calls, 1);
+      }
     }
   } finally {
     db.close();

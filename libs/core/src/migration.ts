@@ -2,8 +2,8 @@ import type { DatabaseDiff, DropGuard, TableAlteration } from "./diff.ts";
 import type { DatabaseTable, DatabaseTrigger, DatabaseView } from "./model.ts";
 
 interface TableProcedure {
-  readonly before: DatabaseTable;
   readonly after: DatabaseTable;
+  readonly before: DatabaseTable;
   readonly changes: readonly TableAlteration[];
 }
 /** Logical procedures, not execution order or physical operations such as a rebuild. */
@@ -11,11 +11,11 @@ export type MigrationProcedure =
   | { readonly _tag: "CreateTrigger" | "DropTrigger"; readonly trigger: DatabaseTrigger }
   | {
       readonly _tag: "ReplaceTrigger";
-      readonly before: DatabaseTrigger;
       readonly after: DatabaseTrigger;
+      readonly before: DatabaseTrigger;
     }
   | { readonly _tag: "CreateView" | "DropView"; readonly view: DatabaseView }
-  | { readonly _tag: "ReplaceView"; readonly before: DatabaseView; readonly after: DatabaseView }
+  | { readonly _tag: "ReplaceView"; readonly after: DatabaseView; readonly before: DatabaseView }
   | { readonly _tag: "CreateTable"; readonly table: DatabaseTable }
   | { readonly _tag: "DropTable"; readonly table: DatabaseTable }
   | (TableProcedure & { readonly _tag: "AlterTable" })
@@ -37,12 +37,12 @@ export const planDatabaseMigration = (diff: DatabaseDiff): DatabaseMigration => 
           trigger: change.trigger,
         };
       case "TriggerChanged":
-        return { _tag: "ReplaceTrigger", before: change.before, after: change.after };
+        return { _tag: "ReplaceTrigger", after: change.after, before: change.before };
       case "ViewAdded":
       case "ViewRemoved":
         return { _tag: change._tag === "ViewAdded" ? "CreateView" : "DropView", view: change.view };
       case "ViewChanged":
-        return { _tag: "ReplaceView", before: change.before, after: change.after };
+        return { _tag: "ReplaceView", after: change.after, before: change.before };
       case "TableAdded":
         return { _tag: "CreateTable", table: change.definition };
       case "TableRemoved":
@@ -51,8 +51,8 @@ export const planDatabaseMigration = (diff: DatabaseDiff): DatabaseMigration => 
       case "TableRenamed":
         return {
           _tag: change._tag === "TableRenamed" ? "RenameTable" : "AlterTable",
-          before: change.before,
           after: change.after,
+          before: change.before,
           changes: change.changes,
         };
     }

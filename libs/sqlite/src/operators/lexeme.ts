@@ -1,5 +1,8 @@
 import { Effect } from "effect";
-import { type Codec, make } from "@uncutsql/codec";
+
+import { make } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { trivia } from "./trivia.ts";
 
 /** Skip leading trivia outside the located codec, keeping spans on actual tokens. */

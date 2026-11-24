@@ -1,4 +1,6 @@
-import { type Codec, located, prefixed, repeat, transform } from "@uncutsql/codec";
+import { located, prefixed, repeat, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keyword } from "../../operators/keyword.ts";
 import { parenthesized } from "../../operators/parenthesized.ts";
 import { punctuation } from "../../operators/punctuation.ts";

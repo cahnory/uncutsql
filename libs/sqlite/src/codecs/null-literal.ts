@@ -1,4 +1,6 @@
-import { type Codec, located, transform } from "@uncutsql/codec";
+import { located, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keyword } from "../operators/keyword.ts";
 import { lexeme } from "../operators/lexeme.ts";
 

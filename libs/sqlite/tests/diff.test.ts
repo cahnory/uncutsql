@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import { EncodeError } from "@uncutsql/codec";
-import { schema, type Statement } from "../src/index.ts";
 import { SchemaDiffError } from "@uncutsql/core";
+
+import { schema } from "../src/index.ts";
+import type { Statement } from "../src/index.ts";
 import { diffSchemas } from "./workflow.ts";
 
 const parse = (sql: string) => Effect.runSync(schema.decode(sql));
@@ -32,7 +36,9 @@ test("table additions and removals carry definitions and never infer renames", (
   );
   const added = result.changes[1]!;
   assert.equal(added._tag, "TableAdded");
-  if (added._tag === "TableAdded") assert.equal(added.definition.columns[0]!.name, "x");
+  if (added._tag === "TableAdded") {
+    assert.equal(added.definition.columns[0]!.name, "x");
+  }
   assert.equal(diff("", "CREATE TABLE t (x)").changes[0]!._tag, "TableAdded");
   assert.equal(diff("CREATE TABLE t (x)", "").changes[0]!._tag, "TableRemoved");
 });
@@ -58,13 +64,17 @@ test("column additions, removals and edits are directional with ordered position
   );
   const table = result.changes[0]!;
   assert.equal(table._tag, "TableChanged");
-  if (table._tag !== "TableChanged") return;
+  if (table._tag !== "TableChanged") {
+    return;
+  }
   assert.deepEqual(
     table.changes.map((change) => change._tag),
     ["ColumnRemoved", "ColumnChanged", "ColumnAdded"],
   );
   const removed = table.changes[0]!;
-  if (removed._tag === "ColumnRemoved") assert.equal(removed.position, 1);
+  if (removed._tag === "ColumnRemoved") {
+    assert.equal(removed.position, 1);
+  }
   const edited = table.changes[1]!;
   if (edited._tag === "ColumnChanged") {
     assert.deepEqual(edited.fields, ["dataType", "constraints"]);
@@ -78,18 +88,20 @@ test("column additions, removals and edits are directional with ordered position
 test("column reorder compares shared names without reporting insertions as moves", () => {
   const reordered = diff("CREATE TABLE t (a, b, c)", "CREATE TABLE t (c, a, added, b)").changes[0]!;
   assert.equal(reordered._tag, "TableChanged");
-  if (reordered._tag === "TableChanged")
+  if (reordered._tag === "TableChanged") {
     assert.deepEqual(reordered.changes.at(-1), {
       _tag: "ColumnOrderChanged",
-      before: ["a", "b", "c"],
       after: ["c", "a", "b"],
+      before: ["a", "b", "c"],
     });
+  }
   const inserted = diff("CREATE TABLE t (a, b)", "CREATE TABLE t (a, added, b)").changes[0]!;
-  if (inserted._tag === "TableChanged")
+  if (inserted._tag === "TableChanged") {
     assert.deepEqual(
       inserted.changes.map((item) => item._tag),
       ["ColumnAdded"],
     );
+  }
 });
 
 test("diff detects table constraints and effective option flags", () => {
@@ -98,11 +110,12 @@ test("diff detects table constraints and effective option flags", () => {
     "CREATE TABLE t (a INTEGER PRIMARY KEY, b TEXT, UNIQUE(b)) STRICT",
   ).changes[0]!;
   assert.equal(result._tag, "TableChanged");
-  if (result._tag === "TableChanged")
+  if (result._tag === "TableChanged") {
     assert.deepEqual(
       result.changes.map((item) => item._tag),
       ["TableConstraintsChanged", "TableOptionsChanged"],
     );
+  }
   assert.deepEqual(
     diff(
       "CREATE TABLE t (a INTEGER PRIMARY KEY) STRICT, WITHOUT ROWID",
@@ -118,7 +131,9 @@ test("constraint ordering and declared type spelling remain conservative", () =>
     "CREATE TABLE t (a DEFAULT 2 DEFAULT 1)",
   ).changes[0]!;
   assert.equal(result._tag, "TableChanged");
-  if (result._tag === "TableChanged") assert.equal(result.changes[0]!._tag, "ColumnChanged");
+  if (result._tag === "TableChanged") {
+    assert.equal(result.changes[0]!._tag, "ColumnChanged");
+  }
   assert.equal(diff("CREATE TABLE t (a INT)", "CREATE TABLE t (a INTEGER)").changes.length, 1);
   assert.equal(
     diff("CREATE TABLE t (a CUSTOM TYPE)", "CREATE TABLE t (a CUSTOM /* INT */ TYPE)").changes
@@ -153,15 +168,17 @@ test("diff validates added ASTs and compares constraints without object-property
   const after = parse("CREATE TABLE t (a DEFAULT 1)");
   const table = after[0]!;
   assert.equal(table._tag, "CreateTable");
-  if (table._tag !== "CreateTable") throw new Error("Expected explicit table");
+  if (table._tag !== "CreateTable") {
+    throw new Error("Expected explicit table");
+  }
   const reordered: readonly Statement[] = [
     {
       ...table,
       columns: [
         {
+          constraints: [{ _tag: "Default", value: { _tag: "NumericLiteral", value: "1" } }],
           name: "a",
           typeName: undefined,
-          constraints: [{ value: { value: "1", _tag: "NumericLiteral" }, _tag: "Default" }],
         },
       ],
     },

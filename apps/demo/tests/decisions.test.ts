@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+
 import type { MigrationDecisions } from "@uncutsql/core";
 const cli = fileURLToPath(import.meta.resolve("@uncutsql/cli/bin"));
 const run = (cwd: string, args: string[], input = "") =>
@@ -19,7 +20,7 @@ const run = (cwd: string, args: string[], input = "") =>
       import.meta.resolve("@uncutsql/sqlite-driver"),
       ...args,
     ],
-    { cwd, input, encoding: "utf8" },
+    { cwd, encoding: "utf8", input },
   );
 
 test("CLI requires reviewable decisions, persists them, and applies renamed data without prompting", () => {
@@ -78,7 +79,7 @@ test("CLI requires reviewable decisions, persists them, and applies renamed data
     assert.equal(stale.status, 1);
     assert.match(stale.stderr, /Stale migration decisions/);
   } finally {
-    rmSync(cwd, { recursive: true, force: true });
+    rmSync(cwd, { force: true, recursive: true });
   }
 });
 
@@ -113,7 +114,7 @@ test("migration decision output and explicit drop preserve add-default semantics
       db.close();
     }
   } finally {
-    rmSync(cwd, { recursive: true, force: true });
+    rmSync(cwd, { force: true, recursive: true });
   }
 });
 
@@ -180,7 +181,7 @@ test("default and configured decision files can be prepared and loaded without p
       assert.equal(overridden.status, 0, overridden.stderr);
       assert.match(overridden.stdout, /removes column data/);
     } finally {
-      rmSync(cwd, { recursive: true, force: true });
+      rmSync(cwd, { force: true, recursive: true });
     }
   }
 });
@@ -206,7 +207,7 @@ test("decision schema paths use the nearest installed package for nested output 
     const pending = JSON.parse(readFileSync(join(project, "review/choices.json"), "utf8"));
     assert.equal(pending.$schema, "../node_modules/@uncutsql/cli/schemas/decisions.schema.json");
   } finally {
-    rmSync(cwd, { recursive: true, force: true });
+    rmSync(cwd, { force: true, recursive: true });
   }
 });
 
@@ -226,7 +227,9 @@ test("guarded drops check live data and can retry the same migration after rollb
     generate(after, "--write-decisions");
     const file = join(cwd, "uncutsql.decisions.json");
     const choices = JSON.parse(readFileSync(file, "utf8")) as MigrationDecisions;
-    for (const choice of choices.decisions) assert.doesNotMatch(choice.question, /rename/i);
+    for (const choice of choices.decisions) {
+      assert.doesNotMatch(choice.question, /rename/i);
+    }
     writeFileSync(
       file,
       JSON.stringify({
@@ -262,7 +265,7 @@ test("guarded drops check live data and can retry the same migration after rollb
       db.close();
     }
   } finally {
-    rmSync(cwd, { recursive: true, force: true });
+    rmSync(cwd, { force: true, recursive: true });
   }
 });
 
@@ -324,7 +327,7 @@ test("merge refreshes a changed review and rewrite resets its answers", () => {
     assert.equal(readFileSync(file, "utf8"), "broken");
     assert.equal(generate(next, "--rewrite-decisions=review.json").status, 0);
   } finally {
-    rmSync(cwd, { recursive: true, force: true });
+    rmSync(cwd, { force: true, recursive: true });
   }
 });
 
@@ -410,7 +413,7 @@ test("generate and apply a table rename with a second round of column decisions"
       db.close();
     }
   } finally {
-    rmSync(cwd, { recursive: true, force: true });
+    rmSync(cwd, { force: true, recursive: true });
   }
 });
 
@@ -442,6 +445,6 @@ test("interactive generation reviews table and column choices in memory", () => 
     assert.equal(run(cwd, [...args, "--write-decisions"]).status, 2);
     assert.equal(run(cwd, ["generate", "-", "--interactive"]).status, 2);
   } finally {
-    rmSync(cwd, { recursive: true, force: true });
+    rmSync(cwd, { force: true, recursive: true });
   }
 });

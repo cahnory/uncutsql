@@ -26,6 +26,7 @@
   "devDependencies": {
     "@types/node": "^24.10.1",
     "concurrently": "^10.0.6",
+    "eslint-plugin-perfectionist": "^5.14.0",
     "oxfmt": "^0.72.0",
     "oxlint": "^1.87.0",
     "typescript": "~5.9.3"

@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect } from "effect";
+
 import {
+  planDatabaseMigration,
   prepareMigrationDecisions,
   resolveMigrationDecisions,
-  planDatabaseMigration,
 } from "@uncutsql/core";
-import { schema, toDatabaseSchema, lowerMigration, encodeMigration } from "../src/index.ts";
+
+import { encodeMigration, lowerMigration, schema, toDatabaseSchema } from "../src/index.ts";
 const model = (sql: string) => Effect.runSync(toDatabaseSchema(Effect.runSync(schema.decode(sql))));
 const plan = (beforeSql: string, afterSql: string, rename: boolean) => {
   const before = model(beforeSql),

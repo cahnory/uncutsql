@@ -1,6 +1,8 @@
-import { type Codec, optional, prefixed, repeat, struct, transform } from "@uncutsql/codec";
-import { keyword } from "../../operators/keyword.ts";
+import { optional, prefixed, repeat, struct, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keywordChoice } from "../../operators/keyword-choice.ts";
+import { keyword } from "../../operators/keyword.ts";
 import { parenthesized } from "../../operators/parenthesized.ts";
 import { punctuation } from "../../operators/punctuation.ts";
 import { nameIdentifier } from "../identifier.ts";
@@ -29,7 +31,7 @@ export const commonTableExpression = (query: Codec<Query>): Codec<CommonTableExp
       " ",
     ),
     {
-      decode: ({ name, columns, definition }): CommonTableExpression => ({
+      decode: ({ columns, definition, name }): CommonTableExpression => ({
         name,
         query: definition.query,
         ...(columns === undefined ? {} : { columns }),
@@ -38,9 +40,9 @@ export const commonTableExpression = (query: Codec<Query>): Codec<CommonTableExp
           : { materialization: definition.materialization }),
       }),
       encode: (value: CommonTableExpression) => ({
-        name: value.name,
         columns: value.columns,
         definition: { materialization: value.materialization, query: value.query },
+        name: value.name,
       }),
     },
   );

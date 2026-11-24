@@ -225,6 +225,7 @@ For example, the query API works without a database driver:
 
 ```ts
 import { Effect } from "effect";
+
 import { sqlQuery } from "@uncutsql/sqlite";
 
 const ast = Effect.runSync(

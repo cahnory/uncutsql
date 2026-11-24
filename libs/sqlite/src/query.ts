@@ -1,4 +1,5 @@
 import { document, followedBy } from "@uncutsql/codec";
+
 import { expression } from "./codecs/expression.ts";
 import { query } from "./codecs/query/query.ts";
 import { terminator } from "./operators/terminator.ts";
@@ -8,26 +9,26 @@ import { trivia } from "./operators/trivia.ts";
 export const queryGrammar = query(expression);
 export const sqlQuery = document(followedBy(queryGrammar, terminator), trivia);
 export type {
+  CommonTableExpression,
+  CompoundOperator,
+  CompoundQuery,
+  FromClause,
+  GroupedSource,
+  IndexHint,
+  JoinConstraint,
+  JoinedSource,
+  JoinModifier,
+  JoinOperator,
+  LimitClause,
   Query,
   QueryBody,
-  WithClause,
-  CommonTableExpression,
   QueryCore,
-  SelectCore,
-  CompoundQuery,
-  CompoundOperator,
-  ValuesQuery,
-  SelectQuery,
   ResultColumn,
-  TableSource,
-  FromClause,
-  JoinedSource,
-  JoinOperator,
-  JoinModifier,
-  JoinConstraint,
-  TableReferenceSource,
-  IndexHint,
+  SelectCore,
+  SelectQuery,
   SubquerySource,
-  GroupedSource,
-  LimitClause,
+  TableReferenceSource,
+  TableSource,
+  ValuesQuery,
+  WithClause,
 } from "./codecs/query/types.ts";

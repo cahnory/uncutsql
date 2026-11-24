@@ -1,5 +1,8 @@
-import { type Codec, optional, prefixed, transform } from "@uncutsql/codec";
-import { conflictClause, type ConflictAction } from "../conflict-clause.ts";
+import { optional, prefixed, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
+import { conflictClause } from "../conflict-clause.ts";
+import type { ConflictAction } from "../conflict-clause.ts";
 
 export interface ConflictColumnConstraint<Tag extends "NotNull" | "Unique"> {
   readonly _tag: Tag;

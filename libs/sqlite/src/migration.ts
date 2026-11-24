@@ -1,70 +1,66 @@
-import { createTrigger, type CreateTrigger } from "./codecs/create-trigger.ts";
-import { triggersFromDatabaseSchema } from "./triggers.ts";
-import { planDeclarations } from "./plan-declarations.ts";
-import { planViewOperations, viewsFromDatabaseSchema } from "./views.ts";
-import { createView, type CreateView } from "./codecs/create-view.ts";
-import { identifier } from "./codecs/identifier.ts";
-import { createIndex, type CreateIndex } from "./codecs/create-index.ts";
-import { indexesFromDatabaseSchema } from "./indexes.ts";
 import { Data, Effect } from "effect";
+
 import { EncodeError } from "@uncutsql/codec";
-import {
-  createTable,
-  columnDefinition,
-  type ColumnDefinition,
-  type CreateTable,
-} from "./create-table.ts";
-import {
-  encodeRebuild,
-  rebuildCopy,
-  qualifiedTable as qualified,
-  sqlString,
-  type RebuildTableOperation,
-} from "./rebuild.ts";
-import { resolveProcedures } from "./procedures.ts";
-import type { SchemaDiffError, DatabaseSchema, DatabaseMigration } from "@uncutsql/core";
-import type { TableIdentity } from "./schema-identity.ts";
-import { tablesFromDatabaseSchema } from "./database.ts";
-import { foldIdentifier, tableIdentity, tableKey } from "./schema-identity.ts";
+import type { DatabaseMigration, DatabaseSchema, SchemaDiffError } from "@uncutsql/core";
+
+import { createIndex } from "./codecs/create-index.ts";
+import type { CreateIndex } from "./codecs/create-index.ts";
+import { createTrigger } from "./codecs/create-trigger.ts";
+import type { CreateTrigger } from "./codecs/create-trigger.ts";
+import { createView } from "./codecs/create-view.ts";
+import type { CreateView } from "./codecs/create-view.ts";
 import type { Expression } from "./codecs/expression.ts";
+import { identifier } from "./codecs/identifier.ts";
+import { columnDefinition, createTable } from "./create-table.ts";
+import type { ColumnDefinition, CreateTable } from "./create-table.ts";
+import { tablesFromDatabaseSchema } from "./database.ts";
+import { indexesFromDatabaseSchema } from "./indexes.ts";
+import { planDeclarations } from "./plan-declarations.ts";
+import { resolveProcedures } from "./procedures.ts";
+import { encodeRebuild, qualifiedTable as qualified, rebuildCopy, sqlString } from "./rebuild.ts";
+import type { RebuildTableOperation } from "./rebuild.ts";
+import type { TableIdentity } from "./schema-identity.ts";
+import { foldIdentifier, tableIdentity, tableKey } from "./schema-identity.ts";
+import { triggersFromDatabaseSchema } from "./triggers.ts";
+import { planViewOperations, viewsFromDatabaseSchema } from "./views.ts";
 
 export type MigrationOperation =
-  | { readonly _tag: "DropTrigger"; readonly table: TableIdentity; readonly owner: TableIdentity }
+  | { readonly _tag: "DropTrigger"; readonly owner: TableIdentity; readonly table: TableIdentity }
   | {
       readonly _tag: "CreateTrigger";
-      readonly table: TableIdentity;
       readonly definition: CreateTrigger;
+      readonly table: TableIdentity;
     }
   | { readonly _tag: "DropView"; readonly table: TableIdentity }
   | { readonly _tag: "VerifyView"; readonly table: TableIdentity }
-  | { readonly _tag: "CreateView"; readonly table: TableIdentity; readonly definition: CreateView }
+  | { readonly _tag: "CreateView"; readonly definition: CreateView; readonly table: TableIdentity }
   | {
       readonly _tag: "CheckDrop";
-      readonly table: TableIdentity;
       readonly column?: string;
       readonly scratch: TableIdentity;
+      readonly table: TableIdentity;
     }
   | {
       readonly _tag: "CreateIndex";
-      readonly table: TableIdentity;
       readonly definition: CreateIndex;
+      readonly table: TableIdentity;
     }
-  | { readonly _tag: "DropIndex"; readonly table: TableIdentity; readonly index: TableIdentity }
+  | { readonly _tag: "DropIndex"; readonly index: TableIdentity; readonly table: TableIdentity }
   | { readonly _tag: "RenameTable"; readonly table: TableIdentity; readonly target: string }
   | RebuildTableOperation
   | { readonly _tag: "CreateTable"; readonly definition: CreateTable }
   | { readonly _tag: "DropTable"; readonly table: TableIdentity }
   | {
       readonly _tag: "AddColumn";
-      readonly table: TableIdentity;
       readonly column: ColumnDefinition;
+      readonly table: TableIdentity;
     };
 
 export interface MigrationDiagnostic {
   readonly code: "UnsupportedRowCopy" | "RetainedForeignKey" | "ForeignKeyCycle";
-  readonly table: TableIdentity;
   readonly column?: string;
   readonly message: string;
+  readonly table: TableIdentity;
 }
 
 export class MigrationPlanError extends Data.TaggedError("MigrationPlanError")<{
@@ -77,13 +73,13 @@ export class MigrationPlanError extends Data.TaggedError("MigrationPlanError")<{
 
 export interface MigrationWarning {
   readonly code: "TableDataLoss" | "ColumnDataLoss";
-  readonly table: TableIdentity;
   readonly message: string;
+  readonly table: TableIdentity;
 }
 
 export interface MigrationPlan {
-  readonly operations: readonly MigrationOperation[];
   readonly guardTable?: TableIdentity;
+  readonly operations: readonly MigrationOperation[];
   readonly warnings: readonly MigrationWarning[];
 }
 
@@ -99,7 +95,7 @@ const references = (table: CreateTable): readonly TableIdentity[] => {
       constraint._tag === "ForeignKey" ? [constraint.references.table] : [],
     ),
   ];
-  return names.map((name) => ({ schema, name: foldIdentifier(name) }));
+  return names.map((name) => ({ name: foldIdentifier(name), schema }));
 };
 
 const literalDefault = (value: Expression): boolean => {
@@ -126,14 +122,17 @@ const unsupportedColumn = (column: ColumnDefinition): string | undefined => {
       constraint._tag !== "NotNull" &&
       constraint._tag !== "Collate",
   );
-  if (unsupported)
+  if (unsupported) {
     return `Adding a column with ${unsupported._tag} is not supported by this planner`;
+  }
   const defaults = column.constraints.filter((constraint) => constraint._tag === "Default");
-  if (defaults.length > 1)
+  if (defaults.length > 1) {
     return "Adding a column with repeated DEFAULT constraints is not supported";
+  }
   const value = defaults[0]?.value;
-  if (value && !literalDefault(value))
+  if (value && !literalDefault(value)) {
     return "ADD COLUMN requires a literal default or a signed numeric default";
+  }
   if (
     column.constraints.some((constraint) => constraint._tag === "NotNull") &&
     (!value || value._tag === "NullLiteral")
@@ -170,21 +169,24 @@ export const lowerMigration = (
     const dropped = new Set(drops.map((change) => tableKey(change.table)));
     const renamed = new Map<string, string>();
     for (const change of changes) {
-      if (change._tag === "RenameTable")
+      if (change._tag === "RenameTable") {
         renamed.set(tableKey(tableIdentity(change.before)), change.after.name);
+      }
     }
     for (const table of after) {
       for (const reference of references(table)) {
         const key = tableKey(reference);
         const target = renamed.get(key);
-        if (target === undefined && !dropped.has(key)) continue;
+        if (target === undefined && !dropped.has(key)) {
+          continue;
+        }
         diagnostics.push({
           code: "RetainedForeignKey",
-          table: tableIdentity(table),
           message:
             target === undefined
               ? `The desired schema still references table ${key}, which is scheduled for removal`
               : `The foreign key still references ${JSON.stringify(reference.name)}, which is being renamed to ${JSON.stringify(target)}. Update REFERENCES in the desired schema and refresh the review with --merge-decisions.`,
+          table: tableIdentity(table),
         });
       }
     }
@@ -195,18 +197,21 @@ export const lowerMigration = (
         tableKey(tableIdentity(table)),
       ),
     );
-    for (const index of [...beforeIndexes, ...afterIndexes])
+    for (const index of [...beforeIndexes, ...afterIndexes]) {
       reserved.add(
         tableKey({
-          schema: foldIdentifier(index.schema ?? "main"),
           name: foldIdentifier(index.name),
+          schema: foldIdentifier(index.schema ?? "main"),
         }),
       );
+    }
     const allocate = (schema: string, prefix: string) => {
       let index = 0;
       let name = prefix;
-      while (reserved.has(tableKey({ schema, name }))) name = `${prefix}_${++index}`;
-      reserved.add(tableKey({ schema, name }));
+      while (reserved.has(tableKey({ name, schema }))) {
+        name = `${prefix}_${++index}`;
+      }
+      reserved.add(tableKey({ name, schema }));
       return name;
     };
     // Drop children before parents. Cyclic and self-referential drops need a later strategy.
@@ -221,29 +226,31 @@ export const lowerMigration = (
           ),
       );
       if (index < 0) {
-        for (const change of pending)
+        for (const change of pending) {
           diagnostics.push({
             code: "ForeignKeyCycle",
-            table: change.table,
             message: "Removing cyclic or self-referencing tables is not supported",
+            table: change.table,
           });
+        }
         break;
       }
       const [change] = pending.splice(index, 1);
       operations.push({ _tag: "DropTable", table: change!.table });
       warnings.push({
         code: "TableDataLoss",
-        table: change!.table,
         message: `Dropping table ${tableKey(change!.table)} removes all its data.`,
+        table: change!.table,
       });
     }
     for (const change of changes) {
-      if (change._tag === "RenameTable")
+      if (change._tag === "RenameTable") {
         operations.push({
           _tag: "RenameTable",
           table: tableIdentity(change.before),
           target: change.after.name,
         });
+      }
     }
     for (const change of changes) {
       if (change._tag === "CreateTable") {
@@ -252,9 +259,9 @@ export const lowerMigration = (
           _tag: "CreateTable",
           definition: {
             ...change.definition,
+            ifNotExists: false,
             schema: change.table.schema,
             temporary: false,
-            ifNotExists: false,
           },
         });
       } else if (change._tag === "AlterTable" || change._tag === "RenameTable") {
@@ -274,28 +281,30 @@ export const lowerMigration = (
             .map((item) => ({ source: item.before.name, target: item.after.name }));
           const copy = rebuildCopy(change.before, change.after, renames);
           if (typeof copy === "string") {
-            diagnostics.push({ code: "UnsupportedRowCopy", table: change.table, message: copy });
+            diagnostics.push({ code: "UnsupportedRowCopy", message: copy, table: change.table });
             continue;
           }
           operations.push({
             _tag: "RebuildTable",
-            table: change.table,
-            before: change.before,
             after: change.after,
-            temporaryName: allocate(change.table.schema, "__uncutsql_rebuild"),
+            before: change.before,
             indexesBefore: indexesFor(beforeIndexes, tableIdentity(change.before)),
+            table: change.table,
+            temporaryName: allocate(change.table.schema, "__uncutsql_rebuild"),
             ...(renames.length ? { renames } : {}),
           });
           const removed = change.changes.filter((item) => item._tag === "ColumnRemoved");
-          if (removed.length)
+          if (removed.length) {
             warnings.push({
               code: "ColumnDataLoss",
-              table: change.table,
               message: `Rebuilding ${tableKey(change.table)} removes column data: ${removed.map((item) => JSON.stringify(item.column.name)).join(", ")}.`,
+              table: change.table,
             });
+          }
         } else {
-          for (const item of additions)
-            operations.push({ _tag: "AddColumn", table: change.table, column: item.column });
+          for (const item of additions) {
+            operations.push({ _tag: "AddColumn", column: item.column, table: change.table });
+          }
         }
       }
     }
@@ -307,46 +316,57 @@ export const lowerMigration = (
         .map((operation) => tableKey(operation.table)),
     );
     for (const procedure of procedures.procedures) {
-      if ("trigger" in procedure || procedure._tag === "ReplaceTrigger") continue;
-      if ("view" in procedure || procedure._tag === "ReplaceView") continue;
+      if ("trigger" in procedure || procedure._tag === "ReplaceTrigger") {
+        continue;
+      }
+      if ("view" in procedure || procedure._tag === "ReplaceView") {
+        continue;
+      }
       const model = "after" in procedure ? procedure.after : procedure.table;
-      const table = { schema: model.identity.catalog!, name: model.identity.name };
+      const table = { name: model.identity.name, schema: model.identity.catalog! };
       const source = "before" in procedure ? procedure.before.identity : model.identity;
-      const old = indexesFor(beforeIndexes, { schema: source.catalog!, name: source.name }),
+      const old = indexesFor(beforeIndexes, { name: source.name, schema: source.catalog! }),
         desired = indexesFor(afterIndexes, table);
       const drop = (index: CreateIndex) => {
-        const identity = { schema: table.schema, name: foldIdentifier(index.name) };
-        indexDrops.set(tableKey(identity), { _tag: "DropIndex", table, index: identity });
+        const identity = { name: foldIdentifier(index.name), schema: table.schema };
+        indexDrops.set(tableKey(identity), { _tag: "DropIndex", index: identity, table });
       };
       const create = (index: CreateIndex) =>
-        indexCreates.set(tableKey({ schema: table.schema, name: foldIdentifier(index.name) }), {
+        indexCreates.set(tableKey({ name: foldIdentifier(index.name), schema: table.schema }), {
           _tag: "CreateIndex",
-          table,
           definition: { ...index, ifNotExists: false },
+          table,
         });
-      if (procedure._tag === "DropTable" || rebuilt.has(tableKey(table))) old.forEach(drop);
-      if (procedure._tag === "CreateTable" || rebuilt.has(tableKey(table))) desired.forEach(create);
-      if ("changes" in procedure && !rebuilt.has(tableKey(table)))
+      if (procedure._tag === "DropTable" || rebuilt.has(tableKey(table))) {
+        old.forEach(drop);
+      }
+      if (procedure._tag === "CreateTable" || rebuilt.has(tableKey(table))) {
+        desired.forEach(create);
+      }
+      if ("changes" in procedure && !rebuilt.has(tableKey(table))) {
         for (const change of procedure.changes) {
           if (change._tag === "IndexRemoved" || change._tag === "IndexChanged") {
             const key = change._tag === "IndexRemoved" ? change.index.key : change.before.key;
             const index = old.find((index) => foldIdentifier(index.name) === key);
-            if (!index)
+            if (!index) {
               return yield* Effect.fail(
                 new EncodeError({ message: "Index removal does not match the database context" }),
               );
+            }
             drop(index);
           }
           if (change._tag === "IndexAdded" || change._tag === "IndexChanged") {
             const key = change._tag === "IndexAdded" ? change.index.key : change.after.key;
             const index = desired.find((index) => foldIdentifier(index.name) === key);
-            if (!index)
+            if (!index) {
               return yield* Effect.fail(
                 new EncodeError({ message: "Index creation does not match the database context" }),
               );
+            }
             create(index);
           }
         }
+      }
     }
     const affectedSchemas = new Set(
       operations.flatMap((op) =>
@@ -365,23 +385,25 @@ export const lowerMigration = (
       ),
     );
     const ownerOf = (trigger: CreateTrigger) => ({
-      schema: trigger.target.schema!,
       name: foldIdentifier(trigger.target.name),
+      schema: trigger.target.schema!,
     });
     const triggerSteps = yield* planDeclarations(
       beforeTriggers,
       afterTriggers,
       procedures.procedures.flatMap((p) => {
-        if (p._tag === "ReplaceTrigger")
-          return [{ identity: p.before.identity, drop: true, create: true }];
-        if ("trigger" in p)
+        if (p._tag === "ReplaceTrigger") {
+          return [{ create: true, drop: true, identity: p.before.identity }];
+        }
+        if ("trigger" in p) {
           return [
             {
-              identity: p.trigger.identity,
-              drop: p._tag === "DropTrigger",
               create: p._tag === "CreateTrigger",
+              drop: p._tag === "DropTrigger",
+              identity: p.trigger.identity,
             },
           ];
+        }
         return [];
       }),
       (trigger) =>
@@ -390,30 +412,34 @@ export const lowerMigration = (
     );
     const triggerDrops = triggerSteps.drops.map((trigger) => ({
       _tag: "DropTrigger" as const,
-      table: tableIdentity(trigger),
       owner: ownerOf(trigger),
+      table: tableIdentity(trigger),
     }));
     const triggerCreates = triggerSteps.creates.map((definition) => ({
       _tag: "CreateTrigger" as const,
-      table: tableIdentity(definition),
       definition,
+      table: tableIdentity(definition),
     }));
     const guards = (procedures.dropGuards ?? []).map((guard): MigrationOperation => ({
       _tag: "CheckDrop",
-      table: { schema: guard.table.catalog ?? "main", name: guard.table.name },
+      table: { name: guard.table.name, schema: guard.table.catalog ?? "main" },
       ...(guard.column !== undefined ? { column: guard.column } : {}),
-      scratch: { schema: "temp", name: allocate("temp", "__uncutsql_drop_guard") },
+      scratch: { name: allocate("temp", "__uncutsql_drop_guard"), schema: "temp" },
     }));
     operations.unshift(...guards, ...triggerDrops, ...viewSteps.drops, ...indexDrops.values());
     operations.push(...indexCreates.values(), ...viewSteps.creates, ...triggerCreates);
-    if (operations.length)
-      for (const view of viewSteps.retained)
+    if (operations.length) {
+      for (const view of viewSteps.retained) {
         operations.push({ _tag: "VerifyView", table: tableIdentity(view) });
-    if (diagnostics.length) return yield* Effect.fail(new MigrationPlanError({ diagnostics }));
+      }
+    }
+    if (diagnostics.length) {
+      return yield* Effect.fail(new MigrationPlanError({ diagnostics }));
+    }
     const guardTable = operations.some(
       (operation) => operation._tag === "RebuildTable" || operation._tag === "DropView",
     )
-      ? { schema: "temp", name: allocate("temp", "__uncutsql_migration_guard") }
+      ? { name: allocate("temp", "__uncutsql_migration_guard"), schema: "temp" }
       : undefined;
     return { operations, warnings, ...(guardTable ? { guardTable } : {}) };
   });
@@ -464,7 +490,9 @@ export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, Enco
             return `DROP TABLE ${yield* qualified(operation.table)};`;
           case "AddColumn": {
             const reason = unsupportedColumn(operation.column);
-            if (reason) return yield* Effect.fail(new EncodeError({ message: reason }));
+            if (reason) {
+              return yield* Effect.fail(new EncodeError({ message: reason }));
+            }
             return `ALTER TABLE ${yield* qualified(operation.table)} ADD COLUMN ${yield* columnDefinition.encode(operation.column)};`;
           }
           default:
@@ -474,7 +502,9 @@ export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, Enco
         }
       }),
     );
-    if (!statements.length) return "";
+    if (!statements.length) {
+      return "";
+    }
     const warnings = plan.warnings.map(
       (warning) => `-- WARNING: ${warning.message.replace(/[\r\n]/g, " ")}`,
     );
@@ -483,12 +513,14 @@ export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, Enco
       ? "BEGIN IMMEDIATE;"
       : "BEGIN;";
     const droppedViews = plan.operations.filter((op) => op._tag === "DropView");
-    if (!rebuilds.length && !droppedViews.length)
+    if (!rebuilds.length && !droppedViews.length) {
       return [...warnings, begin, ...statements, "COMMIT;"].join("\n");
-    if (!plan.guardTable)
+    }
+    if (!plan.guardTable) {
       return yield* Effect.fail(
         new EncodeError({ message: "A rebuild plan requires a guard table" }),
       );
+    }
     const guard = yield* qualified(plan.guardTable);
     const preflight: string[] = [];
     const triggerDrops = plan.operations.filter((op) => op._tag === "DropTrigger");
@@ -507,7 +539,7 @@ export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, Enco
     for (const view of droppedViews) {
       const name = yield* sqlString(view.table.name);
       for (const schema of new Set([view.table.schema, "temp"])) {
-        const catalog = yield* qualified({ schema, name: "sqlite_schema" });
+        const catalog = yield* qualified({ name: "sqlite_schema", schema });
         preflight.push(
           `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM ${catalog} WHERE ${yield* unknownTrigger(schema, view.table)} AND tbl_name = ${name} COLLATE NOCASE;`,
         );
@@ -535,15 +567,16 @@ export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, Enco
       preflight.push(
         `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM ${catalog} WHERE ${yield* unknownViews(operation.table.schema)} OR (tbl_name = ${name} COLLATE NOCASE AND (${yield* unknownTrigger(operation.table.schema, operation.table)} OR (type = 'index' AND sql IS NOT NULL${unknownIndex})));`,
       );
-      if (known.length)
+      if (known.length) {
         preflight.push(
           `INSERT OR ROLLBACK INTO ${guard} SELECT abs(count(*) - ${known.length}) FROM ${catalog} WHERE type = 'index' AND sql IS NOT NULL AND tbl_name = ${name} COLLATE NOCASE AND name COLLATE NOCASE IN (${known.join(", ")});`,
         );
+      }
       preflight.push(
         `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM temp.sqlite_schema WHERE ${yield* unknownViews("temp")} OR (${yield* unknownTrigger("temp", operation.table)} AND tbl_name = ${name} COLLATE NOCASE);`,
       );
     }
-    if (!rebuilds.length)
+    if (!rebuilds.length) {
       return [
         ...warnings,
         begin,
@@ -553,6 +586,7 @@ export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, Enco
         `DROP TABLE ${guard};`,
         "COMMIT;",
       ].join("\n");
+    }
     const schemas = new Set(
       plan.operations.map((operation) =>
         operation._tag === "CreateTable"

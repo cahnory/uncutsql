@@ -1,63 +1,54 @@
-import { subqueryExpression, existsExpression } from "./expression/subquery-expression.ts";
-import { raiseExpression } from "./expression/raise-expression.ts";
-import { rowValueExpression } from "./expression/row-value-expression.ts";
-import { bindParameter } from "./expression/bind-parameter.ts";
+import { Effect, Result } from "effect";
+
+import type { EncodeError, ParseError } from "@uncutsql/codec";
+import { document, make, optional, parseError, transform } from "@uncutsql/codec";
+import type { Codec, Cursor, Read } from "@uncutsql/codec";
+import { mergeErrors } from "@uncutsql/codec";
+
+import { trivia } from "../operators/trivia.ts";
 import {
-  patternOperator,
-  patternPrecedence,
-  readPattern,
-  encodePattern,
-} from "./expression/pattern-expression.ts";
+  betweenOperator,
+  betweenPrecedence,
+  encodeBetween,
+  readBetween,
+} from "./expression/between-expression.ts";
+import { encodeBinaryExpression, readBinaryExpression } from "./expression/binary-expression.ts";
+import { bindParameter } from "./expression/bind-parameter.ts";
 import { caseExpression } from "./expression/case-expression.ts";
 import { castExpression } from "./expression/cast-expression.ts";
 import {
-  collatePrecedence,
   collateOperator,
-  readCollate,
+  collatePrecedence,
   encodeCollate,
+  readCollate,
 } from "./expression/collate-expression.ts";
-import { Effect, Result } from "effect";
-import {
-  type Codec,
-  type Cursor,
-  type Read,
-  EncodeError,
-  ParseError,
-  document,
-  make,
-  optional,
-  transform,
-  parseError,
-} from "@uncutsql/codec";
-import { mergeErrors } from "@uncutsql/codec";
-import { trivia } from "../operators/trivia.ts";
-import { literalValue } from "./literal-value.ts";
-import { functionCall } from "./expression/function-call.ts";
 import { columnReference } from "./expression/column-reference.ts";
-import { readBinaryExpression, encodeBinaryExpression } from "./expression/binary-expression.ts";
-import { unaryExpression } from "./expression/unary-expression.ts";
-import { parenthesizedExpression } from "./expression/parenthesized-expression.ts";
+import { functionCall } from "./expression/function-call.ts";
+import { encodeIn, inOperator, inPrecedence, readIn } from "./expression/in-expression.ts";
+import {
+  nullTestOperator,
+  nullTestPrecedence,
+  readNullTest,
+} from "./expression/null-test-expression.ts";
 import {
   binaryOperator,
   binaryPrecedence,
   primaryPrecedence,
   unaryPrecedence,
 } from "./expression/operators.ts";
+import { parenthesizedExpression } from "./expression/parenthesized-expression.ts";
+import {
+  encodePattern,
+  patternOperator,
+  patternPrecedence,
+  readPattern,
+} from "./expression/pattern-expression.ts";
+import { raiseExpression } from "./expression/raise-expression.ts";
+import { rowValueExpression } from "./expression/row-value-expression.ts";
+import { existsExpression, subqueryExpression } from "./expression/subquery-expression.ts";
 import type { Expression, ExpressionAt } from "./expression/types.ts";
-import {
-  nullTestOperator,
-  nullTestPrecedence,
-  readNullTest,
-} from "./expression/null-test-expression.ts";
-
-import {
-  betweenOperator,
-  betweenPrecedence,
-  readBetween,
-  encodeBetween,
-} from "./expression/between-expression.ts";
-
-import { inOperator, inPrecedence, readIn, encodeIn } from "./expression/in-expression.ts";
+import { unaryExpression } from "./expression/unary-expression.ts";
+import { literalValue } from "./literal-value.ts";
 
 const readPrimary = (cursor: Cursor): Effect.Effect<Read<Expression>, ParseError> =>
   Effect.gen(function* () {
@@ -76,26 +67,43 @@ const readPrimary = (cursor: Cursor): Effect.Effect<Read<Expression>, ParseError
     let best = parseError(cursor, "expression");
     for (const choice of choices) {
       const result = yield* Effect.result(choice.decode(cursor));
-      if (Result.isSuccess(result)) return result.success;
-      if (result.failure.committed) return yield* Effect.fail(result.failure);
+      if (Result.isSuccess(result)) {
+        return result.success;
+      }
+      if (result.failure.committed) {
+        return yield* Effect.fail(result.failure);
+      }
       best = mergeErrors(best, result.failure);
     }
     return yield* Effect.fail(best);
   });
 
 const precedenceOf = (value: Expression): number => {
-  if (value._tag === "PatternExpression") return patternPrecedence;
-  if (value._tag === "CollateExpression") return collatePrecedence;
+  if (value._tag === "PatternExpression") {
+    return patternPrecedence;
+  }
+  if (value._tag === "CollateExpression") {
+    return collatePrecedence;
+  }
   if (
     value._tag === "InExpression" ||
     value._tag === "InTableExpression" ||
     value._tag === "InQueryExpression"
-  )
+  ) {
     return inPrecedence;
-  if (value._tag === "BetweenExpression") return betweenPrecedence;
-  if (value._tag === "BinaryExpression") return binaryPrecedence[value.operator];
-  if (value._tag === "UnaryExpression") return unaryPrecedence[value.operator];
-  if (value._tag === "NullTestExpression") return nullTestPrecedence;
+  }
+  if (value._tag === "BetweenExpression") {
+    return betweenPrecedence;
+  }
+  if (value._tag === "BinaryExpression") {
+    return binaryPrecedence[value.operator];
+  }
+  if (value._tag === "UnaryExpression") {
+    return unaryPrecedence[value.operator];
+  }
+  if (value._tag === "NullTestExpression") {
+    return nullTestPrecedence;
+  }
   return primaryPrecedence;
 };
 
@@ -168,31 +176,43 @@ const at: ExpressionAt = (minimumPrecedence) =>
           }
           const postfix = yield* maybeNullTest.decode(left.next);
           if (postfix.value !== undefined) {
-            if (nullTestPrecedence < minimumPrecedence) return left;
+            if (nullTestPrecedence < minimumPrecedence) {
+              return left;
+            }
             left = readNullTest(start, left, { ...postfix, value: postfix.value });
             continue;
           }
           const between = yield* maybeBetween.decode(left.next);
           if (between.value !== undefined) {
-            if (betweenPrecedence < minimumPrecedence) return left;
+            if (betweenPrecedence < minimumPrecedence) {
+              return left;
+            }
             left = yield* readBetween(start, left, { ...between, value: between.value }, at);
             continue;
           }
           const membership = yield* maybeIn.decode(left.next);
           if (membership.value !== undefined) {
-            if (inPrecedence < minimumPrecedence) return left;
+            if (inPrecedence < minimumPrecedence) {
+              return left;
+            }
             left = yield* readIn(start, left, { ...membership, value: membership.value }, at);
             continue;
           }
           const pattern = yield* maybePattern.decode(left.next);
           if (pattern.value !== undefined) {
-            if (patternPrecedence < minimumPrecedence) return left;
+            if (patternPrecedence < minimumPrecedence) {
+              return left;
+            }
             left = yield* readPattern(start, left, { ...pattern, value: pattern.value }, at);
             continue;
           }
           const operator = yield* maybeOperator.decode(left.next);
-          if (operator.value === undefined || binaryPrecedence[operator.value] < minimumPrecedence)
+          if (
+            operator.value === undefined ||
+            binaryPrecedence[operator.value] < minimumPrecedence
+          ) {
             return left;
+          }
           left = yield* readBinaryExpression(
             start,
             left,
@@ -210,30 +230,30 @@ const at: ExpressionAt = (minimumPrecedence) =>
 export const expression: Codec<Expression> = at(0);
 export const sqlExpression = document(expression, trivia);
 export type {
-  Expression,
-  FunctionCall,
-  OrderingTerm,
-  FrameBoundary,
-  WindowFrame,
-  WindowDefinition,
-  WindowReference,
   BetweenExpression,
-  InExpression,
-  InTableExpression,
-  InQueryExpression,
-  SubqueryExpression,
-  ExistsExpression,
-  InTableTarget,
-  ColumnReference,
-  UnaryExpression,
   BinaryExpression,
-  NullTestExpression,
-  CollateExpression,
-  CastExpression,
-  CaseExpression,
-  PatternExpression,
   BindParameter,
-  RowValueExpression,
+  CaseExpression,
+  CastExpression,
+  CollateExpression,
+  ColumnReference,
+  ExistsExpression,
+  Expression,
+  FrameBoundary,
+  FunctionCall,
+  InExpression,
+  InQueryExpression,
+  InTableExpression,
+  InTableTarget,
+  NullTestExpression,
+  OrderingTerm,
+  PatternExpression,
   RaiseExpression,
+  RowValueExpression,
+  SubqueryExpression,
+  UnaryExpression,
+  WindowDefinition,
+  WindowFrame,
+  WindowReference,
 } from "./expression/types.ts";
 export type { BinaryOperator, UnaryOperator } from "./expression/operators.ts";

@@ -53,7 +53,9 @@ exports.run = async () => {
       const diagnostics = vscode.languages
         .getDiagnostics(users)
         .filter((d) => d.source === "UncutSQL");
-      if (diagnostics.length === count) return diagnostics;
+      if (diagnostics.length === count) {
+        return diagnostics;
+      }
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
     assert.fail("Timed out waiting for diagnostics");

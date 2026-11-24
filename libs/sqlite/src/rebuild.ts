@@ -1,20 +1,23 @@
-import type { CreateIndex } from "./codecs/create-index.ts";
 import { Effect } from "effect";
+
 import { EncodeError } from "@uncutsql/codec";
-import { createTable, type CreateTable } from "./create-table.ts";
+
+import type { CreateIndex } from "./codecs/create-index.ts";
 import { identifier } from "./codecs/identifier.ts";
 import { stringLiteral } from "./codecs/string-literal.ts";
+import { createTable } from "./create-table.ts";
+import type { CreateTable } from "./create-table.ts";
 import type { TableIdentity } from "./schema-identity.ts";
 import { foldIdentifier } from "./schema-identity.ts";
 
 export interface RebuildTableOperation {
   readonly _tag: "RebuildTable";
-  readonly table: TableIdentity;
-  readonly before: CreateTable;
   readonly after: CreateTable;
-  readonly temporaryName: string;
+  readonly before: CreateTable;
   readonly indexesBefore?: readonly CreateIndex[];
   readonly renames?: readonly { readonly source: string; readonly target: string }[];
+  readonly table: TableIdentity;
+  readonly temporaryName: string;
 }
 
 export const qualifiedTable = (table: TableIdentity) =>
@@ -36,7 +39,9 @@ const rowidAlias = (table: CreateTable) =>
 // PRIMARY KEY DESC differently from DESC in a table-level primary key.
 const integerPrimaryKey = (table: CreateTable) =>
   table.columns.find((column) => {
-    if (!/^(?:integer|"integer"|`integer`|\[integer\])$/i.test(column.typeName ?? "")) return false;
+    if (!/^(?:integer|"integer"|`integer`|\[integer\])$/i.test(column.typeName ?? "")) {
+      return false;
+    }
     return (
       column.constraints.some((item) => item._tag === "PrimaryKey" && item.order !== "DESC") ||
       table.tableConstraints.some(
@@ -70,8 +75,9 @@ export const rebuildCopy = (
       next.has(source) ||
       mapping.has(target) ||
       sources.has(source)
-    )
+    ) {
       return "Invalid or conflicting column rename mapping";
+    }
     mapping.set(target, source);
     sources.add(source);
   }
@@ -80,23 +86,30 @@ export const rebuildCopy = (
     const old = previous.get(
       mapping.get(foldIdentifier(column.name)) ?? foldIdentifier(column.name),
     );
-    if (!old) continue;
-    if (!generated(column)) columns.push({ source: old.name, target: column.name });
-    else if (!generated(old))
+    if (!old) {
+      continue;
+    }
+    if (!generated(column)) {
+      columns.push({ source: old.name, target: column.name });
+    } else if (!generated(old)) {
       return `Cannot copy ${JSON.stringify(old.name)} into generated column ${JSON.stringify(column.name)}`;
+    }
   }
   if (hasRowid(before) && hasRowid(after)) {
     const oldKey = integerPrimaryKey(before);
     const newKey = integerPrimaryKey(after);
     const keyCopy = columns.find((column) => column.target === newKey);
     if (keyCopy) {
-      if (keyCopy.source !== oldKey)
+      if (keyCopy.source !== oldKey) {
         return `Cannot preserve both the rowid and column ${JSON.stringify(keyCopy.source)} in integer primary key ${JSON.stringify(newKey)}`;
+      }
       return columns;
     }
     const source = oldKey ?? rowidAlias(before);
     const target = newKey ?? rowidAlias(after);
-    if (!source || !target) return "Cannot preserve rowids when all rowid aliases are shadowed";
+    if (!source || !target) {
+      return "Cannot preserve rowids when all rowid aliases are shadowed";
+    }
     columns.unshift({ source, target });
   }
   return columns.length
@@ -113,7 +126,9 @@ export const encodeRebuild = (
 ): Effect.Effect<string, EncodeError> =>
   Effect.gen(function* () {
     const copy = rebuildCopy(operation.before, operation.after, operation.renames);
-    if (typeof copy === "string") return yield* Effect.fail(new EncodeError({ message: copy }));
+    if (typeof copy === "string") {
+      return yield* Effect.fail(new EncodeError({ message: copy }));
+    }
     const table = yield* qualifiedTable(operation.table);
     const replacement = yield* qualifiedTable({
       ...operation.table,
@@ -121,10 +136,10 @@ export const encodeRebuild = (
     });
     const definition = yield* createTable.encode({
       ...operation.after,
-      schema: operation.table.schema,
-      name: operation.temporaryName,
-      temporary: false,
       ifNotExists: false,
+      name: operation.temporaryName,
+      schema: operation.table.schema,
+      temporary: false,
     });
     const targets = yield* Effect.forEach(copy, (column) => identifier.encode(column.target));
     const sources = yield* Effect.forEach(copy, (column) => identifier.encode(column.source));

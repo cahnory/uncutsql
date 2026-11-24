@@ -1,6 +1,8 @@
-import { type Codec, optional, prefixed, struct, transform } from "@uncutsql/codec";
-import { keyword } from "../../operators/keyword.ts";
+import { optional, prefixed, struct, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keywordChoice } from "../../operators/keyword-choice.ts";
+import { keyword } from "../../operators/keyword.ts";
 
 export interface Deferrability {
   readonly deferrable: boolean;
@@ -18,13 +20,13 @@ export const deferrability: Codec<Deferrability> = transform(
     " ",
   ),
   {
-    decode: ({ mode, initially }): Deferrability => ({
+    decode: ({ initially, mode }): Deferrability => ({
       deferrable: mode === "DEFERRABLE",
       ...(initially === undefined ? {} : { initially }),
     }),
     encode: (value: Deferrability) => ({
-      mode: value.deferrable ? ("DEFERRABLE" as const) : ("NOT DEFERRABLE" as const),
       initially: value.initially,
+      mode: value.deferrable ? ("DEFERRABLE" as const) : ("NOT DEFERRABLE" as const),
     }),
   },
 );

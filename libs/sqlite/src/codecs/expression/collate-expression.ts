@@ -1,5 +1,8 @@
 import { Effect } from "effect";
-import { type Cursor, type Read, commit, read } from "@uncutsql/codec";
+
+import { commit, read } from "@uncutsql/codec";
+import type { Cursor, Read } from "@uncutsql/codec";
+
 import { keyword } from "../../operators/keyword.ts";
 import { identifier } from "../identifier.ts";
 import type { CollateExpression, Expression, ExpressionAt } from "./types.ts";
@@ -11,14 +14,14 @@ export const readCollate = (start: Cursor, operand: Read<Expression>, operator: 
   Effect.gen(function* () {
     const collation = yield* commit(identifier).decode(operator.next);
     return read<Expression>(
-      { _tag: "CollateExpression", operand: operand.value, collation: collation.value },
+      { _tag: "CollateExpression", collation: collation.value, operand: operand.value },
       collation.next,
       [
         {
+          children: [...operand.nodes, ...operator.nodes, ...collation.nodes],
+          end: collation.next.offset,
           kind: "CollateExpression",
           start: start.offset,
-          end: collation.next.offset,
-          children: [...operand.nodes, ...operator.nodes, ...collation.nodes],
         },
       ],
     );

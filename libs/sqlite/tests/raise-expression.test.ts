@@ -1,15 +1,19 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import { EncodeError, ParseError } from "@uncutsql/codec";
-import { sqlExpression, createTable, type RaiseExpression } from "../src/index.ts";
+
+import { createTable, sqlExpression } from "../src/index.ts";
+import type { RaiseExpression } from "../src/index.ts";
 const encode = (sql: string) =>
   Effect.runSync(sqlExpression.encode(Effect.runSync(sqlExpression.decode(sql))));
 for (const group of ["valid", "invalid", "edge"]) {
   const dir = new URL(`./fixtures/previous/raise-function/${group}/`, import.meta.url);
-  for (const file of readdirSync(dir))
+  for (const file of readdirSync(dir)) {
     test(`previous RAISE ${group}: ${file}`, () => {
       const source = readFileSync(new URL(file, dir), "utf8");
       const result = Effect.runSync(Effect.result(sqlExpression.decode(source)));
@@ -21,6 +25,7 @@ for (const group of ["valid", "invalid", "edge"]) {
         assert.deepEqual(Effect.runSync(sqlExpression.decode(encode(source))), result.success);
       }
     });
+  }
 }
 
 test("RAISE retains SQLite trigger actions and expression messages", () => {
@@ -40,7 +45,9 @@ test("RAISE retains SQLite trigger actions and expression messages", () => {
         assert.throws(() => db.exec("INSERT INTO t VALUES(-2)"), /bad:-2/);
         assert.equal(db.isTransaction, action !== "ROLLBACK");
       }
-      if (db.isTransaction) db.exec("ROLLBACK");
+      if (db.isTransaction) {
+        db.exec("ROLLBACK");
+      }
       assert.equal(db.prepare("SELECT count(*) AS n FROM t").get()!.n, 0);
     } finally {
       db.close();

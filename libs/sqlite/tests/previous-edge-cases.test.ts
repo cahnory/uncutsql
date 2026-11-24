@@ -1,26 +1,30 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
-import { type Codec, document, ParseError } from "@uncutsql/codec";
+
+import { document, ParseError } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { columnConstraint } from "../src/codecs/column-constraint.ts";
-import { columnType } from "../src/codecs/type-name.ts";
-import { tableReference } from "../src/codecs/table-reference.ts";
-import { tableOptions } from "../src/codecs/table-options.ts";
 import { createTableGrammar } from "../src/codecs/create-table-statement.ts";
+import { tableOptions } from "../src/codecs/table-options.ts";
+import { tableReference } from "../src/codecs/table-reference.ts";
+import { columnType } from "../src/codecs/type-name.ts";
 import { trivia } from "../src/operators/trivia.ts";
 
 // Preserve the old filenames, including .skip, but run every imported case.
 // Explicit overrides document ambiguously classified edges and newly supported syntax.
 const overrides: Readonly<Record<string, boolean>> = {
+  "column-constraint/edge/04_collate_keyword_name_unquoted.sql": false,
+  "create-table-statement/edge/02_keyword_as_identifier_unquoted.sql": false,
+  "table-options/invalid/03_strict_twice.skip.sql": true,
   "table-reference/edge/01_table_is_keyword_unquoted.sql": false,
   "table-reference/edge/02_schema_is_keyword_unquoted.sql": false,
   // SQLite bracket quoting ends at the first ]; doubled brackets do not escape it.
   "table-reference/valid/17_table_with_escaped_bracket.sql": false,
-  "column-constraint/edge/04_collate_keyword_name_unquoted.sql": false,
   "type-name/edge/02_keyword_like.skip.sql": false,
-  "table-options/invalid/03_strict_twice.skip.sql": true,
-  "create-table-statement/edge/02_keyword_as_identifier_unquoted.sql": false,
 };
 
 const fixtureTests = <A>(group: string, grammar: Codec<A>) => {

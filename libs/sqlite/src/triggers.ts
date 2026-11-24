@@ -1,17 +1,16 @@
 import { Effect } from "effect";
+
 import { EncodeError } from "@uncutsql/codec";
-import {
-  schemaValueEqual,
-  tableKey,
-  type DatabaseSchema,
-  type DatabaseTrigger,
-} from "@uncutsql/core";
-import { createTrigger, type CreateTrigger } from "./codecs/create-trigger.ts";
+import { schemaValueEqual, tableKey } from "@uncutsql/core";
+import type { DatabaseSchema, DatabaseTrigger } from "@uncutsql/core";
+
+import { createTrigger } from "./codecs/create-trigger.ts";
+import type { CreateTrigger } from "./codecs/create-trigger.ts";
 import { foldIdentifier } from "./schema-identity.ts";
 import { semanticValue, syntaxValue } from "./schema-value.ts";
 
-const definition = ({ timing, event, when, actions }: CreateTrigger) =>
-  semanticValue({ timing: timing ?? "BEFORE", event, when, actions });
+const definition = ({ actions, event, timing, when }: CreateTrigger) =>
+  semanticValue({ actions, event, timing: timing ?? "BEFORE", when });
 
 const relations = (database: DatabaseSchema) => [...database.tables, ...(database.views ?? [])];
 
@@ -39,17 +38,18 @@ export const triggerModel = (trigger: CreateTrigger, database: DatabaseSchema) =
       (catalog !== "temp" && catalog !== target.identity.catalog) ||
       "query" in target !== (trigger.timing === "INSTEAD OF") ||
       /^sqlite_/i.test(trigger.name)
-    )
+    ) {
       return yield* Effect.fail(
         new EncodeError({
           message: `Invalid SQLite trigger ${trigger.name} on ${trigger.target.name}`,
         }),
       );
+    }
     return {
+      definition: definition(trigger),
       identity: { catalog, name: foldIdentifier(trigger.name) },
       name: trigger.name,
       target: target.identity,
-      definition: definition(trigger),
     } satisfies DatabaseTrigger;
   });
 
@@ -66,24 +66,25 @@ export const triggersFromDatabaseSchema = (database: DatabaseSchema) =>
         trigger.identity.schema !== undefined ||
         foldIdentifier(catalog) !== catalog ||
         foldIdentifier(trigger.name) !== trigger.identity.name
-      )
+      ) {
         return yield* Effect.fail(
           new EncodeError({
             message: `Invalid SQLite trigger identity or target for ${trigger.name}`,
           }),
         );
+      }
       const ast = {
         ...(syntaxValue(trigger.definition) as Pick<
           CreateTrigger,
           "timing" | "event" | "when" | "actions"
         >),
         _tag: "CreateTrigger",
-        temporary: false,
-        ifNotExists: false,
         forEachRow: false,
-        schema: catalog,
+        ifNotExists: false,
         name: trigger.name,
-        target: { schema: trigger.target.catalog, name: owner.name },
+        schema: catalog,
+        target: { name: owner.name, schema: trigger.target.catalog },
+        temporary: false,
       } as CreateTrigger;
       const parsed = yield* createTrigger.encode(ast).pipe(
         Effect.flatMap(createTrigger.decode),
@@ -93,10 +94,11 @@ export const triggersFromDatabaseSchema = (database: DatabaseSchema) =>
         ),
       );
       const model = yield* triggerModel(parsed, database);
-      if (!schemaValueEqual(model.definition, trigger.definition))
+      if (!schemaValueEqual(model.definition, trigger.definition)) {
         return yield* Effect.fail(
           new EncodeError({ message: "Invalid SQLite trigger definition in snapshot" }),
         );
+      }
       return parsed;
     }),
   );

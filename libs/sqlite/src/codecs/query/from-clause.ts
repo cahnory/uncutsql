@@ -1,6 +1,6 @@
 import { Effect } from "effect";
+
 import {
-  type Codec,
   EncodeError,
   make,
   optional,
@@ -9,11 +9,13 @@ import {
   struct,
   transform,
 } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import type { Expression } from "../expression/types.ts";
-import type { FromClause, JoinedSource } from "./types.ts";
-import { joinOperator } from "./join-operator.ts";
 import { joinConstraint } from "./join-constraint.ts";
+import { joinOperator } from "./join-operator.ts";
 import { tableSource } from "./table-source.ts";
+import type { FromClause, JoinedSource } from "./types.ts";
 
 const isJoined = (value: FromClause): value is JoinedSource => "_tag" in value;
 export const fromClause = (expression: Codec<Expression>): Codec<FromClause> => {
@@ -43,7 +45,7 @@ export const fromClause = (expression: Codec<Expression>): Codec<FromClause> => 
           : {
               _tag: "JoinedSource",
               head,
-              joins: joins.map(({ operator, right, constraint }) => ({
+              joins: joins.map(({ constraint, operator, right }) => ({
                 operator,
                 right,
                 ...(constraint === undefined ? {} : { constraint }),
@@ -58,9 +60,9 @@ export const fromClause = (expression: Codec<Expression>): Codec<FromClause> => 
           : {
               head: value[0]!,
               joins: value.slice(1).map((right) => ({
+                constraint: undefined,
                 operator: { _tag: "CommaJoin" as const },
                 right,
-                constraint: undefined,
               })),
             },
     },
@@ -81,8 +83,9 @@ export const fromClause = (expression: Codec<Expression>): Codec<FromClause> => 
     decode: (cursor) =>
       Effect.gen(function* () {
         const result = yield* syntax.decode(cursor);
-        if (!valid(result.value))
+        if (!valid(result.value)) {
           return yield* Effect.fail(parseError(cursor, "NATURAL JOIN without ON or USING", true));
+        }
         return result;
       }),
     encode: (value) =>

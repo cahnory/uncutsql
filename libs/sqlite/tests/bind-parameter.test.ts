@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import { EncodeError, ParseError } from "@uncutsql/codec";
-import { sqlExpression, createTable } from "../src/index.ts";
+
 import { defaultColumnConstraint } from "../src/codecs/column-constraint/default-column-constraint.ts";
+import { createTable, sqlExpression } from "../src/index.ts";
 const decode = (sql: string) => Effect.runSync(sqlExpression.decode(sql));
 const encode = (sql: string) => Effect.runSync(sqlExpression.encode(decode(sql)));
 
@@ -35,7 +38,7 @@ test("binding tokens retain exact spelling including namespace/suffix extensions
     const sql = encode(source);
     assert.equal(db.prepare(`SELECT ${sql} AS value`).get({ "?1": 3, "?2": 4 })!.value, 10);
     assert.equal(db.prepare(`SELECT ${encode("? + ? * ?")} AS value`).get(2, 3, 4)!.value, 14);
-    const names = { ":x": 1, "@x": 2, $x: 3, "$ns::x(key)": 4 };
+    const names = { ":x": 1, "@x": 2, "$ns::x(key)": 4, $x: 3 };
     const named = db.prepare(`SELECT ${encode(":x + @x + $x + $ns::x(key)")} AS value`);
     named.setAllowBareNamedParameters(false);
     assert.equal(named.get(names)!.value, 10);

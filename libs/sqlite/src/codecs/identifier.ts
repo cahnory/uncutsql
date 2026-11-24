@@ -1,14 +1,9 @@
 import { Effect } from "effect";
-import {
-  type Codec,
-  EncodeError,
-  alternatives,
-  located,
-  make,
-  parseError,
-  read,
-} from "@uncutsql/codec";
-import { identifierStart, identifierPart, uppercaseAscii } from "../lexer/characters.ts";
+
+import { alternatives, EncodeError, located, make, parseError, read } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
+import { identifierPart, identifierStart, uppercaseAscii } from "../lexer/characters.ts";
 import { contextualNameKeywords, keywords } from "../lexer/keywords.ts";
 import { quoted } from "../lexer/quoted.ts";
 import { lexeme } from "../operators/lexeme.ts";
@@ -20,7 +15,9 @@ const bareIdentifier = (allowedKeywords?: ReadonlySet<string>): Codec<string> =>
         return Effect.fail(parseError(cursor, "identifier"));
       }
       let end = cursor.offset + 1;
-      while (identifierPart.test(cursor.source[end] ?? "")) end++;
+      while (identifierPart.test(cursor.source[end] ?? "")) {
+        end++;
+      }
       const value = cursor.source.slice(cursor.offset, end);
       const word = uppercaseAscii(value);
       return keywords.has(word) && !allowedKeywords?.has(word)

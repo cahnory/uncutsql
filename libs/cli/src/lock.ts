@@ -1,16 +1,19 @@
 import { createHash } from "node:crypto";
+
 import { Data, Effect } from "effect";
-import { decodeDatabaseSchema, validateDatabase, type DatabaseSchema } from "@uncutsql/core";
+
+import { decodeDatabaseSchema, validateDatabase } from "@uncutsql/core";
+import type { DatabaseSchema } from "@uncutsql/core";
 
 export class GenerationError extends Data.TaggedError("GenerationError")<{
   readonly message: string;
 }> {}
 export interface SchemaLock {
-  readonly formatVersion: 1;
+  readonly database: DatabaseSchema;
   readonly dialect: string;
+  readonly formatVersion: 1;
   readonly lastMigrationId: number;
   readonly lastMigrationSha256: string;
-  readonly database: DatabaseSchema;
 }
 export const migrationFilename = (id: number) => `${String(id).padStart(6, "0")}.sql`;
 export const hashMigration = (sql: string) =>
@@ -23,11 +26,12 @@ export const decodeLock = (
 ): Effect.Effect<SchemaLock, GenerationError> =>
   Effect.gen(function* () {
     const value: unknown = yield* Effect.try({
-      try: () => JSON.parse(source),
       catch: () => new GenerationError({ message: "Lock file is not valid JSON" }),
+      try: () => JSON.parse(source),
     });
-    if (value === null || typeof value !== "object" || Array.isArray(value))
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
       return yield* Effect.fail(new GenerationError({ message: "Invalid lock file object" }));
+    }
     const item = value as Record<string, unknown>;
     if (
       Object.keys(item).some(
@@ -54,27 +58,29 @@ export const decodeLock = (
         }),
       );
     }
-    if (item.dialect !== dialect)
+    if (item.dialect !== dialect) {
       return yield* Effect.fail(
         new GenerationError({
           message: `Lock dialect ${JSON.stringify(item.dialect)} does not match ${JSON.stringify(dialect)}`,
         }),
       );
+    }
     const database = yield* decodeDatabaseSchema(item.database).pipe(
       Effect.mapError(
         (error) => new GenerationError({ message: `Invalid lock database: ${error.message}` }),
       ),
     );
     const diagnostics = validateDatabase(database, "before");
-    if (diagnostics.length)
+    if (diagnostics.length) {
       return yield* Effect.fail(
         new GenerationError({ message: diagnostics.map((item) => item.message).join("\n") }),
       );
+    }
     return {
-      formatVersion: 1,
+      database,
       dialect: item.dialect,
+      formatVersion: 1,
       lastMigrationId: item.lastMigrationId,
       lastMigrationSha256: item.lastMigrationSha256,
-      database,
     };
   });

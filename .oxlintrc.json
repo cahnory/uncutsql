@@ -1,20 +1,71 @@
 {
-  "ignorePatterns": ["**/dist/**"],
+  "categories": {
+    "correctness": "error"
+  },
   "env": {
     "builtin": true,
     "node": true
   },
-  "categories": {
-    "correctness": "error"
-  },
+  "ignorePatterns": ["**/dist/**"],
+  "jsPlugins": ["eslint-plugin-perfectionist", "./scripts/lint-rules.mjs"],
+  "plugins": ["import", "oxc", "typescript", "unicorn"],
   "rules": {
+    "curly": ["error", "all"],
+    "import/consistent-type-specifier-style": ["error", "prefer-top-level"],
     "no-unused-vars": [
       "error",
       {
         "argsIgnorePattern": "^_",
-        "varsIgnorePattern": "^_",
-        "ignoreRestSiblings": true
+        "ignoreRestSiblings": true,
+        "varsIgnorePattern": "^_"
       }
-    ]
+    ],
+    "perfectionist/sort-interfaces": [
+      "error",
+      {
+        "type": "alphabetical"
+      }
+    ],
+    "perfectionist/sort-named-exports": [
+      "error",
+      {
+        "type": "alphabetical"
+      }
+    ],
+    "perfectionist/sort-object-types": [
+      "error",
+      {
+        "type": "alphabetical"
+      }
+    ],
+    "perfectionist/sort-objects": [
+      "error",
+      {
+        "type": "unsorted",
+        "useConfigurationIf": {
+          "matchesAstSelector": "CallExpression[callee.name=/^(struct|taggedUnion)$/] > ObjectExpression"
+        }
+      },
+      {
+        "type": "alphabetical",
+        "partitionByComputedKey": true,
+        "partitionByNewLine": true
+      }
+    ],
+    "sort-imports": [
+      "error",
+      {
+        "ignoreCase": true,
+        "ignoreDeclarationSort": true
+      }
+    ],
+    "typescript/consistent-type-imports": [
+      "error",
+      {
+        "disallowTypeAnnotations": false,
+        "fixStyle": "separate-type-imports"
+      }
+    ],
+    "workspace/separate-type-exports": "error"
   }
 }

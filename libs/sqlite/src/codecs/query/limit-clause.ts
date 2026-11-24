@@ -1,4 +1,6 @@
-import { type Codec, optional, prefixed, struct, taggedUnion, transform } from "@uncutsql/codec";
+import { optional, prefixed, struct, taggedUnion, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keyword } from "../../operators/keyword.ts";
 import { punctuation } from "../../operators/punctuation.ts";
 import type { Expression } from "../expression/types.ts";
@@ -21,7 +23,7 @@ export const limitClause = (expression: Codec<Expression>): Codec<LimitClause> =
     {
       decode: ({ first, tail }): LimitClause =>
         tail?._tag === "Comma"
-          ? { _tag: "CommaLimit", offset: first, count: tail.value }
+          ? { _tag: "CommaLimit", count: tail.value, offset: first }
           : {
               _tag: "CountLimit",
               count: first,

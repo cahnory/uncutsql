@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
-import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+
 import { Ajv } from "ajv";
 import { Effect } from "effect";
+
 import { prepareMigrationDecisions, resolveMigrationDecisions } from "@uncutsql/core";
 import type { DatabaseSchema } from "@uncutsql/core";
+
 import { resolveConfig } from "../src/config.ts";
 
 const compile = (name: string) =>
@@ -20,7 +23,7 @@ test("config schema agrees with runtime on editor metadata and invalid options",
   try {
     for (const [config, valid] of [
       [{}, true],
-      [{ $schema: "./config.schema.json", schema: "./db", dialect: "@uncutsql/sqlite" }, true],
+      [{ $schema: "./config.schema.json", dialect: "@uncutsql/sqlite", schema: "./db" }, true],
       [{ schema: "   " }, false],
       [{ $schema: 123 }, false],
       [{ schemas: "./db" }, false],
@@ -28,35 +31,38 @@ test("config schema agrees with runtime on editor metadata and invalid options",
     ] as const) {
       assert.equal(validate(config), valid, JSON.stringify(validate.errors));
       writeFileSync(join(cwd, "uncutsql.config.json"), JSON.stringify(config));
-      if (valid) await Effect.runPromise(resolveConfig({}, cwd));
-      else await assert.rejects(Effect.runPromise(resolveConfig({}, cwd)));
+      if (valid) {
+        await Effect.runPromise(resolveConfig({}, cwd));
+      } else {
+        await assert.rejects(Effect.runPromise(resolveConfig({}, cwd)));
+      }
     }
   } finally {
-    rmSync(cwd, { recursive: true, force: true });
+    rmSync(cwd, { force: true, recursive: true });
   }
 });
 
 test("decisions schema validates generated snapshots and editable resolutions", () => {
   const validate = compile("decisions");
   const model = (key: string): DatabaseSchema => ({
+    tables: [
+      {
+        columns: [
+          { constraints: [], dataType: { args: [null, 1, true], name: "TEXT" }, key, name: key },
+        ],
+        constraints: [{ kind: "fixture", properties: { nested: { values: [false] } } }],
+        identity: { name: "users" },
+        indexes: [{ key: "idx", name: "idx", terms: [key], unique: false, where: null }],
+        name: "users",
+        options: {},
+      },
+    ],
     triggers: [
       {
+        definition: { actions: [key] },
         identity: { name: "log" },
         name: "log",
         target: { name: "users" },
-        definition: { actions: [key] },
-      },
-    ],
-    tables: [
-      {
-        identity: { name: "users" },
-        name: "users",
-        columns: [
-          { key, name: key, dataType: { name: "TEXT", args: [null, 1, true] }, constraints: [] },
-        ],
-        indexes: [{ key: "idx", name: "idx", unique: false, terms: [key], where: null }],
-        constraints: [{ kind: "fixture", properties: { nested: { values: [false] } } }],
-        options: {},
       },
     ],
   });
@@ -120,23 +126,23 @@ test("action completion offers column choices before a target exists and offers 
   const service = getLanguageService({});
   service.configure({
     schemas: [
-      { uri: "https://uncutsql.test/decisions.schema.json", fileMatch: ["*.json"], schema },
+      { fileMatch: ["*.json"], schema, uri: "https://uncutsql.test/decisions.schema.json" },
     ],
   });
   const base = {
-    version: 1,
-    before: { tables: [] },
     after: { tables: [] },
+    before: { tables: [] },
     decisions: [
       {
-        id: "fixture",
-        table: { name: "t" },
-        column: "old",
-        question: "Drop or rename?",
         candidates: ["new"],
+        column: "old",
+        id: "fixture",
+        question: "Drop or rename?",
         resolution: { action: "pending" },
+        table: { name: "t" },
       },
     ],
+    version: 1,
   };
   for (const [column, candidates] of [
     ["old", ["new"]],
@@ -147,7 +153,7 @@ test("action completion offers column choices before a target exists and offers 
     for (const value of ['"|pending"', "|", '"|rename"']) {
       const source = JSON.stringify({
         ...base,
-        decisions: base.decisions.map((item) => ({ ...item, column, candidates })),
+        decisions: base.decisions.map((item) => ({ ...item, candidates, column })),
       }).replace('"pending"', value);
       const offset = source.indexOf("|");
       const document = TextDocument.create(
@@ -162,8 +168,9 @@ test("action completion offers column choices before a target exists and offers 
         service.parseJSONDocument(document),
       );
       const labels = completion!.items.map((item) => item.label);
-      for (const action of ["pending", "drop_if_empty", "drop"])
+      for (const action of ["pending", "drop_if_empty", "drop"]) {
         assert.ok(labels.includes(JSON.stringify(action)), JSON.stringify(labels));
+      }
       assert.equal(labels.includes('"rename"'), candidates.length > 0, JSON.stringify(labels));
     }
   }

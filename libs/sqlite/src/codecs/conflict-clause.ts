@@ -1,4 +1,6 @@
-import { prefixed, type Value } from "@uncutsql/codec";
+import { prefixed } from "@uncutsql/codec";
+import type { Value } from "@uncutsql/codec";
+
 import { keywordChoice } from "../operators/keyword-choice.ts";
 import { keywordSequence } from "../operators/keyword-sequence.ts";
 

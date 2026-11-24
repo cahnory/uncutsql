@@ -1,24 +1,18 @@
 import { Effect } from "effect";
-import {
-  type Codec,
-  type SourceNode,
-  document,
-  make,
-  parseError,
-  read,
-  repeat,
-  followedBy,
-  optional,
-} from "@uncutsql/codec";
-import {
-  createTableStatementBodyGrammar,
-  type CreateTableStatement,
-} from "./codecs/create-table-statement.ts";
-import { createIndexBodyGrammar, type CreateIndex } from "./codecs/create-index.ts";
-import { createTriggerBodyGrammar, type CreateTrigger } from "./codecs/create-trigger.ts";
-import { createViewBodyGrammar, type CreateView } from "./codecs/create-view.ts";
-import { keyword } from "./operators/keyword.ts";
+
+import { document, followedBy, make, optional, parseError, read, repeat } from "@uncutsql/codec";
+import type { Codec, SourceNode } from "@uncutsql/codec";
+
+import { createIndexBodyGrammar } from "./codecs/create-index.ts";
+import type { CreateIndex } from "./codecs/create-index.ts";
+import { createTableStatementBodyGrammar } from "./codecs/create-table-statement.ts";
+import type { CreateTableStatement } from "./codecs/create-table-statement.ts";
+import { createTriggerBodyGrammar } from "./codecs/create-trigger.ts";
+import type { CreateTrigger } from "./codecs/create-trigger.ts";
+import { createViewBodyGrammar } from "./codecs/create-view.ts";
+import type { CreateView } from "./codecs/create-view.ts";
 import { keywordChoice } from "./operators/keyword-choice.ts";
+import { keyword } from "./operators/keyword.ts";
 import { terminator } from "./operators/terminator.ts";
 import { trivia } from "./operators/trivia.ts";
 
@@ -35,8 +29,12 @@ const statementBody: Codec<Statement> = make<Statement>({
       const kind = yield* keywordChoice(["TABLE", "INDEX", "VIEW", "TRIGGER"]).decode(
         modifier.next,
       );
-      if (kind.value === "TRIGGER") return yield* createTriggerBodyGrammar.decode(cursor);
-      if (kind.value === "VIEW") return yield* createViewBodyGrammar.decode(cursor);
+      if (kind.value === "TRIGGER") {
+        return yield* createTriggerBodyGrammar.decode(cursor);
+      }
+      if (kind.value === "VIEW") {
+        return yield* createViewBodyGrammar.decode(cursor);
+      }
       return yield* kind.value === "INDEX"
         ? createIndexBodyGrammar.decode(cursor)
         : createTableStatementBodyGrammar.decode(cursor);
@@ -76,10 +74,10 @@ export const schemaGrammar: Codec<readonly Statement[]> = make<readonly Statemen
           next = { ...next, offset: next.offset + 1 };
         }
         nodes.push({
+          children: statement.nodes,
+          end: next.offset,
           kind: statement.value._tag,
           start,
-          end: next.offset,
-          children: statement.nodes,
         });
         next = (yield* trivia.decode(next)).next;
       }

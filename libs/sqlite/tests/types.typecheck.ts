@@ -1,16 +1,18 @@
-import { diffDatabases, SchemaDiffError } from "@uncutsql/core";
-import { Effect } from "effect";
-import { type Value, EncodeError, ParseError } from "@uncutsql/codec";
-import {
+import type { Effect } from "effect";
+
+import type { EncodeError, ParseError } from "@uncutsql/codec";
+import type { Value } from "@uncutsql/codec";
+import type { diffDatabases, SchemaDiffError } from "@uncutsql/core";
+
+import type {
   createTable,
-  lowerMigration,
   encodeMigration,
+  lowerMigration,
   MigrationPlanError,
-  literalValue,
-  expression,
   sqlExpression,
-  type Expression,
 } from "../src/index.ts";
+import { expression, literalValue } from "../src/index.ts";
+import type { Expression } from "../src/index.ts";
 
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -35,7 +37,7 @@ literalValue.encode({ _tag: "StringLiteral", value: 42 });
 // @ts-expect-error Numeric SQL spelling is deliberately not a JavaScript number.
 expression.encode({ _tag: "NumericLiteral", value: 42 });
 // @ts-expect-error Only supported SQLite operators can be constructed.
-expression.encode({ _tag: "UnaryExpression", operator: "!", operand: { _tag: "NullLiteral" } });
+expression.encode({ _tag: "UnaryExpression", operand: { _tag: "NullLiteral" }, operator: "!" });
 
 type _DiffRequirements = Assert<Equal<Effect.Services<ReturnType<typeof diffDatabases>>, never>>;
 type _DiffErrors = Assert<Equal<Effect.Error<ReturnType<typeof diffDatabases>>, SchemaDiffError>>;

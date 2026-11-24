@@ -1,26 +1,20 @@
 import { Effect } from "effect";
-import {
-  type Cursor,
-  type Read,
-  commit,
-  read,
-  repeat,
-  taggedUnion,
-  transform,
-} from "@uncutsql/codec";
+
+import { commit, read, repeat, taggedUnion, transform } from "@uncutsql/codec";
+import type { Cursor, Read } from "@uncutsql/codec";
+
 import { keywordChoice } from "../../operators/keyword-choice.ts";
 import { parenthesized } from "../../operators/parenthesized.ts";
 import { punctuation } from "../../operators/punctuation.ts";
+import { query } from "../query/query.ts";
+import { inTableTarget } from "./in-table-target.ts";
 import type {
   Expression,
   ExpressionAt,
   InExpression,
-  InTableExpression,
   InQueryExpression,
+  InTableExpression,
 } from "./types.ts";
-
-import { query } from "../query/query.ts";
-import { inTableTarget } from "./in-table-target.ts";
 
 export const inPrecedence = 40;
 export const inOperator = keywordChoice(["NOT IN", "IN"]);
@@ -59,7 +53,7 @@ export const readIn = (
       }),
     });
     const list = yield* commit(target).decode(operator.next);
-    const common = { operator: operator.value, operand: operand.value };
+    const common = { operand: operand.value, operator: operator.value };
     const value: InExpression | InTableExpression | InQueryExpression =
       list.value._tag === "Table"
         ? { _tag: "InTableExpression", ...common, target: list.value.target }
@@ -68,10 +62,10 @@ export const readIn = (
           : { _tag: "InExpression", ...common, values: list.value.target.values };
     return read<Expression>(value, list.next, [
       {
+        children: [...operand.nodes, ...operator.nodes, ...list.nodes],
+        end: list.next.offset,
         kind: value._tag,
         start: start.offset,
-        end: list.next.offset,
-        children: [...operand.nodes, ...operator.nodes, ...list.nodes],
       },
     ]);
   });

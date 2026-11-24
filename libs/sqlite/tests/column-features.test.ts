@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect } from "effect";
+
 import { createTable } from "../src/index.ts";
 
 const versions = (source: string) => {
@@ -63,7 +65,7 @@ test("collation and column conflict actions preserve insertion behavior", () => 
           .prepare("SELECT * FROM t")
           .all()
           .map((row) => ({ ...row })),
-        [{ name: "A", fallback: "fallback" }],
+        [{ fallback: "fallback", name: "A" }],
       );
     } finally {
       database.close();
@@ -89,9 +91,9 @@ test("generated VIRTUAL and STORED values update correctly and cannot be assigne
         [0, 0, 2, 3],
       );
       database.exec("INSERT INTO t(a,b) VALUES (1,2)");
-      assert.deepEqual({ ...database.prepare("SELECT v,s FROM t").get()! }, { v: "1:2", s: 3 });
+      assert.deepEqual({ ...database.prepare("SELECT v,s FROM t").get()! }, { s: 3, v: "1:2" });
       database.exec("UPDATE t SET a=4");
-      assert.deepEqual({ ...database.prepare("SELECT v,s FROM t").get()! }, { v: "4:2", s: 6 });
+      assert.deepEqual({ ...database.prepare("SELECT v,s FROM t").get()! }, { s: 6, v: "4:2" });
       assert.throws(() => database.exec("INSERT INTO t(a,b,s) VALUES (1,2,3)"), /generated column/);
     } finally {
       database.close();

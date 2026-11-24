@@ -1,7 +1,11 @@
 import { link, open, readFile, realpath, rename, stat, unlink } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
+
 import { Effect } from "effect";
-import { mergeMigrationDecisions, type MigrationDecisions } from "@uncutsql/core";
+
+import { mergeMigrationDecisions } from "@uncutsql/core";
+import type { MigrationDecisions } from "@uncutsql/core";
+
 import type { DecisionWriterFlag } from "./config.ts";
 
 export const decisionDocument = async (document: MigrationDecisions, output?: string) => {
@@ -18,10 +22,14 @@ export const decisionDocument = async (document: MigrationDecisions, output?: st
         break;
       }
     } catch (cause) {
-      if (!(cause instanceof Error && "code" in cause && cause.code === "ENOENT")) throw cause;
+      if (!(cause instanceof Error && "code" in cause && cause.code === "ENOENT")) {
+        throw cause;
+      }
     }
     const parent = dirname(root);
-    if (parent === root) break;
+    if (parent === root) {
+      break;
+    }
     root = parent;
   }
   const path = relative(directory, schema).split(sep).join("/");
@@ -44,17 +52,22 @@ export const writeDecisionFile = async (
     let document = fresh;
     if (flag === "--merge-decisions") {
       const previous = await readFile(path, "utf8").catch((cause: unknown) => {
-        if (hasCode(cause, "ENOENT")) return undefined;
+        if (hasCode(cause, "ENOENT")) {
+          return undefined;
+        }
         throw cause;
       });
-      if (previous !== undefined)
+      if (previous !== undefined) {
         document = await Effect.runPromise(mergeMigrationDecisions(fresh, JSON.parse(previous)));
+      }
     }
     const mode =
       flag === "--write-decisions"
         ? undefined
         : await stat(path).catch((cause: unknown) => {
-            if (hasCode(cause, "ENOENT")) return undefined;
+            if (hasCode(cause, "ENOENT")) {
+              return undefined;
+            }
             throw cause;
           });
     await handle.chmod(mode ? mode.mode & 0o777 : 0o666 & ~process.umask());
@@ -63,10 +76,11 @@ export const writeDecisionFile = async (
       try {
         await link(stage, path);
       } catch (cause) {
-        if (hasCode(cause, "EEXIST"))
+        if (hasCode(cause, "EEXIST")) {
           throw new Error(
             "Decision file already exists. Replace --write-decisions with --merge-decisions to keep applicable choices or --rewrite-decisions to reset every choice.",
           );
+        }
         throw cause;
       }
     } else {
@@ -82,6 +96,8 @@ export const writeDecisionFile = async (
   } finally {
     await handle.close();
     // A successful rename transfers ownership of the staging path to the next writer.
-    if (!published) await unlink(stage);
+    if (!published) {
+      await unlink(stage);
+    }
   }
 };

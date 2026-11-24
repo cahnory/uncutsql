@@ -1,8 +1,12 @@
 import { Effect, Result } from "effect";
-import { type Codec, EncodeError, make, parseError, prefixed, transform } from "@uncutsql/codec";
+
+import { EncodeError, make, parseError, prefixed, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
 import { mergeErrors } from "@uncutsql/codec";
+
 import { keyword } from "../../operators/keyword.ts";
-import { expression, type Expression } from "../expression.ts";
+import { expression } from "../expression.ts";
+import type { Expression } from "../expression.ts";
 import { parenthesizedExpression } from "../expression/parenthesized-expression.ts";
 import { literalValue } from "../literal-value.ts";
 import { signedNumber } from "../signed-number.ts";
@@ -87,7 +91,9 @@ const defaultValue: Codec<Expression> = make<Expression>({
           }
           return result.success;
         }
-        if (result.failure.committed) return yield* Effect.fail(result.failure);
+        if (result.failure.committed) {
+          return yield* Effect.fail(result.failure);
+        }
         best = mergeErrors(best, result.failure);
       }
       return yield* Effect.fail(best);
@@ -105,7 +111,7 @@ const defaultValue: Codec<Expression> = make<Expression>({
       (value.operator === "+" || value.operator === "-") &&
       value.operand._tag === "NumericLiteral"
     ) {
-      return signedNumber.encode({ ...value, operator: value.operator, operand: value.operand });
+      return signedNumber.encode({ ...value, operand: value.operand, operator: value.operator });
     }
     return value._tag === "RowValueExpression" ||
       value._tag === "PatternExpression" ||

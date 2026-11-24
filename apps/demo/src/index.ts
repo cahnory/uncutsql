@@ -1,4 +1,5 @@
 import { Effect, Logger, References } from "effect";
+
 import { document, observe } from "@uncutsql/codec";
 import { createTableGrammar } from "@uncutsql/sqlite";
 import { trivia } from "@uncutsql/sqlite/tokens";
@@ -16,7 +17,7 @@ const program = Effect.gen(function* () {
     )
   `);
   console.dir(ast, { depth: Infinity });
-  yield* Effect.log("Parsed table", { name: ast.name, columns: ast.columns.length });
+  yield* Effect.log("Parsed table", { columns: ast.columns.length, name: ast.name });
   const encoded = yield* sql.encode(ast);
   console.dir(encoded);
   yield* Effect.log("Canonical SQL", encoded);

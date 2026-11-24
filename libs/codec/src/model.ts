@@ -1,32 +1,32 @@
 import { Data, Effect } from "effect";
 
 export interface Cursor {
-  readonly source: string;
   /** Zero-based UTF-16 offset. */
   readonly offset: number;
+  readonly source: string;
 }
 
 /** A separate syntax tree: semantic values never contain parent links or source text. */
 export interface SourceNode {
+  readonly children: readonly SourceNode[];
+  readonly end: number;
   readonly kind: string;
   readonly start: number;
-  readonly end: number;
-  readonly children: readonly SourceNode[];
 }
 
 export interface Read<A> {
-  readonly value: A;
   readonly next: Cursor;
   readonly nodes: readonly SourceNode[];
+  readonly value: A;
 }
 
 export class ParseError extends Data.TaggedError("ParseError")<{
-  readonly offset: number;
-  readonly line: number;
   readonly column: number;
+  readonly committed: boolean;
   readonly expected: readonly string[];
   readonly found: string;
-  readonly committed: boolean;
+  readonly line: number;
+  readonly offset: number;
 }> {
   override get message(): string {
     return `Expected ${this.expected.join(" or ")} at ${this.line}:${this.column}, found ${this.found}`;
@@ -56,9 +56,9 @@ export const make = <A, E = never, R = never>(codec: Codec<A, E, R>): Codec<A, E
 });
 
 export const read = <A>(value: A, next: Cursor, nodes: readonly SourceNode[] = []): Read<A> => ({
-  value,
   next,
   nodes,
+  value,
 });
 
 export const parseError = (
@@ -68,15 +68,15 @@ export const parseError = (
 ): ParseError => {
   const lines = cursor.source.slice(0, cursor.offset).split(/\r\n|\r|\n/);
   return new ParseError({
-    offset: cursor.offset,
-    line: lines.length,
     column: (lines.at(-1)?.length ?? 0) + 1,
+    committed,
     expected: typeof expected === "string" ? [expected] : expected,
     found:
       cursor.offset === cursor.source.length
         ? "end of input"
         : JSON.stringify(cursor.source.slice(cursor.offset, cursor.offset + 16)),
-    committed,
+    line: lines.length,
+    offset: cursor.offset,
   });
 };
 
@@ -84,6 +84,8 @@ export const commitError = (error: ParseError): ParseError =>
   new ParseError({ ...error, committed: true });
 
 export const mergeErrors = (left: ParseError, right: ParseError): ParseError => {
-  if (left.offset !== right.offset) return left.offset > right.offset ? left : right;
+  if (left.offset !== right.offset) {
+    return left.offset > right.offset ? left : right;
+  }
   return new ParseError({ ...left, expected: [...new Set([...left.expected, ...right.expected])] });
 };

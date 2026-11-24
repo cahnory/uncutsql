@@ -1,29 +1,30 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+
 import { Effect, Result } from "effect";
-import {
-  diffDatabases,
-  planDatabaseMigration,
-  type DatabaseSchema,
-  type MigrationSource,
-} from "@uncutsql/core";
-import { schema, toDatabaseSchema, lowerMigration, encodeMigration } from "@uncutsql/sqlite";
+
+import { diffDatabases, planDatabaseMigration } from "@uncutsql/core";
+import type { DatabaseSchema, MigrationSource } from "@uncutsql/core";
+import { encodeMigration, lowerMigration, schema, toDatabaseSchema } from "@uncutsql/sqlite";
+
 import { applyMigrations, SqliteExecutionError } from "../src/index.ts";
 
 const hash = (sql: string) => createHash("sha256").update(sql).digest("hex");
-const source = (id: number, sql: string): MigrationSource => ({ id, sql, sha256: hash(sql) });
+const source = (id: number, sql: string): MigrationSource => ({ id, sha256: hash(sql), sql });
 const model = (sql: string) => Effect.runSync(Effect.flatMap(schema.decode(sql), toDatabaseSchema));
 const verify = (actual: DatabaseSchema, expected: DatabaseSchema, stage: "applied" | "desired") =>
   Effect.gen(function* () {
     const diff = yield* diffDatabases(expected, actual);
-    if (diff.changes.length) return yield* Effect.fail(new Error(`Schema mismatch: ${stage}`));
+    if (diff.changes.length) {
+      return yield* Effect.fail(new Error(`Schema mismatch: ${stage}`));
+    }
   });
 const generate = (schemas: readonly string[]) => {
   let previous: DatabaseSchema = { tables: [] };
@@ -35,13 +36,13 @@ const generate = (schemas: readonly string[]) => {
     previous = next;
     return source(index + 1, rendered);
   });
-  return { migrations, desired: previous };
+  return { desired: previous, migrations };
 };
 const fixture = () => {
   const directory = mkdtempSync(join(tmpdir(), "uncutsql-executor-"));
   return {
-    path: join(directory, "app.sqlite"),
     close: () => rmSync(directory, { recursive: true }),
+    path: join(directory, "app.sqlite"),
   };
 };
 const read = (path: string, sql: string) => {
@@ -85,7 +86,7 @@ test("executor applies, records and resumes generated rebuilds without rerunning
       ),
       { appliedIds: [2], lastAppliedId: 2 },
     );
-    assert.deepEqual(read(target.path, "SELECT * FROM t"), [{ id: 7, name: "Ada", email: null }]);
+    assert.deepEqual(read(target.path, "SELECT * FROM t"), [{ email: null, id: 7, name: "Ada" }]);
     const history = read(
       target.path,
       "SELECT id, sha256, database_json, applied_at FROM __uncutsql_migrations ORDER BY id",
@@ -389,7 +390,7 @@ test("executor leaves incompatible history tables untouched", async () => {
     const target = fixture();
     try {
       exec(target.path, `CREATE TABLE __uncutsql_migrations (${definition})`);
-      const { migrations, desired } = generate(["CREATE TABLE t (id)"]);
+      const { desired, migrations } = generate(["CREATE TABLE t (id)"]);
       await assert.rejects(
         Effect.runPromise(applyMigrations(target.path, migrations, desired, verify)),
         /Unrecognized applied-history table format/,

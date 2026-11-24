@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import { EncodeError, ParseError } from "@uncutsql/codec";
-import { createTable, type CreateTable } from "../src/index.ts";
+
+import { createTable } from "../src/index.ts";
+import type { CreateTable } from "../src/index.ts";
 
 const decode = (source: string) => Effect.runSync(createTable.decode(source));
 const encode = (value: CreateTable) => Effect.runSync(createTable.encode(value));
@@ -93,7 +97,9 @@ test("composite foreign keys preserve ON clause order and cascade updates/delete
   const ast = decode(source);
   const constraint = ast.tableConstraints[0]!;
   assert.equal(constraint._tag, "ForeignKey");
-  if (constraint._tag !== "ForeignKey") assert.fail("Expected foreign key");
+  if (constraint._tag !== "ForeignKey") {
+    assert.fail("Expected foreign key");
+  }
   assert.deepEqual(
     constraint.references.options.map((value) => value._tag),
     ["OnUpdate", "OnDelete", "Match"],
@@ -321,7 +327,7 @@ test("generated constraints reject empty key/reference lists", () => {
           {
             _tag: "ForeignKey",
             columns: ["a"],
-            references: { table: "parent", columns: [], options: [] },
+            references: { columns: [], options: [], table: "parent" },
           },
         ],
       }),

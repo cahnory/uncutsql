@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import { document, EncodeError, ParseError } from "@uncutsql/codec";
-import { sqlExpression, expression, createTable, type FunctionCall } from "../src/index.ts";
+
 import { orderingTerm } from "../src/codecs/ordering-term.ts";
+import { createTable, expression, sqlExpression } from "../src/index.ts";
+import type { FunctionCall } from "../src/index.ts";
 import { trivia } from "../src/operators/trivia.ts";
 const decode = (sql: string) => Effect.runSync(sqlExpression.decode(sql));
 const encode = (sql: string) => Effect.runSync(sqlExpression.encode(decode(sql)));
@@ -57,8 +61,8 @@ test("malformed aggregate clauses and contradictory constructed arguments fail",
   }
   const value: FunctionCall = {
     _tag: "FunctionCall",
-    name: "count",
     arguments: [{ _tag: "NumericLiteral", value: "1" }],
+    name: "count",
     star: true,
   };
   const result = Effect.runSync(Effect.result(sqlExpression.encode(value)));
@@ -68,7 +72,7 @@ test("malformed aggregate clauses and contradictory constructed arguments fail",
     Result.isFailure(
       Effect.runSync(
         Effect.result(
-          sqlExpression.encode({ _tag: "FunctionCall", name: "sum", arguments: [], orderBy: [] }),
+          sqlExpression.encode({ _tag: "FunctionCall", arguments: [], name: "sum", orderBy: [] }),
         ),
       ),
     ),
@@ -91,7 +95,7 @@ test("default validation traverses aggregate ordering and filter expressions", (
 
 for (const group of ["ordering-term", "filter-clause"]) {
   const root = new URL(`./fixtures/previous/${group}/`, import.meta.url);
-  for (const category of readdirSync(root))
+  for (const category of readdirSync(root)) {
     for (const file of readdirSync(new URL(category + "/", root))) {
       test(`previous ${group}/${category}/${file}`, () => {
         const source = readFileSync(new URL(category + "/" + file, root), "utf8");
@@ -119,4 +123,5 @@ for (const group of ["ordering-term", "filter-clause"]) {
         }
       });
     }
+  }
 }

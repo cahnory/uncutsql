@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
-import { sqlQuery, type ValuesQuery } from "../src/index.ts";
+
+import { sqlQuery } from "../src/index.ts";
+import type { ValuesQuery } from "../src/index.ts";
 const decode = (source: string) => Effect.runSync(sqlQuery.decode(source));
 
 test("VALUES queries preserve rows, expression trees and native results", () => {
@@ -24,8 +27,8 @@ test("VALUES queries preserve rows, expression trees and native results", () => 
     const query = decode("VALUES (?1, :value), (?1 + 1, :value)");
     const rendered = Effect.runSync(sqlQuery.encode(query));
     assert.deepEqual(
-      db.prepare(rendered).all({ "?1": 4, ":value": "x" }),
-      db.prepare("VALUES (?1, :value), (?1 + 1, :value)").all({ "?1": 4, ":value": "x" }),
+      db.prepare(rendered).all({ ":value": "x", "?1": 4 }),
+      db.prepare("VALUES (?1, :value), (?1 + 1, :value)").all({ ":value": "x", "?1": 4 }),
     );
   } finally {
     db.close();

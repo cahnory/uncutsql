@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, readdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+
 import { Effect, Result } from "effect";
-import { resolveConfig, parseOptions } from "../src/config.ts";
+
+import { parseOptions, resolveConfig } from "../src/config.ts";
 import { loadDialect, loadDriver, PluginError } from "../src/plugins.ts";
 
 const fixture = () => {
@@ -26,9 +28,9 @@ const fixture = () => {
     spawnSync(
       process.execPath,
       [fileURLToPath(new URL("../src/index.ts", import.meta.url)), ...args],
-      { cwd, input, encoding: "utf8" },
+      { cwd, encoding: "utf8", input },
     );
-  return { cwd, put, run, close: () => rmSync(cwd, { recursive: true, force: true }) };
+  return { close: () => rmSync(cwd, { force: true, recursive: true }), cwd, put, run };
 };
 
 test("CLI loads configured dialects without loading the configured driver", () => {
@@ -87,9 +89,9 @@ test("bare plugin packages resolve from the consumer with import export conditio
     writeFileSync(
       join(dir, "package.json"),
       JSON.stringify({
+        exports: { import: "./index.mjs" },
         name: "fixture-dialect",
         type: "module",
-        exports: { import: "./index.mjs" },
       }),
     );
     writeFileSync(join(dir, "index.mjs"), readFileSync(join(f.cwd, "dialect.mjs")));
@@ -97,7 +99,7 @@ test("bare plugin packages resolve from the consumer with import export conditio
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout, "fixture:input\n");
     const loaded = await Effect.runPromise(
-      loadDialect({ specifier: "fixture-dialect", directory: f.cwd }),
+      loadDialect({ directory: f.cwd, specifier: "fixture-dialect" }),
     );
     assert.equal(loaded.name, "fixture");
   } finally {
@@ -111,14 +113,14 @@ test("configuration and invalid adapter failures are actionable typed errors", a
     f.put("invalid.mjs", "export default { name: 'incomplete', parse() {} };");
     for (const specifier of ["./missing.mjs", "./invalid.mjs"]) {
       const result = await Effect.runPromise(
-        Effect.result(loadDialect({ specifier, directory: f.cwd })),
+        Effect.result(loadDialect({ directory: f.cwd, specifier })),
       );
       assert.ok(Result.isFailure(result));
       assert.ok(result.failure instanceof PluginError);
     }
     f.put("driver.mjs", "export const executor = {dialect:'fixture', apply() {}};");
     assert.equal(
-      (await Effect.runPromise(loadDriver({ specifier: "./driver.mjs", directory: f.cwd })))
+      (await Effect.runPromise(loadDriver({ directory: f.cwd, specifier: "./driver.mjs" })))
         .dialect,
       "fixture",
     );
@@ -161,11 +163,11 @@ test("apply does not load the dialect and verifies the driver's identity against
     f.put(
       "migrations/uncutsql.lock.json",
       JSON.stringify({
-        formatVersion: 1,
+        database: { tables: [] },
         dialect: "fixture",
+        formatVersion: 1,
         lastMigrationId: 1,
         lastMigrationSha256: "a".repeat(64),
-        database: { tables: [] },
       }),
     );
     const result = f.run(["apply", "target"]);
@@ -190,8 +192,10 @@ test("package boundaries keep the CLI independent and the dialect driver-free", 
           ? [readFileSync(child, "utf8")]
           : [];
     });
-  for (const source of visit(new URL("../../sqlite/src/", import.meta.url)))
+  for (const source of visit(new URL("../../sqlite/src/", import.meta.url))) {
     assert.doesNotMatch(source, /node:sqlite|@uncutsql\/sqlite-driver/);
-  for (const source of visit(new URL("../src/", import.meta.url)))
+  }
+  for (const source of visit(new URL("../src/", import.meta.url))) {
     assert.doesNotMatch(source, /node:sqlite|@uncutsql\/sqlite/);
+  }
 });

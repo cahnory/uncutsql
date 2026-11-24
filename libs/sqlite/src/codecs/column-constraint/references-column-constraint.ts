@@ -1,5 +1,7 @@
 import { transform } from "@uncutsql/codec";
-import { foreignKeyClause, type ForeignKeyClause } from "../foreign-key-clause.ts";
+
+import { foreignKeyClause } from "../foreign-key-clause.ts";
+import type { ForeignKeyClause } from "../foreign-key-clause.ts";
 
 export interface ReferencesColumnConstraint {
   readonly _tag: "References";

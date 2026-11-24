@@ -1,25 +1,21 @@
-import {
-  type Codec,
-  located,
-  optional,
-  prefixed,
-  repeat,
-  struct,
-  transform,
-} from "@uncutsql/codec";
+import { located, optional, prefixed, repeat, struct, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keyword } from "../operators/keyword.ts";
 import { parenthesized } from "../operators/parenthesized.ts";
 import { punctuation } from "../operators/punctuation.ts";
+import { foreignKeyOption } from "./foreign-key/action.ts";
+import type { ForeignKeyOption } from "./foreign-key/action.ts";
+import { deferrability } from "./foreign-key/deferrable.ts";
+import type { Deferrability } from "./foreign-key/deferrable.ts";
 import { nameIdentifier } from "./identifier.ts";
-import { foreignKeyOption, type ForeignKeyOption } from "./foreign-key/action.ts";
-import { deferrability, type Deferrability } from "./foreign-key/deferrable.ts";
 
 export interface ForeignKeyClause {
-  readonly table: string;
   readonly columns?: readonly string[];
+  readonly deferrability?: Deferrability;
   /** Retain the order of MATCH/ON clauses rather than grouping them by kind. */
   readonly options: readonly ForeignKeyOption[];
-  readonly deferrability?: Deferrability;
+  readonly table: string;
 }
 
 export const foreignKeyClause: Codec<ForeignKeyClause> = located(
@@ -42,17 +38,17 @@ export const foreignKeyClause: Codec<ForeignKeyClause> = located(
         " ",
       ),
       {
-        decode: ({ table, columns, options, deferrability }): ForeignKeyClause => ({
-          table,
+        decode: ({ columns, deferrability, options, table }): ForeignKeyClause => ({
           options,
+          table,
           ...(columns === undefined ? {} : { columns }),
           ...(deferrability === undefined ? {} : { deferrability }),
         }),
         encode: (value: ForeignKeyClause) => ({
-          table: value.table,
           columns: value.columns,
-          options: value.options,
           deferrability: value.deferrability,
+          options: value.options,
+          table: value.table,
         }),
       },
     ),

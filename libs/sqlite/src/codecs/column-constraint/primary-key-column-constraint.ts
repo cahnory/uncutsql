@@ -1,14 +1,17 @@
-import { type Codec, optional, prefixed, struct, transform } from "@uncutsql/codec";
-import { keyword } from "../../operators/keyword.ts";
+import { optional, prefixed, struct, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keywordChoice } from "../../operators/keyword-choice.ts";
 import { keywordSequence } from "../../operators/keyword-sequence.ts";
-import { conflictClause, type ConflictAction } from "../conflict-clause.ts";
+import { keyword } from "../../operators/keyword.ts";
+import { conflictClause } from "../conflict-clause.ts";
+import type { ConflictAction } from "../conflict-clause.ts";
 
 export interface PrimaryKeyColumnConstraint {
   readonly _tag: "PrimaryKey";
-  readonly order?: "ASC" | "DESC";
-  readonly onConflict?: ConflictAction;
   readonly autoIncrement?: true;
+  readonly onConflict?: ConflictAction;
+  readonly order?: "ASC" | "DESC";
 }
 
 const autoIncrement = transform(keyword("AUTOINCREMENT"), {
@@ -30,16 +33,16 @@ export const primaryKeyColumnConstraint: Codec<PrimaryKeyColumnConstraint> = tra
     " ",
   ),
   {
-    decode: ({ order, onConflict, autoIncrement }): PrimaryKeyColumnConstraint => ({
+    decode: ({ autoIncrement, onConflict, order }): PrimaryKeyColumnConstraint => ({
       _tag: "PrimaryKey",
       ...(order === undefined ? {} : { order }),
       ...(onConflict === undefined ? {} : { onConflict }),
       ...(autoIncrement === undefined ? {} : { autoIncrement }),
     }),
     encode: (value: PrimaryKeyColumnConstraint) => ({
-      order: value.order,
-      onConflict: value.onConflict,
       autoIncrement: value.autoIncrement,
+      onConflict: value.onConflict,
+      order: value.order,
     }),
   },
 );

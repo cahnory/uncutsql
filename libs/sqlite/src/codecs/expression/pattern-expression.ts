@@ -1,7 +1,10 @@
 import { Effect } from "effect";
-import { type Cursor, type Read, commit, optional, prefixed, read } from "@uncutsql/codec";
-import { keyword } from "../../operators/keyword.ts";
+
+import { commit, optional, prefixed, read } from "@uncutsql/codec";
+import type { Cursor, Read } from "@uncutsql/codec";
+
 import { keywordChoice } from "../../operators/keyword-choice.ts";
+import { keyword } from "../../operators/keyword.ts";
 import type { Expression, ExpressionAt, PatternExpression } from "./types.ts";
 
 export const patternPrecedence = 40;
@@ -30,18 +33,18 @@ export const readPattern = (
     return read<Expression>(
       {
         _tag: "PatternExpression",
-        operator: operator.value,
         left: left.value,
+        operator: operator.value,
         right: right.value,
         ...(escape.value === undefined ? {} : { escape: escape.value }),
       },
       escape.next,
       [
         {
+          children: [...left.nodes, ...operator.nodes, ...right.nodes, ...escape.nodes],
+          end: escape.next.offset,
           kind: "PatternExpression",
           start: start.offset,
-          end: escape.next.offset,
-          children: [...left.nodes, ...operator.nodes, ...right.nodes, ...escape.nodes],
         },
       ],
     );

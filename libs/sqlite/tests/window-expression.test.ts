@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
-import { sqlExpression, createTable, type FunctionCall } from "../src/index.ts";
+
+import { createTable, sqlExpression } from "../src/index.ts";
+import type { FunctionCall } from "../src/index.ts";
 const decode = (sql: string) => Effect.runSync(sqlExpression.decode(sql));
 const encode = (sql: string) => Effect.runSync(sqlExpression.encode(decode(sql)));
 
@@ -48,18 +51,19 @@ test("malformed windows and impossible boundary directions fail", () => {
     "sum(1) OVER (ROWS CURRENT ROW EXCLUDE)",
     "sum(1) OVER (ROWS CURRENT ROW EXCLUDE INVALID)",
     "sum(1) OVER () FILTER (WHERE 1)",
-  ])
+  ]) {
     assert.ok(
       Result.isFailure(Effect.runSync(Effect.result(sqlExpression.decode(source)))),
       source,
     );
+  }
   const value: FunctionCall = {
     _tag: "FunctionCall",
-    name: "sum",
     arguments: [],
+    name: "sum",
     over: {
       _tag: "WindowDefinition",
-      frame: { unit: "ROWS", start: { _tag: "SpecialBoundary", value: "UNBOUNDED FOLLOWING" } },
+      frame: { start: { _tag: "SpecialBoundary", value: "UNBOUNDED FOLLOWING" }, unit: "ROWS" },
     },
   };
   assert.ok(Result.isFailure(Effect.runSync(Effect.result(sqlExpression.encode(value)))));
@@ -77,19 +81,21 @@ test("window functions cannot be defaults", () => {
 
 for (const group of ["frame-spec", "over-clause"]) {
   const root = new URL(`./fixtures/previous/${group}/`, import.meta.url);
-  for (const category of readdirSync(root))
+  for (const category of readdirSync(root)) {
     for (const file of readdirSync(new URL(category + "/", root))) {
       test(`previous ${group}/${category}/${file}`, () => {
         const source = readFileSync(new URL(category + "/" + file, root), "utf8");
         const sql = group === "frame-spec" ? `sum(value) OVER (${source})` : `sum(value) ${source}`;
         const result = Effect.runSync(Effect.result(sqlExpression.decode(sql)));
-        if (category === "invalid") assert.ok(Result.isFailure(result));
-        else {
+        if (category === "invalid") {
+          assert.ok(Result.isFailure(result));
+        } else {
           assert.ok(Result.isSuccess(result));
           assert.deepEqual(decode(encode(sql)), result.success);
         }
       });
     }
+  }
 }
 
 test("window reference quoting is significant in native SQLite", () => {
@@ -118,8 +124,8 @@ test("window names reject injected text when encoding", () => {
   for (const name of ["w; SELECT 1", "w -- comment", "/*comment*/w", " w", ""]) {
     const value: FunctionCall = {
       _tag: "FunctionCall",
-      name: "sum",
       arguments: [],
+      name: "sum",
       over: { _tag: "NamedWindow", name },
     };
     assert.ok(Result.isFailure(Effect.runSync(Effect.result(sqlExpression.encode(value)))), name);

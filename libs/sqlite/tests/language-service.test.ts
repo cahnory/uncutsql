@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 import { analyzeSchema, definitions, referenceAt } from "../src/language-service.ts";
 
 test("locates schema-qualified declarations and composite foreign key targets", () => {

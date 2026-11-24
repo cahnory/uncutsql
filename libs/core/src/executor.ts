@@ -1,4 +1,5 @@
 import type { Effect } from "effect";
+
 import type { DatabaseSchema } from "./model.ts";
 
 export interface MigrationSource {
@@ -13,7 +14,6 @@ export interface ExecutionResult {
 
 /** Optional execution capability, selected and wired by the consumer separately from syntax. */
 export interface MigrationExecutor<E extends Error = Error, R = never> {
-  readonly dialect: string;
   readonly apply: <V extends Error, RV>(
     target: string,
     migrations: readonly MigrationSource[],
@@ -24,4 +24,5 @@ export interface MigrationExecutor<E extends Error = Error, R = never> {
       stage: "applied" | "desired",
     ) => Effect.Effect<void, V, RV>,
   ) => Effect.Effect<ExecutionResult, E | V, R | RV>;
+  readonly dialect: string;
 }

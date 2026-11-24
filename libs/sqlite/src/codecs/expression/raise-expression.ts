@@ -1,6 +1,6 @@
 import { Effect } from "effect";
+
 import {
-  type Codec,
   EncodeError,
   located,
   make,
@@ -10,8 +10,10 @@ import {
   read,
   struct,
 } from "@uncutsql/codec";
-import { keyword } from "../../operators/keyword.ts";
+import type { Codec } from "@uncutsql/codec";
+
 import { keywordChoice } from "../../operators/keyword-choice.ts";
+import { keyword } from "../../operators/keyword.ts";
 import { parenthesized } from "../../operators/parenthesized.ts";
 import { punctuation } from "../../operators/punctuation.ts";
 import type { Expression, RaiseExpression } from "./types.ts";

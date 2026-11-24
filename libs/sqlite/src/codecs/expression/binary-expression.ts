@@ -1,6 +1,10 @@
 import { Effect } from "effect";
-import { type Cursor, type Read, commit, read } from "@uncutsql/codec";
-import { binaryOperator, binaryPrecedence, type BinaryOperator } from "./operators.ts";
+
+import { commit, read } from "@uncutsql/codec";
+import type { Cursor, Read } from "@uncutsql/codec";
+
+import { binaryOperator, binaryPrecedence } from "./operators.ts";
+import type { BinaryOperator } from "./operators.ts";
 import type { BinaryExpression, Expression, ExpressionAt } from "./types.ts";
 
 /** Left-associative continuation used by the precedence-climbing grammar. */
@@ -14,16 +18,16 @@ export const readBinaryExpression = (
     const right = yield* commit(at(binaryPrecedence[operator.value] + 1)).decode(operator.next);
     const value: BinaryExpression = {
       _tag: "BinaryExpression",
-      operator: operator.value,
       left: left.value,
+      operator: operator.value,
       right: right.value,
     };
     return read<Expression>(value, right.next, [
       {
+        children: [...left.nodes, ...operator.nodes, ...right.nodes],
+        end: right.next.offset,
         kind: "BinaryExpression",
         start: start.offset,
-        end: right.next.offset,
-        children: [...left.nodes, ...operator.nodes, ...right.nodes],
       },
     ]);
   });

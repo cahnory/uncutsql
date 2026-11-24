@@ -1,38 +1,28 @@
 import { Data, Effect } from "effect";
+
 import { decodeDatabaseSchema } from "./decode.ts";
-import {
-  compareTable,
-  diffDatabases,
-  type DatabaseDiff,
-  type DropGuard,
-  type TableAlteration,
-  type TableChange,
-} from "./diff.ts";
-import {
-  schemaValueEqual,
-  tableKey,
-  type DatabaseSchema,
-  type TableIdentity,
-  type SchemaValue,
-} from "./model.ts";
+import { compareTable, diffDatabases } from "./diff.ts";
+import type { DatabaseDiff, DropGuard, TableAlteration, TableChange } from "./diff.ts";
+import { schemaValueEqual, tableKey } from "./model.ts";
+import type { DatabaseSchema, SchemaValue, TableIdentity } from "./model.ts";
 
 export interface MigrationDecision {
-  readonly id: string;
-  readonly table: TableIdentity;
-  readonly column?: string;
-  readonly question: string;
   /** Added table names or column keys, not guesses: no candidate is selected automatically. */
   readonly candidates: readonly string[];
+  readonly column?: string;
+  readonly id: string;
+  readonly question: string;
   readonly resolution:
     | { readonly action: "pending" }
     | { readonly action: "drop_if_empty" | "drop" }
     | { readonly action: "rename"; readonly target: string };
+  readonly table: TableIdentity;
 }
 export interface MigrationDecisions {
-  readonly version: 1;
-  readonly before: DatabaseSchema;
   readonly after: DatabaseSchema;
+  readonly before: DatabaseSchema;
   readonly decisions: readonly MigrationDecision[];
+  readonly version: 1;
 }
 export class MigrationDecisionError extends Data.TaggedError("MigrationDecisionError")<{
   readonly message: string;
@@ -61,39 +51,41 @@ const questions = (diff: DatabaseDiff): readonly MigrationDecision[] =>
       );
       return [
         {
+          candidates,
           id: idFor(change.table),
-          table: change.table,
           question: candidates.length
             ? `Drop table ${tableKey(change.table)}, or rename it to an added table?`
             : `Drop table ${tableKey(change.table)} and its data?`,
-          candidates,
           resolution: { action: "pending" },
+          table: change.table,
         },
       ];
     }
-    if (!("changes" in change)) return [];
+    if (!("changes" in change)) {
+      return [];
+    }
     const candidates = change.changes
       .filter((item) => item._tag === "ColumnAdded")
       .map((item) => item.column.key);
     return change.changes
       .filter((item) => item._tag === "ColumnRemoved")
       .map((item) => ({
-        id: columnId(change, item.column.key),
-        table: change.table,
+        candidates,
         column: item.column.key,
+        id: columnId(change, item.column.key),
         question: candidates.length
           ? `Drop column ${JSON.stringify(item.column.name)} in ${tableKey(change.table)}, or rename it to an added column?`
           : `Drop column ${JSON.stringify(item.column.name)} in ${tableKey(change.table)}?`,
-        candidates,
         resolution: { action: "pending" },
+        table: change.table,
       }));
   });
 export const prepareMigrationDecisions = (before: DatabaseSchema, after: DatabaseSchema) =>
   Effect.map(diffDatabases(before, after), (diff) => ({
-    version: 1 as const,
-    before,
     after,
+    before,
     decisions: questions(diff),
+    version: 1 as const,
   }));
 
 const readAnswers = (
@@ -107,13 +99,16 @@ const readAnswers = (
     const answers = new Map<string, MigrationDecision>();
     const targets = new Set<string>();
     for (const input of inputs) {
-      if (!record(input) || typeof input.id !== "string")
+      if (!record(input) || typeof input.id !== "string") {
         return yield* fail("Each decision needs its original id.");
+      }
       const question = expected.get(input.id);
-      if (!question || answers.has(input.id))
+      if (!question || answers.has(input.id)) {
         return yield* fail(`Unknown or duplicate decision: ${input.id}`);
-      if (!equal(input.table, question.table) || input.column !== question.column)
+      }
+      if (!equal(input.table, question.table) || input.column !== question.column) {
         return yield* fail(`Decision identity changed: ${input.id}`);
+      }
       const resolution = input.resolution;
       if (
         allowPending &&
@@ -124,8 +119,9 @@ const readAnswers = (
         answers.set(input.id, question);
         continue;
       }
-      if (!record(resolution) || resolution.action === "pending")
+      if (!record(resolution) || resolution.action === "pending") {
         return yield* fail(`Unresolved decision: ${question.question}`);
+      }
       if (
         (resolution.action === "drop" || resolution.action === "drop_if_empty") &&
         Object.keys(resolution).length === 1
@@ -141,21 +137,25 @@ const readAnswers = (
           question.column === undefined
             ? idFor({ ...question.table, name: resolution.target })
             : idFor(question.table, resolution.target);
-        if (targets.has(target))
+        if (targets.has(target)) {
           return yield* fail(
             `Multiple source ${question.column === undefined ? "tables" : "columns"} map to ${resolution.target}.`,
           );
+        }
         targets.add(target);
         answers.set(input.id, {
           ...question,
           resolution: { action: "rename", target: resolution.target },
         });
-      } else return yield* fail(`Invalid resolution for ${question.question}`);
+      } else {
+        return yield* fail(`Invalid resolution for ${question.question}`);
+      }
     }
-    if (answers.size !== expected.size)
+    if (answers.size !== expected.size) {
       return yield* fail(
         "Missing migration decisions: every removal requires an explicit resolution.",
       );
+    }
     return answers;
   });
 
@@ -168,22 +168,28 @@ const expandRenames = (diff: DatabaseDiff, answers: ReadonlyMap<string, Migratio
   );
   const renames: TableChange[] = [];
   for (const source of diff.changes) {
-    if (source._tag !== "TableRemoved") continue;
+    if (source._tag !== "TableRemoved") {
+      continue;
+    }
     const choice = answers.get(idFor(source.table))?.resolution;
-    if (choice?.action !== "rename") continue;
+    if (choice?.action !== "rename") {
+      continue;
+    }
     const key = tableKey({ ...source.table, name: choice.target });
     const target = additions.get(key)!;
     additions.delete(key);
     renames.push({
       _tag: "TableRenamed",
-      table: source.table,
-      before: source.definition,
       after: target.definition,
+      before: source.definition,
       changes: compareTable(source.definition, target.definition),
+      table: source.table,
     });
   }
   const changes = diff.changes.filter((item) => {
-    if (item._tag === "TableAdded") return additions.has(tableKey(item.table));
+    if (item._tag === "TableAdded") {
+      return additions.has(tableKey(item.table));
+    }
     return (
       item._tag !== "TableRemoved" || answers.get(idFor(item.table))?.resolution.action !== "rename"
     );
@@ -213,8 +219,9 @@ const reviewAnswers = (
         typeof input.column !== "string" ||
         typeof input.id !== "string" ||
         expected.has(input.id)
-      )
+      ) {
         return true;
+      }
       // Drop questions issued for an earlier pairing when a reviewer edits the parent.
       const column = input.column;
       return !pending.decisions.some(
@@ -228,39 +235,42 @@ const reviewAnswers = (
     });
     const ids = new Set(current.flatMap((input) => (record(input) ? [input.id] : [])));
     const missing = expanded.nested.filter((item) => !ids.has(item.id));
-    if (!merging && missing.length)
+    if (!merging && missing.length) {
       return yield* Effect.fail(
         new MigrationDecisionError({
           message: "Table rename requires column decisions. Run --merge-decisions to review them.",
           pending: review,
         }),
       );
+    }
     const answers = yield* readAnswers(review, [...current, ...missing], merging);
-    return { diff: expanded.diff, answers };
+    return { answers, diff: expanded.diff };
   });
 
 /** Refresh the questions and snapshots, carrying forward applicable reviewed choices. */
 export const mergeMigrationDecisions = (fresh: MigrationDecisions, previous: unknown) =>
   Effect.gen(function* () {
-    if (!record(previous) || previous.version !== 1 || !Array.isArray(previous.decisions))
+    if (!record(previous) || previous.version !== 1 || !Array.isArray(previous.decisions)) {
       return yield* Effect.fail(
         new MigrationDecisionError({
           message: "Expected a version 1 migration decision document.",
           pending: fresh,
         }),
       );
+    }
     const before = yield* decodeDatabaseSchema(previous.before);
     const after = yield* decodeDatabaseSchema(previous.after);
     const originalDiff = yield* diffDatabases(before, after);
-    const original = { version: 1 as const, before, after, decisions: questions(originalDiff) };
+    const original = { after, before, decisions: questions(originalDiff), version: 1 as const };
     const { answers } = yield* reviewAnswers(original, originalDiff, previous.decisions, true);
     const carry = (question: MigrationDecision) => {
       const resolution = answers.get(question.id)?.resolution;
       if (
         !resolution ||
         (resolution.action === "rename" && !question.candidates.includes(resolution.target))
-      )
+      ) {
         return question;
+      }
       return { ...question, resolution };
     };
     const freshDiff = yield* diffDatabases(fresh.before, fresh.after);
@@ -277,21 +287,24 @@ export const resolveMigrationDecisions = (
 ) =>
   Effect.gen(function* () {
     const diff = yield* diffDatabases(before, after);
-    const pending: MigrationDecisions = { version: 1, before, after, decisions: questions(diff) };
+    const pending: MigrationDecisions = { after, before, decisions: questions(diff), version: 1 };
     const fail = (message: string) => Effect.fail(new MigrationDecisionError({ message, pending }));
     if (supplied === undefined) {
-      if (pending.decisions.length)
+      if (pending.decisions.length) {
         return yield* fail(
           "Unresolved migration decisions. Prepare a decision file and resolve each removal before planning.",
         );
-      return { diff, decisions: pending };
+      }
+      return { decisions: pending, diff };
     }
-    if (!record(supplied) || supplied.version !== 1 || !Array.isArray(supplied.decisions))
+    if (!record(supplied) || supplied.version !== 1 || !Array.isArray(supplied.decisions)) {
       return yield* fail("Expected a version 1 migration decision document.");
-    if (!equal(supplied.before, before) || !equal(supplied.after, after))
+    }
+    if (!equal(supplied.before, before) || !equal(supplied.after, after)) {
       return yield* fail(
         "Stale migration decisions: source or target schema changed. Prepare a new decision file.",
       );
+    }
     const reviewed = yield* reviewAnswers(pending, diff, supplied.decisions, false);
     const answers = reviewed.answers;
     const dropGuards: DropGuard[] = [];
@@ -300,25 +313,35 @@ export const resolveMigrationDecisions = (
         if (
           change._tag === "TableRemoved" &&
           answers.get(idFor(change.table))?.resolution.action === "drop_if_empty"
-        )
+        ) {
           dropGuards.push({ table: change.table });
+        }
         return change;
       }
       const renamedTargets = new Set<string>();
       const changes: TableAlteration[] = [];
       for (const item of change.changes) {
-        if (item._tag !== "ColumnRemoved") continue;
+        if (item._tag !== "ColumnRemoved") {
+          continue;
+        }
         const answer = answers.get(columnId(change, item.column.key))!;
-        if (answer.resolution.action === "drop_if_empty")
-          dropGuards.push({ table: change.table, column: item.column.name });
-        if (answer.resolution.action !== "rename") continue;
+        if (answer.resolution.action === "drop_if_empty") {
+          dropGuards.push({ column: item.column.name, table: change.table });
+        }
+        if (answer.resolution.action !== "rename") {
+          continue;
+        }
         const targetKey = answer.resolution.target;
         const afterColumn = change.after.columns.find((column) => column.key === targetKey)!;
         renamedTargets.add(afterColumn.key);
         const fields: ("dataType" | "constraints")[] = [];
-        if (!equal(item.column.dataType, afterColumn.dataType)) fields.push("dataType");
-        if (!equal(item.column.constraints, afterColumn.constraints)) fields.push("constraints");
-        changes.push({ _tag: "ColumnRenamed", before: item.column, after: afterColumn, fields });
+        if (!equal(item.column.dataType, afterColumn.dataType)) {
+          fields.push("dataType");
+        }
+        if (!equal(item.column.constraints, afterColumn.constraints)) {
+          fields.push("constraints");
+        }
+        changes.push({ _tag: "ColumnRenamed", after: afterColumn, before: item.column, fields });
       }
       return {
         ...change,
@@ -336,5 +359,5 @@ export const resolveMigrationDecisions = (
       };
     });
     const resolved: DatabaseDiff = { changes, ...(dropGuards.length ? { dropGuards } : {}) };
-    return { diff: resolved, decisions: { ...pending, decisions: [...answers.values()] } };
+    return { decisions: { ...pending, decisions: [...answers.values()] }, diff: resolved };
   });

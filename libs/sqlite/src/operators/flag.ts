@@ -1,4 +1,6 @@
-import { type Codec, optional, prefixed, transform } from "@uncutsql/codec";
+import { optional, prefixed, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keyword } from "./keyword.ts";
 
 export const flag = (syntax: Codec<void>): Codec<boolean> =>

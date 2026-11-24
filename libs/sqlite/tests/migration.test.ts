@@ -1,9 +1,12 @@
-import { diffSchemas, planMigration } from "./workflow.ts";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
-import { schema, encodeMigration, MigrationPlanError, type MigrationPlan } from "../src/index.ts";
+
+import { encodeMigration, MigrationPlanError, schema } from "../src/index.ts";
+import type { MigrationPlan } from "../src/index.ts";
+import { diffSchemas, planMigration } from "./workflow.ts";
 
 const parse = (sql: string) => Effect.runSync(schema.decode(sql));
 const plan = (before: string, after: string) =>
@@ -61,8 +64,8 @@ test("appended columns preserve populated rows and produce the desired schema", 
     assert.deepEqual(
       rows.map((row) => ({ ...row })),
       [
-        { id: 1, value: "kept", note: "hello", count: -1, payload: "CAFE", optional: null },
-        { id: 2, value: "also kept", note: "hello", count: -1, payload: "CAFE", optional: null },
+        { count: -1, id: 1, note: "hello", optional: null, payload: "CAFE", value: "kept" },
+        { count: -1, id: 2, note: "hello", optional: null, payload: "CAFE", value: "also kept" },
       ],
     );
     assert.deepEqual(Effect.runSync(diffSchemas(currentSchema(database), parse(after))), {

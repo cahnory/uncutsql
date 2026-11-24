@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
-import { sqlQuery, type CompoundQuery, type QueryCore } from "../src/index.ts";
+
+import { sqlQuery } from "../src/index.ts";
+import type { CompoundQuery, QueryCore } from "../src/index.ts";
 const decode = (sql: string) => Effect.runSync(sqlQuery.decode(sql));
 
 test("compound queries preserve SQLite set operations, grouping and global tails", () => {
@@ -58,23 +61,26 @@ test("compound syntax and constructed trees reject misplaced tails", () => {
     { ...base, head: decode("SELECT 1 LIMIT 2") as QueryCore },
     {
       ...base,
-      rest: [{ operator: "UNION" as const, query: decode("VALUES (1)") as QueryCore }],
       orderBy: [{ expression: { _tag: "NumericLiteral" as const, value: "1" } }],
+      rest: [{ operator: "UNION" as const, query: decode("VALUES (1)") as QueryCore }],
     },
-  ])
+  ]) {
     assert.ok(Result.isFailure(Effect.runSync(Effect.result(sqlQuery.encode(value)))));
+  }
 });
 
 const root = new URL("./fixtures/previous/select-statement/", import.meta.url);
-for (const category of readdirSync(root))
+for (const category of readdirSync(root)) {
   for (const file of readdirSync(new URL(category + "/", root))) {
     test(`previous select-statement/${category}/${file}`, () => {
       const source = readFileSync(new URL(category + "/" + file, root), "utf8");
       const result = Effect.runSync(Effect.result(sqlQuery.decode(source)));
-      if (category === "invalid") assert.ok(Result.isFailure(result));
-      else {
+      if (category === "invalid") {
+        assert.ok(Result.isFailure(result));
+      } else {
         assert.ok(Result.isSuccess(result));
         assert.deepEqual(decode(Effect.runSync(sqlQuery.encode(result.success))), result.success);
       }
     });
   }
+}

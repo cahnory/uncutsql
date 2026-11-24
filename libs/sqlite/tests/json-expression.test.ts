@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import { ParseError } from "@uncutsql/codec";
-import { sqlExpression, schema, encodeMigration, type Expression } from "../src/index.ts";
+
+import { encodeMigration, schema, sqlExpression } from "../src/index.ts";
+import type { Expression } from "../src/index.ts";
 import { planMigration } from "./workflow.ts";
 const decode = (sql: string) => Effect.runSync(sqlExpression.decode(sql));
 const encode = (ast: Expression) => Effect.runSync(sqlExpression.encode(ast));
@@ -16,8 +20,8 @@ test("previous JSON arrow edge fixture and nested paths round-trip", () => {
   );
   assert.deepEqual(decode(source), {
     _tag: "BinaryExpression",
-    operator: "->",
     left: { _tag: "ColumnReference", parts: ["a"] },
+    operator: "->",
     right: { _tag: "StringLiteral", value: "$.x" },
   });
   for (const sql of [

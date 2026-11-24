@@ -1,28 +1,29 @@
 import { Effect } from "effect";
+
 import {
-  type Codec,
-  type Value,
-  read,
   EncodeError,
   make,
   optional,
   parseError,
   prefixed,
+  read,
   repeat,
   struct,
   taggedUnion,
   transform,
 } from "@uncutsql/codec";
+import type { Codec, Value } from "@uncutsql/codec";
+
 import { keywordChoice } from "../../operators/keyword-choice.ts";
 import { keywordSequence } from "../../operators/keyword-sequence.ts";
 import { punctuation } from "../../operators/punctuation.ts";
-import { orderingTerm } from "../ordering-term.ts";
 import type { Expression } from "../expression/types.ts";
+import { orderingTerm } from "../ordering-term.ts";
+import { limitClause } from "./limit-clause.ts";
 import { selectCore } from "./select-query.ts";
+import type { Query } from "./types.ts";
 import { valuesQuery } from "./values-query.ts";
 import { withClause } from "./with-clause.ts";
-import { limitClause } from "./limit-clause.ts";
-import type { Query } from "./types.ts";
 
 export const query = (expression: Codec<Expression>, schemaNames = false): Codec<Query> => {
   const core = taggedUnion({
@@ -57,9 +58,9 @@ export const query = (expression: Codec<Expression>, schemaNames = false): Codec
   );
   const toQuery = ({
     head,
-    rest,
-    orderBy,
     limit,
+    orderBy,
+    rest,
     with: withDefinition,
   }: Value<typeof syntax>): Query =>
     rest.length === 0
@@ -80,11 +81,11 @@ export const query = (expression: Codec<Expression>, schemaNames = false): Codec
   const mapped = transform(syntax, {
     decode: toQuery,
     encode: (value: Query) => ({
-      with: value.with,
       head: value._tag === "CompoundQuery" ? value.head : value,
-      rest: value._tag === "CompoundQuery" ? value.rest : [],
-      orderBy: value._tag === "ValuesQuery" ? undefined : value.orderBy,
       limit: value._tag === "ValuesQuery" ? undefined : value.limit,
+      orderBy: value._tag === "ValuesQuery" ? undefined : value.orderBy,
+      rest: value._tag === "CompoundQuery" ? value.rest : [],
+      with: value.with,
     }),
   });
   return make<Query>({
@@ -118,10 +119,11 @@ export const query = (expression: Codec<Expression>, schemaNames = false): Codec
             }),
           );
         }
-        if (value.rest.length === 0)
+        if (value.rest.length === 0) {
           return Effect.fail(
             new EncodeError({ message: "A compound query needs at least two cores" }),
           );
+        }
         if (
           value.rest.at(-1)!.query._tag === "ValuesQuery" &&
           (value.orderBy !== undefined || value.limit !== undefined)

@@ -1,4 +1,6 @@
-import { type Value, located, taggedUnion } from "@uncutsql/codec";
+import { located, taggedUnion } from "@uncutsql/codec";
+import type { Value } from "@uncutsql/codec";
+
 import { lexeme } from "../operators/lexeme.ts";
 import { namedConstraint } from "../operators/named-constraint.ts";
 import { checkTableConstraint } from "./table-constraint/check-table-constraint.ts";

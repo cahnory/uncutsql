@@ -1,4 +1,6 @@
-import { type Value, repeat } from "@uncutsql/codec";
+import { repeat } from "@uncutsql/codec";
+import type { Value } from "@uncutsql/codec";
+
 import { keywordChoice } from "../operators/keyword-choice.ts";
 import { punctuation } from "../operators/punctuation.ts";
 

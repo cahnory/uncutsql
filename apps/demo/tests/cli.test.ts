@@ -3,8 +3,8 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 const cli = fileURLToPath(import.meta.resolve("@uncutsql/cli/bin"));
 const run = (args: string[], input = "", cwd?: string) =>
@@ -19,8 +19,8 @@ const run = (args: string[], input = "", cwd?: string) =>
       ...args,
     ],
     {
-      input,
       encoding: "utf8",
+      input,
       ...(cwd === undefined ? {} : { cwd }),
     },
   );
@@ -165,7 +165,7 @@ test("configured multipart schemas use config-relative paths and retain part dia
     mkdirSync(join(cwd, "project/schema/nested"), { recursive: true });
     writeFileSync(
       join(cwd, "project/settings.json"),
-      JSON.stringify({ schema: "schema", migrations: "history" }),
+      JSON.stringify({ migrations: "history", schema: "schema" }),
     );
     const put = (name: string, sql: string) =>
       writeFileSync(join(cwd, "project/schema", name), sql);
@@ -188,7 +188,7 @@ test("configured multipart schemas use config-relative paths and retain part dia
     assert.equal(invalid.stdout, "");
     assert.match(invalid.stderr, /t\.uncut\.sql:2:1/);
   } finally {
-    rmSync(cwd, { recursive: true, force: true });
+    rmSync(cwd, { force: true, recursive: true });
   }
 });
 
@@ -200,8 +200,8 @@ test("project diff uses the lock, discovers config, and never generates output",
     writeFileSync(
       join(cwd, "uncutsql.config.json"),
       JSON.stringify({
-        schema: "schema.sql",
         migrations: "history",
+        schema: "schema.sql",
       }),
     );
     const initial = run([], "", cwd);
@@ -232,6 +232,6 @@ test("project diff uses the lock, discovers config, and never generates output",
     writeFileSync(join(cwd, "history/000001.sql"), "tampered");
     assert.match(run(["diff"], "", cwd).stderr, /migration hash/);
   } finally {
-    rmSync(cwd, { recursive: true, force: true });
+    rmSync(cwd, { force: true, recursive: true });
   }
 });

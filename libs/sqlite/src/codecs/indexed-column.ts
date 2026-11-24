@@ -1,12 +1,14 @@
-import { type Codec, optional, prefixed, struct, transform } from "@uncutsql/codec";
-import { keyword } from "../operators/keyword.ts";
+import { optional, prefixed, struct, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keywordChoice } from "../operators/keyword-choice.ts";
+import { keyword } from "../operators/keyword.ts";
 import { identifier } from "./identifier.ts";
 
 /** Table PRIMARY KEY/UNIQUE columns cannot be arbitrary index expressions. */
 export interface IndexedColumn {
-  readonly column: string;
   readonly collation?: string;
+  readonly column: string;
   readonly order?: "ASC" | "DESC";
 }
 
@@ -20,14 +22,14 @@ export const indexedColumn: Codec<IndexedColumn> = transform(
     " ",
   ),
   {
-    decode: ({ column, collation, order }): IndexedColumn => ({
+    decode: ({ collation, column, order }): IndexedColumn => ({
       column,
       ...(collation === undefined ? {} : { collation }),
       ...(order === undefined ? {} : { order }),
     }),
     encode: (value: IndexedColumn) => ({
-      column: value.column,
       collation: value.collation,
+      column: value.column,
       order: value.order,
     }),
   },

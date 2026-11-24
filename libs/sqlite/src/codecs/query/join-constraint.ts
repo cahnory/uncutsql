@@ -1,9 +1,11 @@
-import { type Codec, prefixed, repeat, taggedUnion, transform } from "@uncutsql/codec";
+import { prefixed, repeat, taggedUnion, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keyword } from "../../operators/keyword.ts";
 import { parenthesized } from "../../operators/parenthesized.ts";
 import { punctuation } from "../../operators/punctuation.ts";
-import { nameIdentifier } from "../identifier.ts";
 import type { Expression } from "../expression/types.ts";
+import { nameIdentifier } from "../identifier.ts";
 import type { JoinConstraint } from "./types.ts";
 
 export const joinConstraint = (expression: Codec<Expression>): Codec<JoinConstraint> =>

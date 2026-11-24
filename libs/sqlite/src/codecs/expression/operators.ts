@@ -1,8 +1,8 @@
 import { Effect } from "effect";
+
 import {
-  type Codec,
-  EncodeError,
   alternatives,
+  EncodeError,
   located,
   make,
   parseError,
@@ -10,37 +10,39 @@ import {
   transform,
   tuple,
 } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keyword } from "../../operators/keyword.ts";
 import { lexeme } from "../../operators/lexeme.ts";
 
 /** One precedence table drives both parsing and printing. Larger binds tighter. */
 export const binaryPrecedence = {
-  OR: 10,
-  AND: 20,
-  "=": 40,
-  "!=": 40,
-  IS: 40,
-  "IS NOT": 40,
-  "<": 50,
-  ">": 50,
-  "<=": 50,
-  ">=": 50,
-  "&": 60,
-  "|": 60,
-  "<<": 60,
-  ">>": 60,
-  "+": 70,
   "-": 70,
-  "*": 80,
-  "/": 80,
-  "%": 80,
-  "||": 90,
   "->": 90,
   "->>": 90,
+  "!=": 40,
+  "*": 80,
+  "/": 80,
+  "&": 60,
+  "%": 80,
+  "+": 70,
+  "<": 50,
+  "<<": 60,
+  "<=": 50,
+  "=": 40,
+  ">": 50,
+  ">=": 50,
+  ">>": 60,
+  "|": 60,
+  "||": 90,
+  AND: 20,
+  IS: 40,
+  "IS NOT": 40,
+  OR: 10,
 } as const;
 export type BinaryOperator = keyof typeof binaryPrecedence;
 
-export const unaryPrecedence = { NOT: 30, "+": 100, "-": 100, "~": 100 } as const;
+export const unaryPrecedence = { "-": 100, "+": 100, "~": 100, NOT: 30 } as const;
 export type UnaryOperator = keyof typeof unaryPrecedence;
 export const primaryPrecedence = 110;
 
@@ -74,26 +76,26 @@ const wordOperator = <A extends string>(spelling: string, value: A): Codec<A> =>
   });
 
 const symbols = {
-  "||": "||",
+  "-": "-",
   "->": "->",
   "->>": "->>",
+  "!=": "!=",
   "*": "*",
   "/": "/",
+  "&": "&",
   "%": "%",
   "+": "+",
-  "-": "-",
-  "&": "&",
-  "|": "|",
-  "<<": "<<",
-  ">>": ">>",
   "<": "<",
-  ">": ">",
+  "<<": "<<",
   "<=": "<=",
-  ">=": ">=",
+  "<>": "!=",
   "=": "=",
   "==": "=",
-  "!=": "!=",
-  "<>": "!=",
+  ">": ">",
+  ">=": ">=",
+  ">>": ">>",
+  "|": "|",
+  "||": "||",
 } as const satisfies Record<string, BinaryOperator>;
 
 // All alternatives below have a shared encoder; decode normalizes SQL aliases.
@@ -138,7 +140,7 @@ export const unaryOperator: Codec<UnaryOperator> = lexeme(
     "UnaryOperator",
     alternatives(
       make<UnaryOperator>({
-        decode: symbol({ "+": "+", "-": "-", "~": "~" }, ["+", "-", "~"]).decode,
+        decode: symbol({ "-": "-", "+": "+", "~": "~" }, ["+", "-", "~"]).decode,
         encode: unaryEncode,
       }),
       make<UnaryOperator>({ decode: wordOperator("NOT", "NOT").decode, encode: unaryEncode }),

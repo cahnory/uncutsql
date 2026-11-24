@@ -1,27 +1,29 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
   renameSync,
   rmdirSync,
+  rmSync,
   statSync,
   utimesSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+
 import { Effect, Result } from "effect";
-import type { DatabaseSchema, Dialect } from "@uncutsql/core";
+
 import { generateMigration } from "@uncutsql/cli";
 import { hashMigration } from "@uncutsql/cli";
+import type { DatabaseSchema, Dialect } from "@uncutsql/core";
 
 const cli = fileURLToPath(import.meta.resolve("@uncutsql/cli/bin"));
 const run = (cwd: string, sql: string, args = ["generate", "-"]) =>
@@ -35,7 +37,7 @@ const run = (cwd: string, sql: string, args = ["generate", "-"]) =>
       import.meta.resolve("@uncutsql/sqlite-driver"),
       ...args,
     ],
-    { cwd, input: sql, encoding: "utf8" },
+    { cwd, encoding: "utf8", input: sql },
   );
 const createDirectory = () => mkdtempSync(join(tmpdir(), "uncutsql-generate-"));
 const lockFile = (directory: string) => join(directory, "migrations", "uncutsql.lock.json");
@@ -43,17 +45,17 @@ const readLock = (directory: string) => JSON.parse(readFileSync(lockFile(directo
 
 // The persistence workflow also works with a non-SQLite AST and physical plan.
 const model: DatabaseSchema = {
-  tables: [{ identity: { name: "t" }, name: "t", columns: [], constraints: [], options: {} }],
+  tables: [{ columns: [], constraints: [], identity: { name: "t" }, name: "t", options: {} }],
 };
 const adapter = (
   render: () => Effect.Effect<string, Error>,
 ): Dialect<{ database: DatabaseSchema }, string, Error> => ({
+  encodeMigration: render,
+  format: () => Effect.succeed(""),
+  lowerMigration: () => Effect.succeed("plan"),
   name: "fixture",
   parse: () => Effect.succeed({ database: model }),
-  format: () => Effect.succeed(""),
   toDatabaseSchema: (ast) => Effect.succeed(ast.database),
-  lowerMigration: () => Effect.succeed("plan"),
-  encodeMigration: render,
 });
 
 test("CLI generates from a missing baseline, advances IDs and leaves no-op output untouched", () => {
@@ -82,7 +84,7 @@ test("CLI generates from a missing baseline, advances IDs and leaves no-op outpu
       database.exec(firstSql);
       database.exec("INSERT INTO t VALUES (7)");
       database.exec(secondSql);
-      assert.deepEqual({ ...database.prepare("SELECT * FROM t").get() }, { id: 7, email: null });
+      assert.deepEqual({ ...database.prepare("SELECT * FROM t").get() }, { email: null, id: 7 });
     } finally {
       database.close();
     }
@@ -276,8 +278,9 @@ test("stale writer locks are preserved and generate validates usage and input be
   try {
     assert.equal(run(directory, "SELECT 1", ["generate", "-", "out"]).status, 1);
     assert.equal(existsSync(join(directory, "out")), false);
-    for (const args of [["generate"], ["generate", "-", "--bad"], ["generate", "-", "a", "b"]])
+    for (const args of [["generate"], ["generate", "-", "--bad"], ["generate", "-", "a", "b"]]) {
       assert.equal(run(directory, "", args).status, 2);
+    }
     const output = join(directory, "out");
     mkdirSync(output);
     const writer = join(output, ".uncutsql-generation.lock");

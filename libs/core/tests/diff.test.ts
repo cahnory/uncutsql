@@ -1,30 +1,30 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import {
-  diffDatabases,
   decodeDatabaseSchema,
+  diffDatabases,
   planDatabaseMigration,
   SchemaDiffError,
-  type DatabaseSchema,
-  type DatabaseTable,
-  type DatabaseColumn,
 } from "../src/index.ts";
+import type { DatabaseColumn, DatabaseSchema, DatabaseTable } from "../src/index.ts";
 
 const column = (key: string, dataType = "integer"): DatabaseColumn => ({
+  constraints: [],
+  dataType,
   key,
   name: key,
-  dataType,
-  constraints: [],
 });
 const table = (
   name: string,
   columns: readonly DatabaseColumn[] = [column("id")],
 ): DatabaseTable => ({
-  identity: { catalog: "app", schema: "public", name },
-  name,
   columns,
   constraints: [],
+  identity: { catalog: "app", name, schema: "public" },
+  name,
   options: {},
 });
 const database = (...tables: DatabaseTable[]): DatabaseSchema => ({ tables });
@@ -37,13 +37,16 @@ test("core compares normalized models without a SQL parser or dialect dependency
   const result = diff(before, after);
   const change = result.changes[0]!;
   assert.equal(change._tag, "TableChanged");
-  if (change._tag === "TableChanged")
+  if (change._tag === "TableChanged") {
     assert.deepEqual(change.changes, [
       { _tag: "ColumnAdded", column: column("email", "varchar"), position: 1 },
     ]);
+  }
   const procedures = planDatabaseMigration(result).procedures;
   assert.equal(procedures[0]!._tag, "AlterTable");
-  if (procedures[0]!._tag === "AlterTable") assert.deepEqual(procedures[0]!.after, after.tables[0]);
+  if (procedures[0]!._tag === "AlterTable") {
+    assert.deepEqual(procedures[0]!.after, after.tables[0]);
+  }
 });
 
 test("identity normalization belongs to adapters, including case and catalog/schema placement", () => {
@@ -54,11 +57,11 @@ test("identity normalization belongs to adapters, including case and catalog/sch
   const original = table("users");
   const differentCatalog = {
     ...original,
-    identity: { catalog: "other", schema: "public", name: "users" },
+    identity: { catalog: "other", name: "users", schema: "public" },
   };
   const differentSchema = {
     ...original,
-    identity: { catalog: "app", schema: "private", name: "users" },
+    identity: { catalog: "app", name: "users", schema: "private" },
   };
   assert.equal(diff(database(original), database(differentCatalog)).changes.length, 2);
   assert.equal(diff(database(original), database(differentSchema)).changes.length, 2);
@@ -73,25 +76,27 @@ test("structured types, constraints and dialect extensions compare by value rath
     ...table("t"),
     columns: [{ ...column("id"), dataType: { name: "decimal", parameters: [10, 2] } }],
     constraints: [
-      { kind: "Unique", properties: { name: "key", columns: ["id"], "vendor:deferrable": true } },
+      { kind: "Unique", properties: { columns: ["id"], name: "key", "vendor:deferrable": true } },
     ],
-    options: { "vendor:partition": { method: "hash", columns: ["id"] } },
+    options: { "vendor:partition": { columns: ["id"], method: "hash" } },
   };
   const equivalent: DatabaseTable = {
     ...before,
-    columns: [{ ...column("id"), dataType: { parameters: [10, 2], name: "decimal" } }],
+    columns: [{ ...column("id"), dataType: { name: "decimal", parameters: [10, 2] } }],
     constraints: [
-      { properties: { "vendor:deferrable": true, columns: ["id"], name: "key" }, kind: "Unique" },
+      { kind: "Unique", properties: { columns: ["id"], name: "key", "vendor:deferrable": true } },
     ],
   };
   assert.deepEqual(diff(database(before), database(equivalent)), { changes: [] });
   const changed = {
     ...before,
-    options: { "vendor:partition": { method: "range", columns: ["id"] } },
+    options: { "vendor:partition": { columns: ["id"], method: "range" } },
   };
   const result = diff(database(before), database(changed)).changes[0]!;
   assert.equal(result._tag, "TableChanged");
-  if (result._tag === "TableChanged") assert.equal(result.changes[0]!._tag, "TableOptionsChanged");
+  if (result._tag === "TableChanged") {
+    assert.equal(result.changes[0]!._tag, "TableOptionsChanged");
+  }
 });
 
 test("core detects column fields, ordering and ordered constraints", () => {
@@ -108,11 +113,12 @@ test("core detects column fields, ordering and ordered constraints", () => {
   };
   const result = diff(database(before), database(after)).changes[0]!;
   assert.equal(result._tag, "TableChanged");
-  if (result._tag === "TableChanged")
+  if (result._tag === "TableChanged") {
     assert.deepEqual(
       result.changes.map((item) => item._tag),
       ["ColumnChanged", "ColumnOrderChanged", "TableConstraintsChanged"],
     );
+  }
 });
 
 test("core validates duplicate identities on both sides without assuming vendor name rules", () => {
@@ -162,10 +168,10 @@ test("view changes survive JSON restoration and lower to logical procedures", ()
 
 test("trigger snapshots compare target identity and ordered actions", () => {
   const trigger = {
+    definition: { actions: ["first", "second"] },
     identity: { name: "audit" },
     name: "audit",
     target: { name: "users" },
-    definition: { actions: ["first", "second"] },
   };
   const schema = { tables: [], triggers: [trigger] };
   assert.deepEqual(
@@ -181,11 +187,12 @@ test("trigger snapshots compare target identity and ordered actions", () => {
   for (const after of [
     { ...trigger, target: { name: "posts" } },
     { ...trigger, definition: { actions: ["second", "first"] } },
-  ])
+  ]) {
     assert.deepEqual(
       planDatabaseMigration(diff(schema, { tables: [], triggers: [after] })).procedures,
-      [{ _tag: "ReplaceTrigger", before: trigger, after }],
+      [{ _tag: "ReplaceTrigger", after, before: trigger }],
     );
+  }
   assert.deepEqual(diff(schema, schema).changes, []);
   assert.throws(
     () => diff(database(), { ...schema, triggers: [trigger, trigger] }),

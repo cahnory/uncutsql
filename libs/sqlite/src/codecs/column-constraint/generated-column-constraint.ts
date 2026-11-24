@@ -1,9 +1,12 @@
-import { type Codec, alternatives, optional, prefixed, struct, transform } from "@uncutsql/codec";
-import { keyword } from "../../operators/keyword.ts";
+import { alternatives, optional, prefixed, struct, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keywordChoice } from "../../operators/keyword-choice.ts";
 import { keywordSequence } from "../../operators/keyword-sequence.ts";
+import { keyword } from "../../operators/keyword.ts";
 import { parenthesized } from "../../operators/parenthesized.ts";
-import { expression, type Expression } from "../expression.ts";
+import { expression } from "../expression.ts";
+import type { Expression } from "../expression.ts";
 
 export interface GeneratedColumnConstraint {
   readonly _tag: "Generated";

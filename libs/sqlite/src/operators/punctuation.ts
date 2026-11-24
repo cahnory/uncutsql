@@ -1,5 +1,8 @@
 import { Effect } from "effect";
-import { type Codec, make, parseError, read } from "@uncutsql/codec";
+
+import { make, parseError, read } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { lexeme } from "./lexeme.ts";
 
 export const punctuation = (text: string, printed = text): Codec<void> =>

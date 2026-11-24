@@ -15,14 +15,14 @@ export type QueryBody = ValuesQuery | SelectQuery | CompoundQuery;
 export type Query = QueryBody & { readonly with?: WithClause };
 
 export interface WithClause {
-  readonly recursive: boolean;
   readonly expressions: readonly CommonTableExpression[];
+  readonly recursive: boolean;
 }
 
 export interface CommonTableExpression {
-  readonly name: string;
   readonly columns?: readonly string[];
   readonly materialization?: "MATERIALIZED" | "NOT MATERIALIZED";
+  readonly name: string;
   readonly query: Query;
 }
 export type QueryCore = ValuesQuery | SelectCore;
@@ -31,35 +31,35 @@ export type CompoundOperator = "UNION" | "UNION ALL" | "INTERSECT" | "EXCEPT";
 export interface CompoundQuery {
   readonly _tag: "CompoundQuery";
   readonly head: QueryCore;
-  readonly rest: readonly { readonly operator: CompoundOperator; readonly query: QueryCore }[];
-  readonly orderBy?: readonly OrderingTerm[];
   readonly limit?: LimitClause;
+  readonly orderBy?: readonly OrderingTerm[];
+  readonly rest: readonly { readonly operator: CompoundOperator; readonly query: QueryCore }[];
 }
 
 export type ResultColumn =
   | { readonly _tag: "StarColumn" }
   | { readonly _tag: "TableStarColumn"; readonly table: string }
-  | { readonly _tag: "ExpressionColumn"; readonly expression: Expression; readonly alias?: string };
+  | { readonly _tag: "ExpressionColumn"; readonly alias?: string; readonly expression: Expression };
 
 export type IndexHint =
   | { readonly _tag: "IndexedBy"; readonly name: string }
   | { readonly _tag: "NotIndexed" };
 
 export interface TableReferenceSource extends InTableTarget {
-  readonly indexHint?: IndexHint;
   readonly alias?: string;
+  readonly indexHint?: IndexHint;
 }
 
 export interface SubquerySource {
   readonly _tag: "SubquerySource";
-  readonly query: Query;
   readonly alias?: string;
+  readonly query: Query;
 }
 
 export interface GroupedSource {
   readonly _tag: "GroupedSource";
-  readonly from: FromClause;
   readonly alias?: string;
+  readonly from: FromClause;
 }
 
 export type TableSource = TableReferenceSource | SubquerySource | GroupedSource;
@@ -75,29 +75,29 @@ export interface JoinedSource {
   readonly _tag: "JoinedSource";
   readonly head: TableSource;
   readonly joins: readonly {
+    readonly constraint?: JoinConstraint;
     readonly operator: JoinOperator;
     readonly right: TableSource;
-    readonly constraint?: JoinConstraint;
   }[];
 }
 export type FromClause = readonly TableSource[] | JoinedSource;
 
 export type LimitClause =
   | { readonly _tag: "CountLimit"; readonly count: Expression; readonly offset?: Expression }
-  | { readonly _tag: "CommaLimit"; readonly offset: Expression; readonly count: Expression };
+  | { readonly _tag: "CommaLimit"; readonly count: Expression; readonly offset: Expression };
 
 export interface SelectCore {
   readonly _tag: "SelectQuery";
-  readonly modifier?: "ALL" | "DISTINCT";
   readonly columns: readonly ResultColumn[];
   readonly from?: FromClause;
-  readonly where?: Expression;
   readonly groupBy?: readonly Expression[];
   readonly having?: Expression;
-  readonly windows?: readonly { readonly name: string; readonly definition: WindowDefinition }[];
+  readonly modifier?: "ALL" | "DISTINCT";
+  readonly where?: Expression;
+  readonly windows?: readonly { readonly definition: WindowDefinition; readonly name: string }[];
 }
 
 export interface SelectQuery extends SelectCore {
-  readonly orderBy?: readonly OrderingTerm[];
   readonly limit?: LimitClause;
+  readonly orderBy?: readonly OrderingTerm[];
 }

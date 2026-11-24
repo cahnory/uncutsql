@@ -1,16 +1,18 @@
 import { Effect } from "effect";
+
 import {
-  type Codec,
   EncodeError,
-  tuple,
   make,
   parseError,
   repeat,
   taggedUnion,
   transform,
+  tuple,
 } from "@uncutsql/codec";
-import { keyword } from "../../operators/keyword.ts";
+import type { Codec } from "@uncutsql/codec";
+
 import { keywordChoice } from "../../operators/keyword-choice.ts";
+import { keyword } from "../../operators/keyword.ts";
 import { punctuation } from "../../operators/punctuation.ts";
 import type { JoinOperator } from "./types.ts";
 
@@ -37,7 +39,9 @@ export const joinOperator: Codec<JoinOperator> = (() => {
     ),
   });
   const valid = (value: JoinOperator) => {
-    if (value._tag === "CommaJoin") return true;
+    if (value._tag === "CommaJoin") {
+      return true;
+    }
     const modifiers = value.modifiers;
     const side = modifiers.some((word) => word === "LEFT" || word === "RIGHT" || word === "FULL");
     const outer = side || modifiers.includes("OUTER");
@@ -48,10 +52,11 @@ export const joinOperator: Codec<JoinOperator> = (() => {
     decode: (cursor) =>
       Effect.gen(function* () {
         const result = yield* syntax.decode(cursor);
-        if (!valid(result.value))
+        if (!valid(result.value)) {
           return yield* Effect.fail(
             parseError(cursor, "a compatible SQLite join type with at most three modifiers", true),
           );
+        }
         return result;
       }),
     encode: (value) =>

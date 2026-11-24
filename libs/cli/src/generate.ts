@@ -1,20 +1,14 @@
-import { mkdir, open, readFile, readdir, rename, link, unlink } from "node:fs/promises";
+import { link, mkdir, open, readdir, readFile, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
+
 import { Effect } from "effect";
-import {
-  decodeDatabaseSchema,
-  diffDatabases,
-  prepareMigrationDecisions,
-  type Dialect,
-} from "@uncutsql/core";
+
+import { decodeDatabaseSchema, diffDatabases, prepareMigrationDecisions } from "@uncutsql/core";
+import type { Dialect } from "@uncutsql/core";
+
+import { decodeLock, GenerationError, hashMigration, migrationFilename } from "./lock.ts";
+import type { SchemaLock } from "./lock.ts";
 import { renderMigration } from "./workflow.ts";
-import {
-  decodeLock,
-  GenerationError,
-  hashMigration,
-  migrationFilename,
-  type SchemaLock,
-} from "./lock.ts";
 
 const lockName = "uncutsql.lock.json";
 const writerName = ".uncutsql-generation.lock";
@@ -23,21 +17,25 @@ const hasCode = (cause: unknown, code: string) =>
   cause !== null && typeof cause === "object" && "code" in cause && cause.code === code;
 const io = <A>(label: string, operation: () => Promise<A>) =>
   Effect.tryPromise({
-    try: operation,
     catch: (cause) => new GenerationError({ message: `${label}: ${message(cause)}` }),
+    try: operation,
   });
 const remove = async (path: string) => {
   try {
     await unlink(path);
   } catch (cause) {
-    if (!hasCode(cause, "ENOENT")) throw cause;
+    if (!hasCode(cause, "ENOENT")) {
+      throw cause;
+    }
   }
 };
 const readOptional = async (path: string) => {
   try {
     return await readFile(path, "utf8");
   } catch (cause) {
-    if (hasCode(cause, "ENOENT")) return undefined;
+    if (hasCode(cause, "ENOENT")) {
+      return undefined;
+    }
     throw cause;
   }
 };
@@ -78,19 +76,22 @@ export const readBaseline = (directory: string, dialect: string) =>
       try {
         return await readdir(directory);
       } catch (cause) {
-        if (hasCode(cause, "ENOENT")) return [];
+        if (hasCode(cause, "ENOENT")) {
+          return [];
+        }
         throw cause;
       }
     }))
       .filter((name) => /^\d+\.sql$/.test(name))
       .sort((left, right) => Number(left.slice(0, -4)) - Number(right.slice(0, -4)));
     if (source === undefined) {
-      if (files.length)
+      if (files.length) {
         return yield* Effect.fail(
           new GenerationError({
             message: `${directory}: numbered migrations exist without a lock; restore the matching baseline before generating`,
           }),
         );
+      }
       return { database: { tables: [] }, lastMigrationId: 0 };
     }
     const lock = yield* decodeLock(source, dialect).pipe(
@@ -108,12 +109,13 @@ export const readBaseline = (directory: string, dialect: string) =>
     }
     const latest = join(directory, migrationFilename(lock.lastMigrationId));
     const sql = yield* io(latest, () => readFile(latest, "utf8"));
-    if (hashMigration(sql) !== lock.lastMigrationSha256)
+    if (hashMigration(sql) !== lock.lastMigrationSha256) {
       return yield* Effect.fail(
         new GenerationError({
           message: `${latest}: content does not match the lock's migration hash`,
         }),
       );
+    }
     return lock;
   });
 
@@ -160,7 +162,7 @@ const publish = async (directory: string, sql: string, lock: SchemaLock) => {
   } catch (cause) {
     cleanup.push(cause);
   }
-  if (failure !== undefined || cleanup.length)
+  if (failure !== undefined || cleanup.length) {
     throw new Error(
       [
         committed
@@ -170,11 +172,12 @@ const publish = async (directory: string, sql: string, lock: SchemaLock) => {
         ...cleanup.map(message),
       ].join(": "),
     );
+  }
 };
 
 export interface GenerationResult {
-  readonly migrationPath?: string;
   readonly lockPath?: string;
+  readonly migrationPath?: string;
 }
 
 /** Application-owned generation; no database is opened and no SQL is executed. */
@@ -195,41 +198,47 @@ export const generateMigration = <Ast, Plan, E extends Error, R>(
       Effect.gen(function* () {
         const baseline = yield* readBaseline(directory, dialect.name);
         const diff = yield* diffDatabases(baseline.database, after);
-        if (!diff.changes.length && decisions === undefined) return {} satisfies GenerationResult;
+        if (!diff.changes.length && decisions === undefined) {
+          return {} satisfies GenerationResult;
+        }
         const id = baseline.lastMigrationId + 1;
-        if (!Number.isSafeInteger(id))
+        if (!Number.isSafeInteger(id)) {
           return yield* Effect.fail(
             new GenerationError({ message: "Migration ID range exhausted" }),
           );
+        }
         const rendered = yield* renderMigration(
           dialect,
           {
-            before: baseline.database,
             after,
+            before: baseline.database,
             diff,
           },
           decisions,
         );
-        if (!diff.changes.length) return {} satisfies GenerationResult;
-        if (!rendered.trim())
+        if (!diff.changes.length) {
+          return {} satisfies GenerationResult;
+        }
+        if (!rendered.trim()) {
           return yield* Effect.fail(
             new GenerationError({
               message: "The dialect returned empty SQL for a nonempty schema diff",
             }),
           );
+        }
         const sql = rendered.endsWith("\n") ? rendered : `${rendered}\n`;
         const lock: SchemaLock = {
-          formatVersion: 1,
+          database: after,
           dialect: dialect.name,
+          formatVersion: 1,
           lastMigrationId: id,
           lastMigrationSha256: hashMigration(sql),
-          database: after,
         };
         // Complete publication/cleanup before releasing the writer lock on interruption.
         yield* Effect.uninterruptible(io(directory, () => publish(directory, sql, lock)));
         return {
-          migrationPath: join(directory, migrationFilename(id)),
           lockPath: join(directory, lockName),
+          migrationPath: join(directory, migrationFilename(id)),
         } satisfies GenerationResult;
       }),
     );
@@ -244,14 +253,17 @@ export const withMigrationDirectoryLock = <A, E, R>(
   const writerPath = join(directory, writerName);
   return Effect.acquireUseRelease(
     io(writerPath, async () => {
-      if (create) await mkdir(directory, { recursive: true });
+      if (create) {
+        await mkdir(directory, { recursive: true });
+      }
       try {
         return await open(writerPath, "wx");
       } catch (cause) {
-        if (hasCode(cause, "EEXIST"))
+        if (hasCode(cause, "EEXIST")) {
           throw new Error(
             "Another command is reading or generating migrations, or was interrupted. Inspect the output and remove this writer lock only when no command is using the directory.",
           );
+        }
         throw cause;
       }
     }),
@@ -295,5 +307,5 @@ export const compareGeneratedSchema = <Ast, Plan, E extends Error, R>(
     const after = yield* dialect.toDatabaseSchema(ast, "after");
     const baseline = yield* readBaseline(directory, dialect.name);
     const diff = yield* diffDatabases(baseline.database, after);
-    return { before: baseline.database, after, diff };
+    return { after, before: baseline.database, diff };
   });

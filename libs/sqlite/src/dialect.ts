@@ -1,25 +1,23 @@
-import type { Dialect, SchemaDiffError } from "@uncutsql/core";
 import type { EncodeError, ParseError } from "@uncutsql/codec";
-import { schema, type Statement } from "./schema.ts";
+import type { Dialect, SchemaDiffError } from "@uncutsql/core";
+
 import { toDatabaseSchema } from "./database.ts";
-import {
-  lowerMigration,
-  encodeMigration,
-  type MigrationPlan,
-  type MigrationPlanError,
-} from "./migration.ts";
+import { encodeMigration, lowerMigration } from "./migration.ts";
+import type { MigrationPlan, MigrationPlanError } from "./migration.ts";
+import { schema } from "./schema.ts";
+import type { Statement } from "./schema.ts";
 
 export const dialect: Dialect<
   readonly Statement[],
   MigrationPlan,
   ParseError | EncodeError | SchemaDiffError | MigrationPlanError
 > = {
-  name: "sqlite",
-  supportsDropGuards: true,
-  parse: schema.decode,
   combineSchemas: (parts) => parts.flat(),
-  format: schema.encode,
-  toDatabaseSchema,
-  lowerMigration,
   encodeMigration,
+  format: schema.encode,
+  lowerMigration,
+  name: "sqlite",
+  parse: schema.decode,
+  supportsDropGuards: true,
+  toDatabaseSchema,
 };

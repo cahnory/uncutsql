@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
-import { type SourceNode, ParseError } from "@uncutsql/codec";
+
+import { ParseError } from "@uncutsql/codec";
+import type { SourceNode } from "@uncutsql/codec";
+
 import { schema } from "../src/index.ts";
 
 const decode = (sql: string) => Effect.runSync(schema.decode(sql));

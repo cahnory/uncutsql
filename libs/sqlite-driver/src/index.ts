@@ -1,31 +1,34 @@
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
+
 import { Data, Effect } from "effect";
-import {
-  decodeDatabaseSchema,
-  type DatabaseSchema,
-  type MigrationSource,
-  type ExecutionResult,
-  type MigrationExecutor,
+
+import { decodeDatabaseSchema } from "@uncutsql/core";
+import type {
+  DatabaseSchema,
+  ExecutionResult,
+  MigrationExecutor,
+  MigrationSource,
 } from "@uncutsql/core";
 import { schema, toDatabaseSchema } from "@uncutsql/sqlite";
+
 import { executeScriptBody } from "./script.ts";
 
 export class SqliteExecutionError extends Data.TaggedError("SqliteExecutionError")<{
+  readonly appliedIds?: readonly number[];
   readonly message: string;
   readonly migrationId?: number;
-  readonly appliedIds?: readonly number[];
 }> {}
 const historyName = "__uncutsql_migrations";
 const historyTable = `main."${historyName}"`;
 const historyDdl = `CREATE TABLE ${historyTable} (id INTEGER PRIMARY KEY, sha256 TEXT NOT NULL, dialect TEXT NOT NULL, format_version INTEGER NOT NULL, database_json TEXT NOT NULL, applied_at TEXT NOT NULL)`;
 const native = <A>(label: string, operation: () => A) =>
   Effect.try({
-    try: operation,
     catch: (cause) =>
       new SqliteExecutionError({
         message: `${label}: ${cause instanceof Error ? cause.message : String(cause)}`,
       }),
+    try: operation,
   });
 const digest = (sql: string) => createHash("sha256").update(sql, "utf8").digest("hex");
 
@@ -45,19 +48,21 @@ const inspectDatabase = (database: DatabaseSync) =>
         object.type !== "view" &&
         object.type !== "trigger",
     );
-    if (unsupported)
+    if (unsupported) {
       return yield* Effect.fail(
         new SqliteExecutionError({
           message: `Unsupported live schema object ${String(unsupported.type)} ${JSON.stringify(unsupported.name)}`,
         }),
       );
+    }
     const temporary = yield* native("Inspect temporary schema", () =>
       database.prepare("SELECT name FROM temp.sqlite_schema WHERE name NOT GLOB 'sqlite_*'").all(),
     );
-    if (temporary.length)
+    if (temporary.length) {
       return yield* Effect.fail(
         new SqliteExecutionError({ message: "Migration left temporary schema objects behind" }),
       );
+    }
     const sql = objects.map((object) => String(object.sql)).join(";\n");
     const ast = yield* schema.decode(sql).pipe(
       Effect.mapError(
@@ -79,11 +84,13 @@ const readHistory = (database: DatabaseSync, migrations: readonly MigrationSourc
         .prepare("SELECT type FROM main.sqlite_schema WHERE name = ? COLLATE NOCASE")
         .get(historyName),
     );
-    if (!object) yield* native("Initialize applied history", () => database.exec(historyDdl));
-    else if (object.type !== "table")
+    if (!object) {
+      yield* native("Initialize applied history", () => database.exec(historyDdl));
+    } else if (object.type !== "table") {
       return yield* Effect.fail(
         new SqliteExecutionError({ message: "The reserved applied-history name is not a table" }),
       );
+    }
     const columns = yield* native("Validate applied-history table", () =>
       database.prepare(`PRAGMA main.table_xinfo("${historyName}")`).all(),
     );
@@ -99,10 +106,11 @@ const readHistory = (database: DatabaseSync, migrations: readonly MigrationSourc
           column.dflt_value !== null ||
           column.type !== (index === 0 || index === 3 ? "INTEGER" : "TEXT"),
       )
-    )
+    ) {
       return yield* Effect.fail(
         new SqliteExecutionError({ message: "Unrecognized applied-history table format" }),
       );
+    }
     const rows = yield* native("Read applied history", () =>
       database
         .prepare(
@@ -119,17 +127,20 @@ const readHistory = (database: DatabaseSync, migrations: readonly MigrationSourc
           row.dialect !== "sqlite" ||
           row.format_version !== 1,
       )
-    )
+    ) {
       return yield* Effect.fail(
         new SqliteExecutionError({
           message:
             "Applied migration history is not a matching prefix of the supplied files (ID, checksum, dialect or version mismatch)",
         }),
       );
+    }
     let snapshot: DatabaseSchema = { tables: [] };
     for (const row of rows) {
       const value: unknown = yield* native("Decode applied schema snapshot", () => {
-        if (typeof row.database_json !== "string") throw new Error("Expected snapshot JSON");
+        if (typeof row.database_json !== "string") {
+          throw new Error("Expected snapshot JSON");
+        }
         return JSON.parse(row.database_json);
       });
       const decoded = yield* decodeDatabaseSchema(value).pipe(
@@ -159,13 +170,14 @@ export const applyMigrations = <V extends Error, RV>(
           table.identity.schema !== undefined ||
           table.identity.name === historyName,
       )
-    )
+    ) {
       return yield* Effect.fail(
         new SqliteExecutionError({
           message:
             "This executor requires a file-backed main database and reserves __uncutsql_migrations",
         }),
       );
+    }
     if (
       migrations.some(
         (migration, index) =>
@@ -174,17 +186,18 @@ export const applyMigrations = <V extends Error, RV>(
           migration.sql.includes("\0") ||
           digest(migration.sql) !== migration.sha256,
       )
-    )
+    ) {
       return yield* Effect.fail(
         new SqliteExecutionError({ message: "Invalid migration IDs, SQL or checksums" }),
       );
+    }
     const appliedIds: number[] = [];
     let currentId: number | undefined;
     return yield* Effect.acquireUseRelease(
       native("Open SQLite database", () => {
         const database = new DatabaseSync(target, {
-          timeout: 5000,
           enableForeignKeyConstraints: true,
+          timeout: 5000,
         });
         if (!database.location("main")) {
           database.close();
@@ -204,13 +217,14 @@ export const applyMigrations = <V extends Error, RV>(
                 Effect.gen(function* () {
                   const history = yield* readHistory(database, migrations);
                   const actual = yield* inspectDatabase(database);
-                  if (history.count === 0 && (actual.tables.length || actual.views?.length))
+                  if (history.count === 0 && (actual.tables.length || actual.views?.length)) {
                     return yield* Effect.fail(
                       new SqliteExecutionError({
                         message:
                           "Refusing to adopt a nonempty database without applied migration history",
                       }),
                     );
+                  }
                   yield* verifySchema(actual, history.snapshot, "applied");
                   const next = migrations[history.count];
                   if (!next) {
@@ -225,15 +239,17 @@ export const applyMigrations = <V extends Error, RV>(
                   const violations = yield* native("Check foreign keys", () =>
                     database.prepare("PRAGMA main.foreign_key_check").all(),
                   );
-                  if (violations.length)
+                  if (violations.length) {
                     return yield* Effect.fail(
                       new SqliteExecutionError({
                         message: "Migration produced foreign-key violations",
                       }),
                     );
+                  }
                   const updated = yield* inspectDatabase(database);
-                  if (next.id === migrations.length)
+                  if (next.id === migrations.length) {
                     yield* verifySchema(updated, desired, "desired");
+                  }
                   yield* native("Record applied migration", () => {
                     database
                       .prepare(
@@ -248,11 +264,15 @@ export const applyMigrations = <V extends Error, RV>(
               () =>
                 native("Clean up migration transaction", () => {
                   database.setAuthorizer(null);
-                  if (database.isTransaction) database.exec("ROLLBACK");
+                  if (database.isTransaction) {
+                    database.exec("ROLLBACK");
+                  }
                   database.exec("PRAGMA foreign_keys=ON");
                 }),
             );
-            if (result.done) return { appliedIds, lastAppliedId: result.id };
+            if (result.done) {
+              return { appliedIds, lastAppliedId: result.id };
+            }
           }
         }),
       (database) => native("Close SQLite database", () => database.close()),
@@ -269,6 +289,6 @@ export const applyMigrations = <V extends Error, RV>(
   });
 
 export const executor: MigrationExecutor<SqliteExecutionError> = {
-  dialect: "sqlite",
   apply: applyMigrations,
+  dialect: "sqlite",
 };

@@ -1,9 +1,10 @@
 import { prefixed, transform } from "@uncutsql/codec";
+
 import { keyword } from "../operators/keyword.ts";
+import type { CreateTableHeader } from "./create-table-header.ts";
 import { expression } from "./expression.ts";
 import { query } from "./query/query.ts";
 import type { Query } from "./query/types.ts";
-import type { CreateTableHeader } from "./create-table-header.ts";
 
 export interface CreateTableAs extends CreateTableHeader {
   readonly _tag: "CreateTableAs";

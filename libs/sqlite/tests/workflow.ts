@@ -1,13 +1,11 @@
 // Test consumers wire core and the dialect exactly as an application would.
 import { Effect, Result } from "effect";
-import {
-  diffDatabases,
-  planDatabaseMigration,
-  SchemaDiffError,
-  type DatabaseSchema,
-  type DiffDiagnostic,
-} from "@uncutsql/core";
-import { toDatabaseSchema, lowerMigration, type Statement } from "../src/index.ts";
+
+import { diffDatabases, planDatabaseMigration, SchemaDiffError } from "@uncutsql/core";
+import type { DatabaseSchema, DiffDiagnostic } from "@uncutsql/core";
+
+import { lowerMigration, toDatabaseSchema } from "../src/index.ts";
+import type { Statement } from "../src/index.ts";
 
 const compare = (before: readonly Statement[], after: readonly Statement[]) =>
   Effect.gen(function* () {
@@ -18,15 +16,20 @@ const compare = (before: readonly Statement[], after: readonly Statement[]) =>
       [after, "after"],
     ] as const) {
       const result = yield* Effect.result(toDatabaseSchema(ast, side));
-      if (Result.isSuccess(result)) models.push(result.success);
-      else if (result.failure instanceof SchemaDiffError)
+      if (Result.isSuccess(result)) {
+        models.push(result.success);
+      } else if (result.failure instanceof SchemaDiffError) {
         diagnostics.push(...result.failure.diagnostics);
-      else return yield* Effect.fail(result.failure);
+      } else {
+        return yield* Effect.fail(result.failure);
+      }
     }
-    if (diagnostics.length) return yield* Effect.fail(new SchemaDiffError({ diagnostics }));
+    if (diagnostics.length) {
+      return yield* Effect.fail(new SchemaDiffError({ diagnostics }));
+    }
     return {
-      before: models[0]!,
       after: models[1]!,
+      before: models[0]!,
       diff: yield* diffDatabases(models[0]!, models[1]!),
     };
   });

@@ -1,4 +1,6 @@
-import { type Codec, followedBy, prefixed } from "@uncutsql/codec";
+import { followedBy, prefixed } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { punctuation } from "./punctuation.ts";
 
 export const parenthesized = <A, E, R>(codec: Codec<A, E, R>): Codec<A, E, R> =>

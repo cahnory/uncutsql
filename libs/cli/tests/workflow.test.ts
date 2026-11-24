@@ -1,27 +1,30 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 import { Effect } from "effect";
+
 import { prepareMigrationDecisions } from "@uncutsql/core";
-import type { DatabaseSchema, DatabaseMigration, Dialect } from "@uncutsql/core";
+import type { DatabaseMigration, DatabaseSchema, Dialect } from "@uncutsql/core";
+
 import { compareSchemas, renderMigration } from "../src/workflow.ts";
 
 // A second adapter with a different AST/plan and case-sensitive names. It has no diff function.
 const adapter: Dialect<{ model: DatabaseSchema }, { logical: DatabaseMigration }, never> = {
-  name: "fixture",
-  parse: (source) => Effect.sync(() => ({ model: JSON.parse(source) as DatabaseSchema })),
-  format: (ast) => Effect.succeed(JSON.stringify(ast.model)),
-  toDatabaseSchema: (ast) => Effect.succeed(ast.model),
-  lowerMigration: (logical) => Effect.succeed({ logical }),
   encodeMigration: (plan) =>
     Effect.succeed(plan.logical.procedures.map((item) => item._tag).join(",")),
+  format: (ast) => Effect.succeed(JSON.stringify(ast.model)),
+  lowerMigration: (logical) => Effect.succeed({ logical }),
+  name: "fixture",
+  parse: (source) => Effect.sync(() => ({ model: JSON.parse(source) as DatabaseSchema })),
+  toDatabaseSchema: (ast) => Effect.succeed(ast.model),
 };
 const model = (name: string): DatabaseSchema => ({
   tables: [
     {
-      identity: { catalog: "app", schema: "public", name },
-      name,
       columns: [],
       constraints: [],
+      identity: { catalog: "app", name, schema: "public" },
+      name,
       options: {},
     },
   ],

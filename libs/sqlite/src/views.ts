@@ -1,13 +1,12 @@
 import { Effect } from "effect";
+
 import { EncodeError } from "@uncutsql/codec";
-import {
-  schemaValueEqual,
-  tableKey,
-  type DatabaseSchema,
-  type DatabaseMigration,
-} from "@uncutsql/core";
+import { schemaValueEqual, tableKey } from "@uncutsql/core";
+import type { DatabaseMigration, DatabaseSchema } from "@uncutsql/core";
+
+import { createView } from "./codecs/create-view.ts";
+import type { CreateView } from "./codecs/create-view.ts";
 import { planDeclarations } from "./plan-declarations.ts";
-import { createView, type CreateView } from "./codecs/create-view.ts";
 import { foldIdentifier, tableIdentity } from "./schema-identity.ts";
 import { semanticValue, syntaxValue } from "./schema-value.ts";
 
@@ -30,17 +29,18 @@ export const viewsFromDatabaseSchema = (database: DatabaseSchema) =>
           identity.schema !== undefined ||
           foldIdentifier(view.name) !== identity.name ||
           /^sqlite_/i.test(view.name)
-        )
+        ) {
           return yield* Effect.fail(
             new EncodeError({ message: `Invalid or conflicting SQLite view identity ${key}` }),
           );
+        }
         names.add(key);
         const ast: CreateView = {
           _tag: "CreateView",
-          temporary: false,
           ifNotExists: false,
-          schema: identity.catalog,
           name: view.name,
+          schema: identity.catalog,
+          temporary: false,
           ...(view.columns ? { columns: view.columns } : {}),
           query: syntaxValue(view.query) as CreateView["query"],
         };
@@ -54,10 +54,11 @@ export const viewsFromDatabaseSchema = (database: DatabaseSchema) =>
         const parsed = yield* createView
           .decode(sql)
           .pipe(Effect.mapError((error) => new EncodeError({ message: error.message })));
-        if (!schemaValueEqual(view.query, semanticValue(parsed.query)))
+        if (!schemaValueEqual(view.query, semanticValue(parsed.query))) {
           return yield* Effect.fail(
             new EncodeError({ message: "Invalid SQLite view query in snapshot" }),
           );
+        }
         return parsed;
       }),
     );
@@ -71,28 +72,30 @@ export const planViewOperations = (
 ) =>
   Effect.gen(function* () {
     const changes = migration.procedures.flatMap((p) => {
-      if (p._tag === "ReplaceView")
-        return [{ identity: p.before.identity, drop: true, create: true }];
-      if ("view" in p)
+      if (p._tag === "ReplaceView") {
+        return [{ create: true, drop: true, identity: p.before.identity }];
+      }
+      if ("view" in p) {
         return [
           {
-            identity: p.view.identity,
-            drop: p._tag === "DropView",
             create: p._tag === "CreateView",
+            drop: p._tag === "DropView",
+            identity: p.view.identity,
           },
         ];
+      }
       return [];
     });
     const steps = yield* planDeclarations(before, after, changes, (view) =>
       affectedSchemas.has(tableIdentity(view).schema),
     );
     return {
-      drops: steps.drops.map((view) => ({ _tag: "DropView" as const, table: tableIdentity(view) })),
       creates: steps.creates.map((definition) => ({
         _tag: "CreateView" as const,
-        table: tableIdentity(definition),
         definition,
+        table: tableIdentity(definition),
       })),
+      drops: steps.drops.map((view) => ({ _tag: "DropView" as const, table: tableIdentity(view) })),
       retained: steps.retained,
     };
   });

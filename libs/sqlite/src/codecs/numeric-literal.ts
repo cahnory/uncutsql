@@ -1,5 +1,8 @@
 import { Effect } from "effect";
-import { type Codec, EncodeError, located, make, parseError, read } from "@uncutsql/codec";
+
+import { EncodeError, located, make, parseError, read } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { identifierPart } from "../lexer/characters.ts";
 import { lexeme } from "../operators/lexeme.ts";
 
@@ -14,8 +17,12 @@ const decimal = `(?:${digits}(?:\\.(?:${digits})?)?|\\.${digits})(?:[eE][+-]?${d
 const numeric = new RegExp(`^(?:0[xX][0-9a-fA-F](?:_?[0-9a-fA-F])*|${decimal})`);
 
 const isRepresentable = (value: string): boolean => {
-  if (numeric.exec(value)?.[0] !== value) return false;
-  if (!/^0x/i.test(value)) return true;
+  if (numeric.exec(value)?.[0] !== value) {
+    return false;
+  }
+  if (!/^0x/i.test(value)) {
+    return true;
+  }
   // SQLite hex integers are 64-bit two's-complement values.
   return value.slice(2).replaceAll("_", "").replace(/^0+/, "").length <= 16;
 };

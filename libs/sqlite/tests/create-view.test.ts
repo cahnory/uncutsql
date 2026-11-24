@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect } from "effect";
+
 import { diffDatabases, planDatabaseMigration } from "@uncutsql/core";
+
 import {
-  lowerMigration,
-  encodeMigration,
   createView,
+  encodeMigration,
   fromDatabaseSchema,
+  lowerMigration,
   schema,
   toDatabaseSchema,
 } from "../src/index.ts";
@@ -41,8 +44,9 @@ test("view declarations reject missing queries and empty result column lists", (
     "CREATE VIEW v AS",
     "CREATE VIEW v() AS SELECT 1",
     "CREATE UNIQUE VIEW v AS SELECT 1",
-  ])
+  ]) {
     assert.throws(() => Effect.runSync(schema.decode(sql)));
+  }
 });
 
 test("rebuilds preserve chained views and refuse unmodeled triggers on a view", () => {

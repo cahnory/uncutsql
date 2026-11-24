@@ -1,4 +1,6 @@
-import { type Cursor, type Read, read, transform } from "@uncutsql/codec";
+import { read, transform } from "@uncutsql/codec";
+import type { Cursor, Read } from "@uncutsql/codec";
+
 import { keywordChoice } from "../../operators/keyword-choice.ts";
 import type { Expression, NullTestExpression } from "./types.ts";
 
@@ -14,14 +16,14 @@ export const readNullTest = (
   operator: Read<NullTestExpression["operator"]>,
 ): Read<Expression> =>
   read(
-    { _tag: "NullTestExpression", operator: operator.value, operand: operand.value },
+    { _tag: "NullTestExpression", operand: operand.value, operator: operator.value },
     operator.next,
     [
       {
+        children: [...operand.nodes, ...operator.nodes],
+        end: operator.next.offset,
         kind: "NullTestExpression",
         start: start.offset,
-        end: operator.next.offset,
-        children: [...operand.nodes, ...operator.nodes],
       },
     ],
   );

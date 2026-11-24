@@ -1,10 +1,12 @@
-import { diffSchemas, planMigration } from "./workflow.ts";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
-import { schema, encodeMigration, MigrationPlanError } from "../src/index.ts";
+
+import { encodeMigration, MigrationPlanError, schema } from "../src/index.ts";
+import { diffSchemas, planMigration } from "./workflow.ts";
 
 const parse = (sql: string) => Effect.runSync(schema.decode(sql));
 const migration = (before: string, after: string) =>
@@ -44,7 +46,7 @@ test("rebuild migrates the original next-schema example and preserves incoming r
     database.exec(migration(before, after));
     assert.deepEqual(
       { ...database.prepare("SELECT * FROM users").get() },
-      { id: 7, name: "Ada", email: null, status: "active" },
+      { email: null, id: 7, name: "Ada", status: "active" },
     );
     assert.equal(database.prepare("SELECT count(*) AS n FROM posts").get()!.n, 1);
     assert.deepEqual(Effect.runSync(diffSchemas(introspect(database), parse(after))), {
@@ -78,7 +80,7 @@ test("rebuild preserves hidden rowids, defaults, generated values and removed-co
     database.exec(Effect.runSync(encodeMigration(planned)));
     assert.deepEqual(
       { ...database.prepare("SELECT rowid, * FROM t").get() },
-      { rowid: 42, fresh: "new", a: 3, doubled: 6 },
+      { a: 3, doubled: 6, fresh: "new", rowid: 42 },
     );
     assert.deepEqual(Effect.runSync(diffSchemas(introspect(database), parse(after))), {
       changes: [],
@@ -96,7 +98,9 @@ test("AUTOINCREMENT high-water marks survive populated and emptied rebuilds", ()
     try {
       database.exec(before.replace("TABLE t", "TABLE T"));
       database.exec("INSERT INTO t VALUES (1, 'kept'), (99, 'deleted'); DELETE FROM t WHERE id=99");
-      if (empty) database.exec("DELETE FROM t");
+      if (empty) {
+        database.exec("DELETE FROM t");
+      }
       database.exec(migration(before, after));
       database.exec("INSERT INTO t (name) VALUES ('new')");
       assert.equal(database.prepare("SELECT id FROM t WHERE name='new'").get()!.id, 100);
@@ -229,15 +233,16 @@ test("rebuild preserves distinct rowids and rejects competing integer primary ke
   for (const after of [
     "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT)",
     'CREATE TABLE t (id "integer", value TEXT, PRIMARY KEY (ID DESC))',
-  ])
+  ]) {
     assert.throws(() => migration(before, after), /Cannot preserve both the rowid and column/);
+  }
 
   const db = new DatabaseSync(":memory:");
   try {
     db.exec(before);
     db.exec("INSERT INTO t(rowid, id, value) VALUES (42, 7, 'kept')");
     db.exec(migration(before, "CREATE TABLE t (id INTEGER PRIMARY KEY DESC, value TEXT)"));
-    assert.deepEqual({ ...db.prepare("SELECT rowid, id FROM t").get() }, { rowid: 42, id: 7 });
+    assert.deepEqual({ ...db.prepare("SELECT rowid, id FROM t").get() }, { id: 7, rowid: 42 });
   } finally {
     db.close();
   }
@@ -254,10 +259,10 @@ test("declared integer primary keys preserve rowids when all hidden aliases are 
     assert.deepEqual(
       { ...db.prepare("SELECT * FROM t").get() },
       {
-        id: 42,
-        rowid: "r",
-        oid: "o",
         _rowid_: "u",
+        id: 42,
+        oid: "o",
+        rowid: "r",
         value: "v",
       },
     );

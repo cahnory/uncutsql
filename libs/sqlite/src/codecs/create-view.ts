@@ -1,5 +1,4 @@
 import {
-  type Codec,
   document,
   followedBy,
   optional,
@@ -8,12 +7,15 @@ import {
   struct,
   transform,
 } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keyword } from "../operators/keyword.ts";
 import { parenthesized } from "../operators/parenthesized.ts";
 import { punctuation } from "../operators/punctuation.ts";
 import { terminator } from "../operators/terminator.ts";
 import { trivia } from "../operators/trivia.ts";
-import { createRelationHeader, type CreateTableHeader } from "./create-table-header.ts";
+import { createRelationHeader } from "./create-table-header.ts";
+import type { CreateTableHeader } from "./create-table-header.ts";
 import { expression } from "./expression.ts";
 import { nameIdentifier } from "./identifier.ts";
 import { query } from "./query/query.ts";
@@ -37,13 +39,13 @@ export const createViewBodyGrammar: Codec<CreateView> = transform(
     " ",
   ),
   {
-    decode: ({ header, columns, query }): CreateView => ({
+    decode: ({ columns, header, query }): CreateView => ({
       _tag: "CreateView",
       ...header,
       ...(columns === undefined ? {} : { columns }),
       query,
     }),
-    encode: (view: CreateView) => ({ header: view, columns: view.columns, query: view.query }),
+    encode: (view: CreateView) => ({ columns: view.columns, header: view, query: view.query }),
   },
 );
 export const createView = document(followedBy(createViewBodyGrammar, terminator), trivia);

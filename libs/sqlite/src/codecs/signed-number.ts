@@ -1,13 +1,17 @@
 import { Effect } from "effect";
-import { type Codec, EncodeError, commit, located, make, parseError, read } from "@uncutsql/codec";
+
+import { commit, EncodeError, located, make, parseError, read } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { lexeme } from "../operators/lexeme.ts";
-import { numericLiteral, type NumericLiteral } from "./numeric-literal.ts";
 import { unaryOperator } from "./expression/operators.ts";
+import { numericLiteral } from "./numeric-literal.ts";
+import type { NumericLiteral } from "./numeric-literal.ts";
 
 export interface SignedNumber {
   readonly _tag: "UnaryExpression";
-  readonly operator: "+" | "-";
   readonly operand: NumericLiteral;
+  readonly operator: "+" | "-";
 }
 
 /** DEFAULT allows a single sign before a numeric literal without parentheses. */
@@ -23,7 +27,7 @@ export const signedNumber: Codec<SignedNumber> = lexeme(
           }
           const number = yield* commit(numericLiteral).decode(operator.next);
           return read(
-            { _tag: "UnaryExpression", operator: operator.value, operand: number.value },
+            { _tag: "UnaryExpression", operand: number.value, operator: operator.value },
             number.next,
             number.nodes,
           );

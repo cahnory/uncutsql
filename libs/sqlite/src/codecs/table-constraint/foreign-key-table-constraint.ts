@@ -1,9 +1,11 @@
 import { prefixed, repeat, struct, transform } from "@uncutsql/codec";
+
 import { keywordSequence } from "../../operators/keyword-sequence.ts";
 import { parenthesized } from "../../operators/parenthesized.ts";
 import { punctuation } from "../../operators/punctuation.ts";
+import { foreignKeyClause } from "../foreign-key-clause.ts";
+import type { ForeignKeyClause } from "../foreign-key-clause.ts";
 import { nameIdentifier } from "../identifier.ts";
-import { foreignKeyClause, type ForeignKeyClause } from "../foreign-key-clause.ts";
 
 export interface ForeignKeyTableConstraint {
   readonly _tag: "ForeignKey";

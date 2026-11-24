@@ -1,8 +1,10 @@
-import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import { sqlQuery } from "../src/index.ts";
 
 test("derived tables compose with aliases, compounds and recursively nested queries", () => {

@@ -1,18 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 import { Context, Data, Effect, Exit, Layer, Logger, References, Result } from "effect";
+
 import {
-  type Codec,
-  EncodeError,
-  ParseError,
   alternatives,
   commit,
   document,
+  EncodeError,
   literal,
   located,
   make,
   observe,
   optional,
+  ParseError,
   prefixed,
   read,
   repeat,
@@ -22,6 +23,7 @@ import {
   transformEffect,
   tuple,
 } from "../src/index.ts";
+import type { Codec } from "../src/index.ts";
 
 const failure = <A, E>(effect: Effect.Effect<A, E>): E => {
   const result = Effect.runSync(Effect.result(effect));
@@ -143,7 +145,9 @@ const checked = transformEffect(literal("a"), {
   decode: (value) =>
     Effect.gen(function* () {
       const policy = yield* Policy;
-      if (!policy.allow) return yield* Effect.fail(new PolicyDenied());
+      if (!policy.allow) {
+        return yield* Effect.fail(new PolicyDenied());
+      }
       return value;
     }),
   encode: (value: "a") => Effect.succeed(value),
@@ -152,7 +156,7 @@ const checked = transformEffect(literal("a"), {
 test("custom requirements propagate through composition and are supplied by a Layer", () => {
   const codec = document(struct({ value: checked, rest: repeat(checked) }));
   const program = codec.decode("aaa").pipe(Effect.provide(Layer.succeed(Policy, { allow: true })));
-  assert.deepEqual(Effect.runSync(program), { value: "a", rest: ["a", "a"] });
+  assert.deepEqual(Effect.runSync(program), { rest: ["a", "a"], value: "a" });
 });
 
 test("optional, alternatives, commit and repetition never swallow service failures", () => {
@@ -213,11 +217,11 @@ test("one codec can parse concurrently across actual asynchronous boundaries", a
 });
 
 test("observability composes with a caller-provided logger and annotations", () => {
-  const events: { message: unknown; annotations: Readonly<Record<string, unknown>> }[] = [];
+  const events: { annotations: Readonly<Record<string, unknown>>; message: unknown }[] = [];
   const logger = Logger.make((options) => {
     events.push({
-      message: options.message,
       annotations: options.fiber.getRef(References.CurrentLogAnnotations),
+      message: options.message,
     });
   });
   const codec = document(observe("test.literal", literal("a")));

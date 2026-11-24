@@ -1,7 +1,8 @@
-import type { Query } from "../query/types.ts";
 import type { Codec } from "@uncutsql/codec";
-import type { TableReference } from "../table-reference.ts";
+
 import type { LiteralValue } from "../literal-value.ts";
+import type { Query } from "../query/types.ts";
+import type { TableReference } from "../table-reference.ts";
 import type { BinaryOperator, UnaryOperator } from "./operators.ts";
 
 export interface ColumnReference {
@@ -12,14 +13,14 @@ export interface ColumnReference {
 
 export interface UnaryExpression {
   readonly _tag: "UnaryExpression";
-  readonly operator: UnaryOperator;
   readonly operand: Expression;
+  readonly operator: UnaryOperator;
 }
 
 export interface BinaryExpression {
   readonly _tag: "BinaryExpression";
-  readonly operator: BinaryOperator;
   readonly left: Expression;
+  readonly operator: BinaryOperator;
   readonly right: Expression;
 }
 
@@ -43,6 +44,8 @@ export interface BindParameter {
 
 export interface PatternExpression {
   readonly _tag: "PatternExpression";
+  readonly escape?: Expression;
+  readonly left: Expression;
   readonly operator:
     | "LIKE"
     | "NOT LIKE"
@@ -52,9 +55,7 @@ export interface PatternExpression {
     | "NOT REGEXP"
     | "MATCH"
     | "NOT MATCH";
-  readonly left: Expression;
   readonly right: Expression;
-  readonly escape?: Expression;
 }
 
 export interface CaseExpression {
@@ -72,14 +73,14 @@ export interface CastExpression {
 
 export interface CollateExpression {
   readonly _tag: "CollateExpression";
-  readonly operand: Expression;
   readonly collation: string;
+  readonly operand: Expression;
 }
 
 export interface NullTestExpression {
   readonly _tag: "NullTestExpression";
-  readonly operator: "ISNULL" | "NOTNULL";
   readonly operand: Expression;
+  readonly operator: "ISNULL" | "NOTNULL";
 }
 
 export interface SubqueryExpression {
@@ -94,42 +95,42 @@ export interface ExistsExpression {
 
 export interface InQueryExpression {
   readonly _tag: "InQueryExpression";
-  readonly operator: "IN" | "NOT IN";
   readonly operand: Expression;
+  readonly operator: "IN" | "NOT IN";
   readonly query: Query;
 }
 
 export interface InTableTarget {
-  readonly table: TableReference;
   /** Absent for a table, present (possibly empty) for a table-valued function. */
   readonly arguments?: readonly Expression[];
+  readonly table: TableReference;
 }
 
 export interface InTableExpression {
   readonly _tag: "InTableExpression";
-  readonly operator: "IN" | "NOT IN";
   readonly operand: Expression;
+  readonly operator: "IN" | "NOT IN";
   readonly target: InTableTarget;
 }
 
 export interface InExpression {
   readonly _tag: "InExpression";
-  readonly operator: "IN" | "NOT IN";
   readonly operand: Expression;
+  readonly operator: "IN" | "NOT IN";
   readonly values: readonly Expression[];
 }
 
 export interface BetweenExpression {
   readonly _tag: "BetweenExpression";
-  readonly operator: "BETWEEN" | "NOT BETWEEN";
-  readonly operand: Expression;
   readonly lower: Expression;
+  readonly operand: Expression;
+  readonly operator: "BETWEEN" | "NOT BETWEEN";
   readonly upper: Expression;
 }
 
 export interface OrderingTerm {
-  readonly expression: Expression;
   readonly direction?: "ASC" | "DESC";
+  readonly expression: Expression;
   readonly nulls?: "FIRST" | "LAST";
 }
 
@@ -140,24 +141,24 @@ export type FrameBoundary =
     }
   | {
       readonly _tag: "OffsetBoundary";
-      readonly value: Expression;
       readonly direction: "PRECEDING" | "FOLLOWING";
+      readonly value: Expression;
     };
 
 export interface WindowFrame {
-  readonly unit: "ROWS" | "RANGE" | "GROUPS";
-  readonly start: FrameBoundary;
   readonly end?: FrameBoundary;
   readonly exclude?: "NO OTHERS" | "CURRENT ROW" | "GROUP" | "TIES";
+  readonly start: FrameBoundary;
+  readonly unit: "ROWS" | "RANGE" | "GROUPS";
 }
 
 export interface WindowDefinition {
   readonly _tag: "WindowDefinition";
   /** Original identifier token, including quotes: SQLite window lookup preserves them. */
   readonly base?: string;
-  readonly partitionBy?: readonly Expression[];
-  readonly orderBy?: readonly OrderingTerm[];
   readonly frame?: WindowFrame;
+  readonly orderBy?: readonly OrderingTerm[];
+  readonly partitionBy?: readonly Expression[];
 }
 
 /** Named-window names retain their original identifier token, including quotes. */
@@ -167,13 +168,13 @@ export type WindowReference =
 
 export interface FunctionCall {
   readonly _tag: "FunctionCall";
-  readonly name: string;
   readonly arguments: readonly Expression[];
-  readonly star?: true;
-  readonly modifier?: "DISTINCT" | "ALL";
-  readonly orderBy?: readonly OrderingTerm[];
   readonly filter?: Expression;
+  readonly modifier?: "DISTINCT" | "ALL";
+  readonly name: string;
+  readonly orderBy?: readonly OrderingTerm[];
   readonly over?: WindowReference;
+  readonly star?: true;
 }
 
 /** Parentheses affect tree shape and source spans, not semantic node kinds. */

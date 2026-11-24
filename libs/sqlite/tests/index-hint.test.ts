@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import { sqlQuery } from "../src/index.ts";
 import { keywords } from "../src/lexer/keywords.ts";
 
@@ -74,7 +76,7 @@ test("hints require a table and complete syntax", () => {
           sqlQuery.encode({
             _tag: "SelectQuery",
             columns: [{ _tag: "StarColumn" }],
-            from: [{ table: { name: "f" }, arguments: [], indexHint: { _tag: "NotIndexed" } }],
+            from: [{ arguments: [], indexHint: { _tag: "NotIndexed" }, table: { name: "f" } }],
           }),
         ),
       ),

@@ -1,20 +1,13 @@
-import {
-  type Codec,
-  type Value,
-  optional,
-  prefixed,
-  repeat,
-  struct,
-  taggedUnion,
-  transform,
-} from "@uncutsql/codec";
-import { keyword } from "../operators/keyword.ts";
+import { optional, prefixed, repeat, struct, taggedUnion, transform } from "@uncutsql/codec";
+import type { Codec, Value } from "@uncutsql/codec";
+
 import { keywordChoice } from "../operators/keyword-choice.ts";
 import { keywordSequence } from "../operators/keyword-sequence.ts";
+import { keyword } from "../operators/keyword.ts";
 import { parenthesized } from "../operators/parenthesized.ts";
 import { punctuation } from "../operators/punctuation.ts";
-import { identifier } from "./identifier.ts";
 import { expression } from "./expression.ts";
+import { identifier } from "./identifier.ts";
 import { query } from "./query/query.ts";
 
 const list = <A>(codec: Codec<A>) => repeat(codec, { min: 1, separator: punctuation(",", ", ") });

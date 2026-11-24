@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
-import { sqlQuery, type Query } from "../src/index.ts";
+
+import { sqlQuery } from "../src/index.ts";
+import type { Query } from "../src/index.ts";
 import { keywords } from "../src/lexer/keywords.ts";
 
 const decode = (sql: string) => Effect.runSync(sqlQuery.decode(sql));
@@ -94,7 +97,7 @@ test("WITH rejects incomplete definitions and empty constructed lists", () => {
   const query: Query = {
     _tag: "ValuesQuery",
     rows: [[{ _tag: "NumericLiteral", value: "1" }]],
-    with: { recursive: false, expressions: [] },
+    with: { expressions: [], recursive: false },
   };
   assert.ok(Result.isFailure(Effect.runSync(Effect.result(sqlQuery.encode(query)))));
 });

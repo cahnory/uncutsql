@@ -1,11 +1,16 @@
 import { Effect } from "effect";
-import { type Codec, make, parseError, read } from "@uncutsql/codec";
+
+import { make, parseError, read } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { identifierPart, uppercaseAscii } from "../lexer/characters.ts";
 import { lexeme } from "./lexeme.ts";
 
 export const keyword = (text: string): Codec<void> => {
   const canonical = uppercaseAscii(text);
-  if (!/^[A-Z_]+$/.test(canonical)) throw new TypeError("keyword requires one word");
+  if (!/^[A-Z_]+$/.test(canonical)) {
+    throw new TypeError("keyword requires one word");
+  }
   return lexeme(
     make<void>({
       decode: (cursor) => {

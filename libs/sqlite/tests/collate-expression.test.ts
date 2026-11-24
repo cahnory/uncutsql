@@ -2,16 +2,15 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
-import { EncodeError, ParseError, type SourceNode } from "@uncutsql/codec";
-import {
-  sqlExpression,
-  createTable,
-  schema,
-  encodeMigration,
-  type Expression,
-} from "../src/index.ts";
+
+import { EncodeError, ParseError } from "@uncutsql/codec";
+import type { SourceNode } from "@uncutsql/codec";
+
 import { defaultColumnConstraint } from "../src/codecs/column-constraint/default-column-constraint.ts";
+import { createTable, encodeMigration, schema, sqlExpression } from "../src/index.ts";
+import type { Expression } from "../src/index.ts";
 import { planMigration } from "./workflow.ts";
 const decode = (sql: string) => Effect.runSync(sqlExpression.decode(sql));
 const encode = (ast: Expression) => Effect.runSync(sqlExpression.encode(ast));
@@ -24,20 +23,20 @@ test("previous COLLATE fixture and unary/concatenation boundaries retain AST str
   );
   assert.deepEqual(decode(fixture), {
     _tag: "CollateExpression",
-    operand: ref,
     collation: "NOCASE",
+    operand: ref,
   });
   assert.deepEqual(decode("-a COLLATE NOCASE"), {
     _tag: "CollateExpression",
-    operand: { _tag: "UnaryExpression", operator: "-", operand: ref },
     collation: "NOCASE",
+    operand: { _tag: "UnaryExpression", operand: ref, operator: "-" },
   });
   assert.equal(decode("NOT a COLLATE NOCASE")._tag, "UnaryExpression");
   assert.equal(decode("a || a COLLATE NOCASE")._tag, "BinaryExpression");
   const grouped: Expression = {
     _tag: "UnaryExpression",
+    operand: { _tag: "CollateExpression", collation: "NOCASE", operand: ref },
     operator: "-",
-    operand: { _tag: "CollateExpression", operand: ref, collation: "NOCASE" },
   };
   assert.equal(encode(grouped), '-("a" COLLATE "NOCASE")');
   assert.deepEqual(decode(encode(grouped)), grouped);
@@ -82,7 +81,7 @@ test("COLLATE preserves native comparison results, nesting and operand precedenc
 
 test("collation names quote safely and malformed suffixes commit parse failures", () => {
   for (const collation of ["select", "custom name", 'a"b', "NOCASE"]) {
-    const ast: Expression = { _tag: "CollateExpression", operand: ref, collation };
+    const ast: Expression = { _tag: "CollateExpression", collation, operand: ref };
     assert.deepEqual(decode(encode(ast)), ast);
   }
   for (const source of [
@@ -98,7 +97,7 @@ test("collation names quote safely and malformed suffixes commit parse failures"
   }
   const bad = Effect.runSync(
     Effect.result(
-      sqlExpression.encode({ _tag: "CollateExpression", operand: ref, collation: "bad\0name" }),
+      sqlExpression.encode({ _tag: "CollateExpression", collation: "bad\0name", operand: ref }),
     ),
   );
   assert.ok(Result.isFailure(bad));
@@ -122,7 +121,7 @@ test("defaults retain expression grouping and cannot hide a column behind COLLAT
     Effect.result(
       defaultColumnConstraint.encode({
         _tag: "Default",
-        value: { _tag: "CollateExpression", operand: ref, collation: "NOCASE" },
+        value: { _tag: "CollateExpression", collation: "NOCASE", operand: ref },
       }),
     ),
   );

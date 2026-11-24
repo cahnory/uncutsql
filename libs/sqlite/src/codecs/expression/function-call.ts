@@ -1,7 +1,6 @@
-import { windowKeyword } from "../../operators/window-keyword.ts";
 import { Effect } from "effect";
+
 import {
-  type Codec,
   EncodeError,
   located,
   make,
@@ -13,14 +12,17 @@ import {
   transform,
   tuple,
 } from "@uncutsql/codec";
-import { identifier } from "../identifier.ts";
-import { overClause } from "../over-clause.ts";
-import { orderingTerm } from "../ordering-term.ts";
-import { punctuation } from "../../operators/punctuation.ts";
-import { keyword } from "../../operators/keyword.ts";
+import type { Codec } from "@uncutsql/codec";
+
 import { keywordChoice } from "../../operators/keyword-choice.ts";
 import { keywordSequence } from "../../operators/keyword-sequence.ts";
+import { keyword } from "../../operators/keyword.ts";
 import { parenthesized } from "../../operators/parenthesized.ts";
+import { punctuation } from "../../operators/punctuation.ts";
+import { windowKeyword } from "../../operators/window-keyword.ts";
+import { identifier } from "../identifier.ts";
+import { orderingTerm } from "../ordering-term.ts";
+import { overClause } from "../over-clause.ts";
 import type { Expression, FunctionCall } from "./types.ts";
 
 /** The opening parenthesis commits; bare names remain column references. */
@@ -65,8 +67,8 @@ export const functionCall = (expression: Codec<Expression>): Codec<FunctionCall>
   const mapped = transform(syntax, {
     decode: ([[name, args], filter, over]): FunctionCall => ({
       _tag: "FunctionCall",
-      name,
       arguments: args._tag === "Star" ? [] : args.values,
+      name,
       ...(args._tag === "Star"
         ? { star: true as const }
         : {
@@ -85,8 +87,8 @@ export const functionCall = (expression: Codec<Expression>): Codec<FunctionCall>
             : {
                 _tag: "Arguments" as const,
                 modifier: value.modifier,
-                values: value.arguments,
                 orderBy: value.orderBy,
+                values: value.arguments,
               },
         ] as const,
         value.filter,

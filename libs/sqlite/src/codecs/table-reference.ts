@@ -1,4 +1,6 @@
-import { type Codec, located, optional, prefixed, transform, tuple } from "@uncutsql/codec";
+import { located, optional, prefixed, transform, tuple } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { lexeme } from "../operators/lexeme.ts";
 import { punctuation } from "../operators/punctuation.ts";
 import { nameIdentifier } from "./identifier.ts";
@@ -14,7 +16,7 @@ export const tableReference: Codec<TableReference> = lexeme(
     "TableReference",
     transform(tuple([nameIdentifier, optional(prefixed(punctuation("."), nameIdentifier))]), {
       decode: ([first, second]): TableReference =>
-        second === undefined ? { name: first } : { schema: first, name: second },
+        second === undefined ? { name: first } : { name: second, schema: first },
       encode: ({ name, schema }: TableReference) =>
         schema === undefined ? ([name, undefined] as const) : ([schema, name] as const),
     }),

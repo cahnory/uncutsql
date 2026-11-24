@@ -1,5 +1,8 @@
 import { Effect } from "effect";
-import { type Codec, make, repeat, taggedUnion, transform } from "@uncutsql/codec";
+
+import { make, repeat, taggedUnion, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { lexeme } from "../../operators/lexeme.ts";
 import { parenthesized } from "../../operators/parenthesized.ts";
 import { punctuation } from "../../operators/punctuation.ts";
@@ -38,15 +41,15 @@ export const parenthesizedExpression = (expression: Codec<Expression>): Codec<Ex
                 : "RowValueExpression";
           return {
             ...result,
-            value,
             nodes: [
               {
+                children: result.nodes,
+                end: result.next.offset,
                 kind,
                 start: cursor.offset,
-                end: result.next.offset,
-                children: result.nodes,
               },
             ],
+            value,
           };
         }),
       encode: parenthesized(expression).encode,

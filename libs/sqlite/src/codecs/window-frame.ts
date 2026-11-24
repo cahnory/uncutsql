@@ -1,6 +1,8 @@
-import { type Codec, optional, prefixed, struct, taggedUnion, transform } from "@uncutsql/codec";
-import { keyword } from "../operators/keyword.ts";
+import { optional, prefixed, struct, taggedUnion, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keywordChoice } from "../operators/keyword-choice.ts";
+import { keyword } from "../operators/keyword.ts";
 import type { Expression, FrameBoundary, WindowFrame } from "./expression/types.ts";
 
 export const windowFrame = (expression: Codec<Expression>): Codec<WindowFrame> => {
@@ -62,19 +64,19 @@ export const windowFrame = (expression: Codec<Expression>): Codec<WindowFrame> =
       " ",
     ),
     {
-      decode: ({ unit, bounds, exclude }): WindowFrame => ({
-        unit,
+      decode: ({ bounds, exclude, unit }): WindowFrame => ({
         start: bounds.start,
+        unit,
         ...(bounds._tag === "BetweenBounds" ? { end: bounds.end } : {}),
         ...(exclude === undefined ? {} : { exclude }),
       }),
       encode: (value: WindowFrame) => ({
-        unit: value.unit,
-        exclude: value.exclude,
         bounds:
           value.end === undefined
             ? { _tag: "SingleBound" as const, start: value.start }
-            : { _tag: "BetweenBounds" as const, start: value.start, end: value.end },
+            : { _tag: "BetweenBounds" as const, end: value.end, start: value.start },
+        exclude: value.exclude,
+        unit: value.unit,
       }),
     },
   );

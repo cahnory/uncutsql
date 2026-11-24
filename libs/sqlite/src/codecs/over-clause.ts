@@ -1,20 +1,14 @@
-import { windowKeyword } from "../operators/window-keyword.ts";
-import {
-  type Codec,
-  optional,
-  prefixed,
-  repeat,
-  struct,
-  taggedUnion,
-  transform,
-} from "@uncutsql/codec";
+import { optional, prefixed, repeat, struct, taggedUnion, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keywordSequence } from "../operators/keyword-sequence.ts";
 import { parenthesized } from "../operators/parenthesized.ts";
 import { punctuation } from "../operators/punctuation.ts";
-import { baseWindowName, windowNameAfterKeyword } from "./window-name.ts";
+import { windowKeyword } from "../operators/window-keyword.ts";
+import type { Expression, WindowDefinition, WindowReference } from "./expression/types.ts";
 import { orderingTerm } from "./ordering-term.ts";
 import { windowFrame } from "./window-frame.ts";
-import type { Expression, WindowDefinition, WindowReference } from "./expression/types.ts";
+import { baseWindowName, windowNameAfterKeyword } from "./window-name.ts";
 
 export const windowDefinition = (expression: Codec<Expression>): Codec<WindowDefinition> =>
   transform(
@@ -42,7 +36,7 @@ export const windowDefinition = (expression: Codec<Expression>): Codec<WindowDef
       ),
     ),
     {
-      decode: ({ base, partitionBy, orderBy, frame }): WindowDefinition => ({
+      decode: ({ base, frame, orderBy, partitionBy }): WindowDefinition => ({
         _tag: "WindowDefinition",
         ...(base === undefined ? {} : { base }),
         ...(partitionBy === undefined ? {} : { partitionBy }),
@@ -51,9 +45,9 @@ export const windowDefinition = (expression: Codec<Expression>): Codec<WindowDef
       }),
       encode: (value: WindowDefinition) => ({
         base: value.base,
-        partitionBy: value.partitionBy,
-        orderBy: value.orderBy,
         frame: value.frame,
+        orderBy: value.orderBy,
+        partitionBy: value.partitionBy,
       }),
     },
   );

@@ -1,41 +1,49 @@
 import { Effect } from "effect";
+
 import {
-  type Codec,
   followedBy,
   make,
   optional,
   parseError,
+  prefixed,
   read,
   taggedUnion,
   transform,
-  prefixed,
 } from "@uncutsql/codec";
-import { punctuation } from "../../operators/punctuation.ts";
+import type { Codec } from "@uncutsql/codec";
+
 import { contextualNameKeywords } from "../../lexer/keywords.ts";
-import { nameWithKeywords } from "../identifier.ts";
-import type { Expression } from "../expression/types.ts";
-import type { ResultColumn } from "./types.ts";
 import { lexeme } from "../../operators/lexeme.ts";
+import { punctuation } from "../../operators/punctuation.ts";
+import type { Expression } from "../expression/types.ts";
+import { nameWithKeywords } from "../identifier.ts";
 import { resultAlias, resultAliasAfter } from "./alias.ts";
+import type { ResultColumn } from "./types.ts";
 
 // At the start of a result expression, SQLite parses these as expressions before
 // considering whether the token can stand for a table name.
 const tableStarKeywords = new Set(contextualNameKeywords);
-for (const word of ["CAST", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "RAISE"])
+for (const word of ["CAST", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "RAISE"]) {
   tableStarKeywords.delete(word);
+}
 const tableStarName = nameWithKeywords(tableStarKeywords);
 
 // SQLite's derived-table column naming ignores COLLATE and likelihood wrappers
 // around a direct column. Top-level result labels instead use their source text.
 const derivesColumnName = (expression: Expression): boolean => {
-  if (expression._tag === "ColumnReference") return true;
-  if (expression._tag === "CollateExpression") return derivesColumnName(expression.operand);
+  if (expression._tag === "ColumnReference") {
+    return true;
+  }
+  if (expression._tag === "CollateExpression") {
+    return derivesColumnName(expression.operand);
+  }
   if (
     expression._tag === "FunctionCall" &&
     /^(?:likely|unlikely|likelihood)$/i.test(expression.name) &&
     expression.arguments[0] !== undefined
-  )
+  ) {
     return derivesColumnName(expression.arguments[0]);
+  }
   return false;
 };
 

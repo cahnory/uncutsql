@@ -1,6 +1,6 @@
 import { Effect } from "effect";
+
 import {
-  type Codec,
   commit,
   document,
   followedBy,
@@ -12,13 +12,19 @@ import {
   taggedUnion,
   transform,
 } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { lexeme } from "../operators/lexeme.ts";
 import { terminator } from "../operators/terminator.ts";
 import { trivia } from "../operators/trivia.ts";
-import { createTableHeader, type CreateTableHeader } from "./create-table-header.ts";
-import { createTableAsDefinition, type CreateTableAs } from "./create-table-as.ts";
-import { tableDefinition, type TableDefinition } from "./table-definition.ts";
-import { tableOptions, type TableOption } from "./table-options.ts";
+import { createTableAsDefinition } from "./create-table-as.ts";
+import type { CreateTableAs } from "./create-table-as.ts";
+import { createTableHeader } from "./create-table-header.ts";
+import type { CreateTableHeader } from "./create-table-header.ts";
+import { tableDefinition } from "./table-definition.ts";
+import type { TableDefinition } from "./table-definition.ts";
+import { tableOptions } from "./table-options.ts";
+import type { TableOption } from "./table-options.ts";
 
 export interface CreateTable extends CreateTableHeader, TableDefinition {
   readonly _tag: "CreateTable";
@@ -48,8 +54,8 @@ const definition = taggedUnion({
 export const createTableStatementBodyGrammar: Codec<CreateTableStatement> = transform(
   struct({ header: createTableHeader, definition: commit(definition) }, " "),
   {
-    decode: ({ header, definition }): CreateTableStatement => ({ ...header, ...definition }),
-    encode: (value: CreateTableStatement) => ({ header: value, definition: value }),
+    decode: ({ definition, header }): CreateTableStatement => ({ ...header, ...definition }),
+    encode: (value: CreateTableStatement) => ({ definition: value, header: value }),
   },
 );
 
@@ -58,7 +64,7 @@ export const createTableBodyGrammar: Codec<CreateTable> = make<CreateTable>({
   decode: (cursor) =>
     Effect.gen(function* () {
       const result = yield* createTableStatementBodyGrammar.decode(cursor);
-      if (result.value._tag !== "CreateTable")
+      if (result.value._tag !== "CreateTable") {
         return yield* Effect.fail(
           parseError(
             cursor,
@@ -66,6 +72,7 @@ export const createTableBodyGrammar: Codec<CreateTable> = make<CreateTable>({
             true,
           ),
         );
+      }
       return { ...result, value: result.value };
     }),
   encode: createTableStatementBodyGrammar.encode,

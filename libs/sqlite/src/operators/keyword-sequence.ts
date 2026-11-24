@@ -1,4 +1,6 @@
-import { type Codec, transform, tuple } from "@uncutsql/codec";
+import { transform, tuple } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keyword } from "./keyword.ts";
 
 /** Match a phrase without committing on a shared first word. */

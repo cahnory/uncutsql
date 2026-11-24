@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
-import { sqlExpression, sqlQuery, createTable } from "../src/index.ts";
+
+import { createTable, sqlExpression, sqlQuery } from "../src/index.ts";
 const decode = (sql: string) => Effect.runSync(sqlExpression.decode(sql));
 
 test("query expressions preserve native scalar, row and membership semantics", () => {

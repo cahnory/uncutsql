@@ -1,6 +1,6 @@
 import { Effect, Result } from "effect";
+
 import {
-  type Codec,
   EncodeError,
   located,
   make,
@@ -11,6 +11,8 @@ import {
   struct,
   tuple,
 } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { lexeme } from "../operators/lexeme.ts";
 import { parenthesized } from "../operators/parenthesized.ts";
 import { punctuation } from "../operators/punctuation.ts";
@@ -32,7 +34,7 @@ const typeWord = make<string>({
 });
 
 const syntax = struct({
-  words: repeat(typeWord, { min: 1, join: " " }),
+  words: repeat(typeWord, { join: " ", min: 1 }),
   parameters: optional(
     parenthesized(tuple([typeParameter, optional(prefixed(punctuation(","), typeParameter))])),
   ),
@@ -55,7 +57,7 @@ export const columnType: Codec<ColumnType> = lexeme(
           }
           // Validate the complete grammar before emitting the retained spelling. This
           // prevents a constructed type from injecting a constraint or statement.
-          const parsed = yield* Effect.result(columnType.decode({ source: value, offset: 0 }));
+          const parsed = yield* Effect.result(columnType.decode({ offset: 0, source: value }));
           if (
             Result.isFailure(parsed) ||
             parsed.success.next.offset !== value.length ||

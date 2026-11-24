@@ -26,10 +26,14 @@ try {
     ],
     { stdio: "inherit" },
   );
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error("VS Code exited with status " + result.status);
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    throw new Error("VS Code exited with status " + result.status);
+  }
   await access(join(workspace, "host-tests-passed"));
   console.log("VS Code verified foreign key navigation, Outline and diagnostics.");
 } finally {
-  await rm(directory, { recursive: true, force: true });
+  await rm(directory, { force: true, recursive: true });
 }

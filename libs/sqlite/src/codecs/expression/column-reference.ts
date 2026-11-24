@@ -1,17 +1,11 @@
 import { Effect } from "effect";
-import {
-  type Codec,
-  EncodeError,
-  located,
-  make,
-  optional,
-  parseError,
-  prefixed,
-  read,
-} from "@uncutsql/codec";
-import { identifier } from "../identifier.ts";
+
+import { EncodeError, located, make, optional, parseError, prefixed, read } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { lexeme } from "../../operators/lexeme.ts";
 import { punctuation } from "../../operators/punctuation.ts";
+import { identifier } from "../identifier.ts";
 import type { ColumnReference } from "./types.ts";
 
 const nextPart = optional(prefixed(punctuation("."), identifier));

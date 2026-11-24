@@ -1,5 +1,8 @@
 import { Effect, Result } from "effect";
-import { type Codec, commit, make, prefixed, read, repeat } from "@uncutsql/codec";
+
+import { commit, make, prefixed, read, repeat } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { nameIdentifier } from "../codecs/identifier.ts";
 import { keyword } from "./keyword.ts";
 import { skipSqliteTrivia } from "./trivia.ts";
@@ -24,7 +27,9 @@ export const namedConstraint = <A extends { readonly _tag: string }>(
     encode: (value) =>
       Effect.gen(function* () {
         const sql = yield* body.encode(value);
-        if (value.name === undefined) return sql;
+        if (value.name === undefined) {
+          return sql;
+        }
         return `${yield* constraintLabel.encode(value.name)} ${sql}`;
       }),
   });
@@ -37,14 +42,17 @@ export const constraintEntry = <A extends Named<{ readonly _tag: string }>>(
     decode: (cursor) =>
       Effect.gen(function* () {
         const parsed = yield* Effect.result(constraint.decode(cursor));
-        if (Result.isSuccess(parsed)) return parsed.success;
+        if (Result.isSuccess(parsed)) {
+          return parsed.success;
+        }
         if (parsed.failure.committed) {
           const prefix = yield* Effect.result(labels.decode(cursor));
           if (Result.isSuccess(prefix) && prefix.success.value.length > 0) {
             const { next, nodes } = prefix.success;
             const delimiter = next.source[skipSqliteTrivia(next.source, next.offset)];
-            if (delimiter === "," || delimiter === ")")
+            if (delimiter === "," || delimiter === ")") {
               return read(prefix.success.value.at(-1)!, next, nodes);
+            }
           }
         }
         return yield* Effect.fail(parsed.failure);

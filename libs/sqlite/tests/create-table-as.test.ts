@@ -1,10 +1,13 @@
-import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import { SchemaDiffError } from "@uncutsql/core";
-import { schema, createTableStatement, toDatabaseSchema, sqlQuery } from "../src/index.ts";
+
+import { createTableStatement, schema, sqlQuery, toDatabaseSchema } from "../src/index.ts";
 const decode = (sql: string) => Effect.runSync(createTableStatement.decode(sql));
 
 test("CREATE TABLE AS preserves data and inferred column names and affinities", () => {

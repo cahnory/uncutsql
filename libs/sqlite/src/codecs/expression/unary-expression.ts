@@ -1,5 +1,8 @@
 import { Effect } from "effect";
-import { type Codec, commit, located, make, read } from "@uncutsql/codec";
+
+import { commit, located, make, read } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { lexeme } from "../../operators/lexeme.ts";
 import { unaryOperator, unaryPrecedence } from "./operators.ts";
 import type { ExpressionAt, UnaryExpression } from "./types.ts";
@@ -16,7 +19,7 @@ export const unaryExpression = (at: ExpressionAt): Codec<UnaryExpression> =>
               operator.next,
             );
             return read(
-              { _tag: "UnaryExpression", operator: operator.value, operand: operand.value },
+              { _tag: "UnaryExpression", operand: operand.value, operator: operator.value },
               operand.next,
               [...operator.nodes, ...operand.nodes],
             );

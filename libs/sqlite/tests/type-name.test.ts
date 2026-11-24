@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import { document, EncodeError, ParseError } from "@uncutsql/codec";
+
 import { columnType, createTable } from "../src/index.ts";
 
 const codec = document(columnType);

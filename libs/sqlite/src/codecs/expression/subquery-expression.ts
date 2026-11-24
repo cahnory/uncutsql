@@ -1,8 +1,10 @@
-import { type Codec, located, prefixed, transform } from "@uncutsql/codec";
+import { located, prefixed, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keyword } from "../../operators/keyword.ts";
 import { parenthesized } from "../../operators/parenthesized.ts";
 import { query } from "../query/query.ts";
-import type { Expression, SubqueryExpression, ExistsExpression } from "./types.ts";
+import type { ExistsExpression, Expression, SubqueryExpression } from "./types.ts";
 
 export const subqueryExpression = (expression: Codec<Expression>): Codec<SubqueryExpression> =>
   located(

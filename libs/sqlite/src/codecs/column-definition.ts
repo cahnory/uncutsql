@@ -1,7 +1,10 @@
-import { type Codec, located, optional, repeat, struct, transform } from "@uncutsql/codec";
+import { located, optional, repeat, struct, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { lexeme } from "../operators/lexeme.ts";
 import { constraintEntry } from "../operators/named-constraint.ts";
-import { columnConstraint, type ColumnConstraint } from "./column-constraint.ts";
+import { columnConstraint } from "./column-constraint.ts";
+import type { ColumnConstraint } from "./column-constraint.ts";
 import { nameIdentifier } from "./identifier.ts";
 import { columnType } from "./type-name.ts";
 
@@ -19,9 +22,9 @@ const columnEntries = lexeme(
   ),
 );
 export interface ColumnDefinition {
+  readonly constraints: readonly ColumnConstraint[];
   readonly name: string;
   readonly typeName: string | undefined;
-  readonly constraints: readonly ColumnConstraint[];
 }
 
 interface ColumnWithLabel {

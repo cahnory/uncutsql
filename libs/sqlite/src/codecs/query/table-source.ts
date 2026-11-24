@@ -1,22 +1,24 @@
 import { Effect } from "effect";
+
 import {
-  type Codec,
   EncodeError,
-  parseError,
   make,
   optional,
+  parseError,
   struct,
   taggedUnion,
   transform,
 } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { parenthesized } from "../../operators/parenthesized.ts";
 import { inTableTarget } from "../expression/in-table-target.ts";
 import type { Expression } from "../expression/types.ts";
-import type { Query, TableSource, FromClause } from "./types.ts";
-import { query } from "./query.ts";
-import { indexHint } from "./index-hint.ts";
-import { fromClause } from "./from-clause.ts";
 import { sourceAlias } from "./alias.ts";
+import { fromClause } from "./from-clause.ts";
+import { indexHint } from "./index-hint.ts";
+import { query } from "./query.ts";
+import type { FromClause, Query, TableSource } from "./types.ts";
 
 export const tableSource = (expression: Codec<Expression>): Codec<TableSource> => {
   // Defer recursive grammar construction until reading/writing a derived table.
@@ -55,18 +57,18 @@ export const tableSource = (expression: Codec<Expression>): Codec<TableSource> =
   const syntax = transform(
     struct({ target, alias: optional(sourceAlias), indexHint: optional(indexHint) }, " "),
     {
-      decode: ({ target, alias, indexHint }): TableSource => ({
+      decode: ({ alias, indexHint, target }): TableSource => ({
         ...(target._tag === "Table" ? target.target : target.source),
         ...(alias === undefined ? {} : { alias }),
         ...(indexHint === undefined ? {} : { indexHint }),
       }),
       encode: (value: TableSource) => ({
+        alias: value.alias,
+        indexHint: "indexHint" in value ? value.indexHint : undefined,
         target:
           "_tag" in value
             ? { _tag: "Parenthesized" as const, source: value }
             : { _tag: "Table" as const, target: value },
-        alias: value.alias,
-        indexHint: "indexHint" in value ? value.indexHint : undefined,
       }),
     },
   );
@@ -80,8 +82,9 @@ export const tableSource = (expression: Codec<Expression>): Codec<TableSource> =
     decode: (cursor) =>
       Effect.gen(function* () {
         const result = yield* syntax.decode(cursor);
-        if (!valid(result.value))
+        if (!valid(result.value)) {
           return yield* Effect.fail(parseError(cursor, "index hints only on named tables", true));
+        }
         return result;
       }),
     encode: (value) =>

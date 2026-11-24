@@ -1,7 +1,10 @@
 import { Effect } from "effect";
-import { type Cursor, type Read, commit, read } from "@uncutsql/codec";
-import { keyword } from "../../operators/keyword.ts";
+
+import { commit, read } from "@uncutsql/codec";
+import type { Cursor, Read } from "@uncutsql/codec";
+
 import { keywordChoice } from "../../operators/keyword-choice.ts";
+import { keyword } from "../../operators/keyword.ts";
 import { binaryPrecedence } from "./operators.ts";
 import type { BetweenExpression, Expression, ExpressionAt } from "./types.ts";
 
@@ -21,16 +24,13 @@ export const readBetween = (
     const upper = yield* commit(at(betweenPrecedence + 1)).decode(delimiter.next);
     const value: BetweenExpression = {
       _tag: "BetweenExpression",
-      operator: operator.value,
-      operand: operand.value,
       lower: lower.value,
+      operand: operand.value,
+      operator: operator.value,
       upper: upper.value,
     };
     return read<Expression>(value, upper.next, [
       {
-        kind: "BetweenExpression",
-        start: start.offset,
-        end: upper.next.offset,
         children: [
           ...operand.nodes,
           ...operator.nodes,
@@ -38,6 +38,9 @@ export const readBetween = (
           ...delimiter.nodes,
           ...upper.nodes,
         ],
+        end: upper.next.offset,
+        kind: "BetweenExpression",
+        start: start.offset,
       },
     ]);
   });

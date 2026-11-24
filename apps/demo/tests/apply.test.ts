@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+
 import { Effect } from "effect";
-import type { DatabaseSchema, MigrationExecutor } from "@uncutsql/core";
+
 import { applyGenerated } from "@uncutsql/cli";
 import { generateMigration } from "@uncutsql/cli";
+import type { DatabaseSchema, MigrationExecutor } from "@uncutsql/core";
 import type { Dialect } from "@uncutsql/core";
 
 const cli = fileURLToPath(import.meta.resolve("@uncutsql/cli/bin"));
@@ -25,7 +27,7 @@ const run = (cwd: string, args: string[], input = "") =>
       import.meta.resolve("@uncutsql/sqlite-driver"),
       ...args,
     ],
-    { cwd, input, encoding: "utf8" },
+    { cwd, encoding: "utf8", input },
   );
 const exec = (path: string, sql: string) => {
   const database = new DatabaseSync(path);
@@ -72,7 +74,7 @@ test("CLI applies generated migrations and stores application history separately
     const second = run(cwd, ["apply", "app.sqlite"]);
     assert.equal(second.status, 0, second.stderr);
     assert.equal(second.stdout, "Applied 000002.sql.\n");
-    assert.deepEqual(rows(database, "SELECT * FROM t"), [{ id: 7, name: "Ada", email: null }]);
+    assert.deepEqual(rows(database, "SELECT * FROM t"), [{ email: null, id: 7, name: "Ada" }]);
     assert.equal(rows(database, "SELECT count(*) AS n FROM __uncutsql_migrations")[0]!.n, 2);
     const noop = run(cwd, ["apply", "app.sqlite"]);
     assert.equal(noop.status, 0, noop.stderr);
@@ -140,8 +142,9 @@ test("CLI validates history and usage before opening a target database", () => {
       ["apply", "-"],
       ["apply", "db", "--bad"],
       ["apply", "db", "a", "b"],
-    ])
+    ]) {
       assert.equal(run(cwd, args).status, 2);
+    }
     const missing = run(cwd, ["apply", "new.sqlite"]);
     assert.equal(missing.status, 1);
     assert.equal(existsSync(join(cwd, "new.sqlite")), false);
@@ -159,19 +162,18 @@ test("CLI validates history and usage before opening a target database", () => {
 test("application orchestration uses a swappable executor and core-owned verification", async () => {
   const cwd = directory();
   const database: DatabaseSchema = {
-    tables: [{ identity: { name: "t" }, name: "t", columns: [], constraints: [], options: {} }],
+    tables: [{ columns: [], constraints: [], identity: { name: "t" }, name: "t", options: {} }],
   };
   const dialect: Dialect<DatabaseSchema, string, never> = {
+    encodeMigration: () => Effect.succeed("BEGIN; CREATE THING; COMMIT;"),
+    format: () => Effect.succeed(""),
+    lowerMigration: () => Effect.succeed("plan"),
     name: "fixture",
     parse: () => Effect.succeed(database),
-    format: () => Effect.succeed(""),
     toDatabaseSchema: (ast) => Effect.succeed(ast),
-    lowerMigration: () => Effect.succeed("plan"),
-    encodeMigration: () => Effect.succeed("BEGIN; CREATE THING; COMMIT;"),
   };
   let calls = 0;
   const executor: MigrationExecutor<never> = {
-    dialect: "fixture",
     apply: (target, files, desired, verify) =>
       Effect.gen(function* () {
         assert.equal(target, "opaque-target");
@@ -180,6 +182,7 @@ test("application orchestration uses a swappable executor and core-owned verific
         yield* verify(database, desired, "desired");
         return { appliedIds: [1], lastAppliedId: 1 };
       }),
+    dialect: "fixture",
   };
   try {
     await Effect.runPromise(generateMigration(dialect, database, cwd));

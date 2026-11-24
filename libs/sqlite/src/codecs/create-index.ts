@@ -1,5 +1,4 @@
 import {
-  type Codec,
   document,
   followedBy,
   optional,
@@ -8,40 +7,43 @@ import {
   struct,
   transform,
 } from "@uncutsql/codec";
-import { keyword } from "../operators/keyword.ts";
-import { keywordChoice } from "../operators/keyword-choice.ts";
+import type { Codec } from "@uncutsql/codec";
+
 import { flag, ifNotExists } from "../operators/flag.ts";
+import { keywordChoice } from "../operators/keyword-choice.ts";
+import { keyword } from "../operators/keyword.ts";
 import { parenthesized } from "../operators/parenthesized.ts";
 import { punctuation } from "../operators/punctuation.ts";
 import { terminator } from "../operators/terminator.ts";
 import { trivia } from "../operators/trivia.ts";
+import { expression } from "./expression.ts";
+import type { Expression } from "./expression.ts";
 import { nameIdentifier } from "./identifier.ts";
 import { tableReference } from "./table-reference.ts";
-import { expression, type Expression } from "./expression.ts";
 
 export interface IndexTerm {
-  readonly expression: Expression;
   readonly direction?: "ASC" | "DESC";
+  readonly expression: Expression;
 }
 export interface CreateIndex {
   readonly _tag: "CreateIndex";
+  readonly ifNotExists: boolean;
   readonly name: string;
   readonly schema?: string;
   readonly table: string;
-  readonly unique: boolean;
-  readonly ifNotExists: boolean;
   readonly terms: readonly IndexTerm[];
+  readonly unique: boolean;
   readonly where?: Expression;
 }
 // COLLATE is part of the expression. Index terms do not accept NULLS FIRST/LAST.
 export const indexTerm: Codec<IndexTerm> = transform(
   struct({ expression, direction: optional(keywordChoice(["ASC", "DESC"])) }, " "),
   {
-    decode: ({ expression, direction }): IndexTerm => ({
+    decode: ({ direction, expression }): IndexTerm => ({
       expression,
       ...(direction === undefined ? {} : { direction }),
     }),
-    encode: (value: IndexTerm) => ({ expression: value.expression, direction: value.direction }),
+    encode: (value: IndexTerm) => ({ direction: value.direction, expression: value.expression }),
   },
 );
 export const createIndexBodyGrammar: Codec<CreateIndex> = prefixed(
@@ -60,17 +62,16 @@ export const createIndexBodyGrammar: Codec<CreateIndex> = prefixed(
       " ",
     ),
     {
-      decode: ({ unique, ifNotExists, reference, table, terms, where }): CreateIndex => ({
+      decode: ({ ifNotExists, reference, table, terms, unique, where }): CreateIndex => ({
         _tag: "CreateIndex",
-        unique,
         ifNotExists,
+        unique,
         ...reference,
         table,
         terms,
         ...(where === undefined ? {} : { where }),
       }),
       encode: (value: CreateIndex) => ({
-        unique: value.unique,
         ifNotExists: value.ifNotExists,
         indexKeyword: undefined,
         reference: {
@@ -79,6 +80,7 @@ export const createIndexBodyGrammar: Codec<CreateIndex> = prefixed(
         },
         table: value.table,
         terms: value.terms,
+        unique: value.unique,
         where: value.where,
       }),
     },

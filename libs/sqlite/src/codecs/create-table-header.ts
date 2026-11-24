@@ -1,13 +1,15 @@
-import { type Codec, alternatives, prefixed, struct, transform } from "@uncutsql/codec";
+import { alternatives, prefixed, struct, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { flag, ifNotExists } from "../operators/flag.ts";
 import { keyword } from "../operators/keyword.ts";
 import { tableReference } from "./table-reference.ts";
 
 export interface CreateTableHeader {
-  readonly temporary: boolean;
   readonly ifNotExists: boolean;
   readonly name: string;
   readonly schema?: string;
+  readonly temporary: boolean;
 }
 
 export const createRelationHeader = (
@@ -26,19 +28,19 @@ export const createRelationHeader = (
         " ",
       ),
       {
-        decode: ({ temporary, ifNotExists, reference }): CreateTableHeader => ({
-          temporary,
+        decode: ({ ifNotExists, reference, temporary }): CreateTableHeader => ({
           ifNotExists,
+          temporary,
           ...reference,
         }),
         encode: (value: CreateTableHeader) => ({
-          temporary: value.temporary,
           ifNotExists: value.ifNotExists,
           kindKeyword: undefined,
           reference: {
             name: value.name,
             ...(value.schema === undefined ? {} : { schema: value.schema }),
           },
+          temporary: value.temporary,
         }),
       },
     ),

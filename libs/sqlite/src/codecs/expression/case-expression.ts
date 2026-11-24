@@ -1,5 +1,4 @@
 import {
-  type Codec,
   followedBy,
   located,
   optional,
@@ -8,6 +7,8 @@ import {
   struct,
   transform,
 } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keyword } from "../../operators/keyword.ts";
 import type { CaseExpression, Expression } from "./types.ts";
 
@@ -32,7 +33,7 @@ export const caseExpression = (expression: Codec<Expression>): Codec<CaseExpress
           struct(
             {
               base: optional(expression),
-              branches: repeat(branch, { min: 1, join: " " }),
+              branches: repeat(branch, { join: " ", min: 1 }),
               else: optional(prefixed(keyword("ELSE"), expression, " ")),
             },
             " ",

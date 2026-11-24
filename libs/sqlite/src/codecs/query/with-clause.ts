@@ -1,4 +1,6 @@
-import { type Codec, optional, prefixed, repeat, struct, transform } from "@uncutsql/codec";
+import { optional, prefixed, repeat, struct, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keyword } from "../../operators/keyword.ts";
 import { punctuation } from "../../operators/punctuation.ts";
 import { commonTableExpression } from "./common-table-expression.ts";
@@ -26,13 +28,13 @@ export const withClause = (query: Codec<Query>): Codec<WithClause> =>
       " ",
     ),
     {
-      decode: ({ recursive, expressions }): WithClause => ({
-        recursive: recursive ?? false,
+      decode: ({ expressions, recursive }): WithClause => ({
         expressions,
+        recursive: recursive ?? false,
       }),
       encode: (value: WithClause) => ({
-        recursive: value.recursive ? (true as const) : undefined,
         expressions: value.expressions,
+        recursive: value.recursive ? (true as const) : undefined,
       }),
     },
   );

@@ -1,6 +1,8 @@
-import { type Codec, optional, prefixed, struct, transform } from "@uncutsql/codec";
-import { keyword } from "../operators/keyword.ts";
+import { optional, prefixed, struct, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keywordChoice } from "../operators/keyword-choice.ts";
+import { keyword } from "../operators/keyword.ts";
 import type { Expression, OrderingTerm } from "./expression/types.ts";
 
 export const orderingTerm = (expression: Codec<Expression>): Codec<OrderingTerm> =>
@@ -14,14 +16,14 @@ export const orderingTerm = (expression: Codec<Expression>): Codec<OrderingTerm>
       " ",
     ),
     {
-      decode: ({ expression, direction, nulls }): OrderingTerm => ({
+      decode: ({ direction, expression, nulls }): OrderingTerm => ({
         expression,
         ...(direction === undefined ? {} : { direction }),
         ...(nulls === undefined ? {} : { nulls }),
       }),
       encode: (value: OrderingTerm) => ({
-        expression: value.expression,
         direction: value.direction,
+        expression: value.expression,
         nulls: value.nulls,
       }),
     },

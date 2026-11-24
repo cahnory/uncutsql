@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import { diffDatabases, planDatabaseMigration } from "@uncutsql/core";
+
 import {
-  schema,
-  toDatabaseSchema,
+  encodeMigration,
   fromDatabaseSchema,
   lowerMigration,
-  encodeMigration,
+  schema,
+  toDatabaseSchema,
 } from "../src/index.ts";
 
 const convert = (sql: string) =>
@@ -34,11 +37,12 @@ test("SQLite models can use the standalone core diff and logical procedure plann
   const diff = Effect.runSync(diffDatabases(before, after));
   const procedures = planDatabaseMigration(diff).procedures;
   assert.equal(procedures[0]!._tag, "AlterTable");
-  if (procedures[0]!._tag === "AlterTable")
+  if (procedures[0]!._tag === "AlterTable") {
     assert.deepEqual(
       procedures[0]!.changes.map((item) => item._tag),
       ["ColumnChanged", "ColumnAdded"],
     );
+  }
 });
 
 test("serialized shared models round-trip through the SQLite adapter", () => {
@@ -74,7 +78,7 @@ test("SQLite refuses unsupported model extensions instead of dropping their sema
   const model = convert("CREATE TABLE t (id)");
   for (const table of [
     { ...model.tables[0]!, options: { "other:partition": "hash" } },
-    { ...model.tables[0]!, identity: { catalog: "app", schema: "public", name: "t" } },
+    { ...model.tables[0]!, identity: { catalog: "app", name: "t", schema: "public" } },
     {
       ...model.tables[0]!,
       columns: [{ ...model.tables[0]!.columns[0]!, dataType: { name: "domain" } }],

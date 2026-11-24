@@ -1,4 +1,6 @@
-import { taggedUnion, type Value } from "@uncutsql/codec";
+import { taggedUnion } from "@uncutsql/codec";
+import type { Value } from "@uncutsql/codec";
+
 import { blobLiteral } from "./blob-literal.ts";
 import { keywordLiteral } from "./keyword-literal.ts";
 import { nullLiteral } from "./null-literal.ts";

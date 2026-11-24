@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect } from "effect";
-import { diffDatabases, planDatabaseMigration } from "@uncutsql/core";
-import { lowerMigration, encodeMigration } from "../src/index.ts";
+
 import type { SourceNode } from "@uncutsql/codec";
+import { diffDatabases, planDatabaseMigration } from "@uncutsql/core";
+
+import { encodeMigration, lowerMigration } from "../src/index.ts";
 import { createTrigger, fromDatabaseSchema, schema, toDatabaseSchema } from "../src/index.ts";
 
 test("multi-action triggers round trip and execute in source order", () => {
@@ -39,7 +42,7 @@ test("multi-action triggers round trip and execute in source order", () => {
 test("trigger and target identifiers have exact source ranges in a schema document", () => {
   const sql =
     'CREATE TEMP TRIGGER IF NOT EXISTS temp."tr one" INSTEAD OF DELETE ON main.[my view] BEGIN SELECT 1; END; CREATE TABLE t(n)';
-  const { value, sourceMap } = Effect.runSync(schema.decodeWithSourceMap(sql));
+  const { sourceMap, value } = Effect.runSync(schema.decodeWithSourceMap(sql));
   assert.deepEqual(
     value.map((item) => item._tag),
     ["CreateTrigger", "CreateTable"],
@@ -58,10 +61,11 @@ test("trigger action lists require an action and every internal semicolon", () =
     "SELECT 1 END",
     "SELECT 1; SELECT 2 END",
     "UPDATE main.t SET n=1; END",
-  ])
+  ]) {
     assert.throws(() =>
       Effect.runSync(schema.decode("CREATE TRIGGER tr BEFORE INSERT ON t BEGIN " + body)),
     );
+  }
 });
 
 test("table and view triggers survive JSON restoration with resolved owners and ordered actions", () => {

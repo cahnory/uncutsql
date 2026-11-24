@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import { ParseError } from "@uncutsql/codec";
-import { createTable, sqlExpression, type Expression } from "../src/index.ts";
-import { binaryPrecedence } from "../src/codecs/expression/operators.ts";
+
 import { defaultColumnConstraint } from "../src/codecs/column-constraint/default-column-constraint.ts";
+import { binaryPrecedence } from "../src/codecs/expression/operators.ts";
+import { createTable, sqlExpression } from "../src/index.ts";
+import type { Expression } from "../src/index.ts";
 
 const decode = (sql: string) => Effect.runSync(sqlExpression.decode(sql));
 const encode = (value: Expression) => Effect.runSync(sqlExpression.encode(value));
@@ -55,9 +59,9 @@ test("BETWEEN tree shape and grouping preserve all three operands", () => {
   const ast = decode("a BETWEEN b AND c");
   assert.deepEqual(ast, {
     _tag: "BetweenExpression",
-    operator: "BETWEEN",
-    operand: { _tag: "ColumnReference", parts: ["a"] },
     lower: { _tag: "ColumnReference", parts: ["b"] },
+    operand: { _tag: "ColumnReference", parts: ["a"] },
+    operator: "BETWEEN",
     upper: { _tag: "ColumnReference", parts: ["c"] },
   });
   for (const source of [

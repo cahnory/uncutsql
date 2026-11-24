@@ -10,8 +10,8 @@ export type SchemaValue =
 /** Keys are already normalized by the dialect. Core never folds or resolves names. */
 export interface TableIdentity {
   readonly catalog?: string;
-  readonly schema?: string;
   readonly name: string;
+  readonly schema?: string;
 }
 
 export interface Constraint {
@@ -20,51 +20,51 @@ export interface Constraint {
 }
 
 export interface DatabaseColumn {
+  readonly constraints: readonly Constraint[];
+  readonly dataType: SchemaValue;
   readonly key: string;
   readonly name: string;
-  readonly dataType: SchemaValue;
-  readonly constraints: readonly Constraint[];
 }
 
 /** Standalone indexes belong to a table; keys are normalized within its namespace. */
 export interface DatabaseIndex {
   readonly key: string;
   readonly name: string;
-  readonly unique: boolean;
   readonly terms: readonly SchemaValue[];
+  readonly unique: boolean;
   readonly where: SchemaValue;
 }
 
 export interface DatabaseTable {
-  readonly identity: TableIdentity;
-  readonly name: string;
   readonly columns: readonly DatabaseColumn[];
-  readonly indexes?: readonly DatabaseIndex[];
   readonly constraints: readonly Constraint[];
+  readonly identity: TableIdentity;
+  readonly indexes?: readonly DatabaseIndex[];
+  readonly name: string;
   /** Namespaced keys retain vendor-specific features without teaching core their meaning. */
   readonly options: { readonly [key: string]: SchemaValue };
 }
 
 export interface DatabaseView {
+  readonly columns?: readonly string[];
   readonly identity: TableIdentity;
   readonly name: string;
-  readonly columns?: readonly string[];
   readonly query: SchemaValue;
 }
 
 export interface DatabaseTrigger {
+  /** Dialect-normalized timing, event, condition and ordered actions. */
+  readonly definition: SchemaValue;
   readonly identity: TableIdentity;
   readonly name: string;
   /** Normalized identity of the table or view that owns this trigger. */
   readonly target: TableIdentity;
-  /** Dialect-normalized timing, event, condition and ordered actions. */
-  readonly definition: SchemaValue;
 }
 
 export interface DatabaseSchema {
+  readonly tables: readonly DatabaseTable[];
   readonly triggers?: readonly DatabaseTrigger[];
   readonly views?: readonly DatabaseView[];
-  readonly tables: readonly DatabaseTable[];
 }
 
 export const tableKey = (table: TableIdentity): string =>
@@ -72,9 +72,17 @@ export const tableKey = (table: TableIdentity): string =>
 
 /** Object property insertion order is not semantic; array order is retained. */
 export const schemaValueEqual = (before: SchemaValue, after: SchemaValue): boolean => {
-  if (before === after) return true;
-  if (before === null || after === null || typeof before !== "object" || typeof after !== "object")
+  if (before === after) {
+    return true;
+  }
+  if (
+    before === null ||
+    after === null ||
+    typeof before !== "object" ||
+    typeof after !== "object"
+  ) {
     return false;
+  }
   if (Array.isArray(before) || Array.isArray(after)) {
     return (
       Array.isArray(before) &&

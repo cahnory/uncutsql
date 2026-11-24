@@ -1,5 +1,8 @@
 import { Effect } from "effect";
-import { type Codec, EncodeError, located, make, parseError, read } from "@uncutsql/codec";
+
+import { EncodeError, located, make, parseError, read } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { identifierPart, uppercaseAscii } from "../lexer/characters.ts";
 import { lexeme } from "../operators/lexeme.ts";
 
@@ -17,7 +20,9 @@ export const keywordLiteral: Codec<KeywordLiteral> = lexeme(
     make<KeywordLiteral>({
       decode: (cursor) => {
         let end = cursor.offset;
-        while (identifierPart.test(cursor.source[end] ?? "")) end++;
+        while (identifierPart.test(cursor.source[end] ?? "")) {
+          end++;
+        }
         const word = uppercaseAscii(cursor.source.slice(cursor.offset, end));
         const value = values.find((value) => value === word);
         return value === undefined

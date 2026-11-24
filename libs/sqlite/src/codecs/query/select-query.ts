@@ -1,25 +1,19 @@
 import { Effect } from "effect";
-import {
-  type Codec,
-  located,
-  optional,
-  prefixed,
-  repeat,
-  struct,
-  transform,
-  make,
-} from "@uncutsql/codec";
-import { keyword } from "../../operators/keyword.ts";
+
+import { located, make, optional, prefixed, repeat, struct, transform } from "@uncutsql/codec";
+import type { Codec } from "@uncutsql/codec";
+
 import { keywordChoice } from "../../operators/keyword-choice.ts";
 import { keywordSequence } from "../../operators/keyword-sequence.ts";
+import { keyword } from "../../operators/keyword.ts";
 import { punctuation } from "../../operators/punctuation.ts";
-import { windowDefinition } from "../over-clause.ts";
 import { windowKeyword } from "../../operators/window-keyword.ts";
-import { windowName, windowNameAfterKeyword } from "../window-name.ts";
 import type { Expression } from "../expression/types.ts";
-import type { SelectCore } from "./types.ts";
-import { resultColumn } from "./result-column.ts";
+import { windowDefinition } from "../over-clause.ts";
+import { windowName, windowNameAfterKeyword } from "../window-name.ts";
 import { fromClause } from "./from-clause.ts";
+import { resultColumn } from "./result-column.ts";
+import type { SelectCore } from "./types.ts";
 
 export const selectCore = (
   expression: Codec<Expression>,
@@ -38,7 +32,9 @@ export const selectCore = (
     decode: declarations.decode,
     encode: (values) =>
       Effect.gen(function* () {
-        if (values[0]) yield* windowNameAfterKeyword.encode(values[0].name);
+        if (values[0]) {
+          yield* windowNameAfterKeyword.encode(values[0].name);
+        }
         return yield* declarations.encode(values);
       }),
   });
@@ -62,7 +58,7 @@ export const selectCore = (
         " ",
       ),
       {
-        decode: ({ columns, modifier, from, where, groupBy, having, windows }): SelectCore => ({
+        decode: ({ columns, from, groupBy, having, modifier, where, windows }): SelectCore => ({
           _tag: "SelectQuery",
           columns,
           ...(modifier === undefined ? {} : { modifier }),
@@ -74,11 +70,11 @@ export const selectCore = (
         }),
         encode: (value: SelectCore) => ({
           columns: value.columns,
-          modifier: value.modifier,
           from: value.from,
-          where: value.where,
           groupBy: value.groupBy,
           having: value.having,
+          modifier: value.modifier,
+          where: value.where,
           windows: value.windows,
         }),
       },

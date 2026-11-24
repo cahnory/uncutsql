@@ -1,4 +1,5 @@
 import { optional, transform } from "@uncutsql/codec";
+
 import { punctuation } from "./punctuation.ts";
 
 /** Optional on input; always print the canonical final semicolon. */

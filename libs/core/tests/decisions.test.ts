@@ -1,20 +1,22 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import {
-  prepareMigrationDecisions,
   mergeMigrationDecisions,
-  resolveMigrationDecisions,
   MigrationDecisionError,
-  type DatabaseSchema,
+  prepareMigrationDecisions,
+  resolveMigrationDecisions,
 } from "../src/index.ts";
+import type { DatabaseSchema } from "../src/index.ts";
 const model = (names: string[], type = "TEXT"): DatabaseSchema => ({
   tables: [
     {
+      columns: names.map((name) => ({ constraints: [], dataType: type, key: name, name })),
+      constraints: [],
       identity: { catalog: "main", name: "t" },
       name: "t",
-      columns: names.map((name) => ({ key: name, name, dataType: type, constraints: [] })),
-      constraints: [],
       options: {},
     },
   ],
@@ -42,13 +44,16 @@ test("ambiguities remain unresolved until explicit drop or rename choices", () =
     );
     const change = resolved.diff.changes[0]!;
     assert.equal(change._tag, "TableChanged");
-    if (change._tag !== "TableChanged") throw new Error("Expected table change");
+    if (change._tag !== "TableChanged") {
+      throw new Error("Expected table change");
+    }
     assert.deepEqual(
       change.changes.map((item) => item._tag),
       resolution.action === "drop" ? ["ColumnRemoved", "ColumnAdded"] : ["ColumnRenamed"],
     );
-    if (change.changes[0]!._tag === "ColumnRenamed")
+    if (change.changes[0]!._tag === "ColumnRenamed") {
       assert.deepEqual(change.changes[0]!.fields, ["dataType"]);
+    }
   }
 });
 test("decisions reject stale, missing, duplicated and invalid resolutions", () => {
@@ -70,15 +75,16 @@ test("decisions reject stale, missing, duplicated and invalid resolutions", () =
     },
     { ...pending, decisions: [{ ...first, id: "unknown", resolution: { action: "drop" } }] },
     { ...pending, decisions: [{ ...first, column: "other", resolution: { action: "drop" } }] },
-  ])
+  ]) {
     failure(document);
+  }
   for (const resolution of [
     null,
     {},
     { action: "pending" },
     { action: "rename" },
     { action: "drop", target: "new" },
-    { action: "rename", target: "new", extra: true },
+    { action: "rename", extra: true, target: "new" },
     { action: "other" },
     { _tag: "Drop" },
   ]) {
@@ -150,21 +156,25 @@ test("mixed rename/drop decisions retain other additions and accompanying constr
     }),
   );
   const change = resolved.diff.changes[0]!;
-  if (change._tag !== "TableChanged") throw new Error("Expected altered table");
+  if (change._tag !== "TableChanged") {
+    throw new Error("Expected altered table");
+  }
   assert.deepEqual(
     change.changes.map((item) => item._tag),
     ["ColumnRenamed", "ColumnRemoved", "ColumnAdded"],
   );
   const rename = change.changes[0]!;
-  if (rename._tag !== "ColumnRenamed") throw new Error("Expected rename");
+  if (rename._tag !== "ColumnRenamed") {
+    throw new Error("Expected rename");
+  }
   assert.deepEqual(rename.fields, ["dataType", "constraints"]);
 });
 
 test("changing a table pairing discards only its dependent column answers", () => {
   const table = (name: string, column: string) => ({
     ...model([column]).tables[0]!,
-    name,
     identity: { name },
+    name,
   });
   const source = { tables: [table("old", "value"), table("other", "value")] };
   const target = { tables: [table("first", "label"), table("second", "label")] };

@@ -1,17 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
 import { Effect, Result } from "effect";
+
 import { decodeDatabaseSchema, SchemaModelError } from "../src/index.ts";
 
 const valid = () => ({
   tables: [
     {
-      identity: { catalog: "app", schema: "public", name: "t" },
-      name: "t",
       columns: [
-        { key: "id", name: "id", dataType: { name: "decimal", args: [10, 2] }, constraints: [] },
+        { constraints: [], dataType: { args: [10, 2], name: "decimal" }, key: "id", name: "id" },
       ],
       constraints: [{ kind: "PrimaryKey", properties: { columns: ["id"] } }],
+      identity: { catalog: "app", name: "t", schema: "public" },
+      name: "t",
       options: { "vendor:feature": true },
     },
   ],
@@ -27,13 +29,13 @@ test("malformed model shapes and unknown fields produce path-based typed errors"
   for (const [value, path] of [
     [null, "$database"],
     [{ tables: "bad" }, "$database.tables"],
-    [{ tables: [], future: true }, "$database.future"],
+    [{ future: true, tables: [] }, "$database.future"],
     [
-      { tables: [{ ...valid().tables[0]!, columns: [{ key: "id", name: "id", dataType: null }] }] },
+      { tables: [{ ...valid().tables[0]!, columns: [{ dataType: null, key: "id", name: "id" }] }] },
       "$database.tables[0].columns[0].constraints",
     ],
     [
-      { tables: [{ ...valid().tables[0]!, identity: { name: "t", catalog: 1 } }] },
+      { tables: [{ ...valid().tables[0]!, identity: { catalog: 1, name: "t" } }] },
       "$database.tables[0].identity.catalog",
     ],
   ] as const) {

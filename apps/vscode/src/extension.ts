@@ -1,17 +1,14 @@
-import { dirname, isAbsolute, relative, sep } from "node:path";
 import { readFile, stat } from "node:fs/promises";
-import * as vscode from "vscode";
-import { Effect } from "effect";
-import { resolveConfig, schemaFiles } from "@uncutsql/cli";
-import {
-  analyzeSchema,
-  definitions,
-  referenceAt,
-  type SchemaSymbol,
-  type Span,
-} from "@uncutsql/sqlite/language-service";
+import { dirname, isAbsolute, relative, sep } from "node:path";
 
-const selector: vscode.DocumentSelector = { scheme: "file", language: "sql" };
+import { Effect } from "effect";
+import * as vscode from "vscode";
+
+import { resolveConfig, schemaFiles } from "@uncutsql/cli";
+import { analyzeSchema, definitions, referenceAt } from "@uncutsql/sqlite/language-service";
+import type { SchemaSymbol, Span } from "@uncutsql/sqlite/language-service";
+
+const selector: vscode.DocumentSelector = { language: "sql", scheme: "file" };
 const matches = (doc: vscode.TextDocument) => vscode.languages.match(selector, doc) > 0;
 const range = (doc: vscode.TextDocument, span: Span) =>
   new vscode.Range(doc.positionAt(span.start), doc.positionAt(span.end));
@@ -20,29 +17,40 @@ async function schemaPath(doc: vscode.TextDocument) {
   const path = doc.uri.fsPath;
   const fallback = path.endsWith(".uncut.sql") ? path : undefined;
   const root = vscode.workspace.getWorkspaceFolder(doc.uri)?.uri.fsPath;
-  if (!root) return fallback;
+  if (!root) {
+    return fallback;
+  }
   for (let directory = dirname(path); ; directory = dirname(directory)) {
     const config = await Effect.runPromise(resolveConfig({}, directory));
     if (config.configured) {
-      if (config.dialect && config.dialect.specifier !== "@uncutsql/sqlite") return undefined;
-      if (!config.schema) return fallback;
-      if (path === config.schema) return path;
-      const child = relative(config.schema, path);
-      if (!fallback || child.startsWith(".." + sep) || child === ".." || isAbsolute(child))
+      if (config.dialect && config.dialect.specifier !== "@uncutsql/sqlite") {
         return undefined;
+      }
+      if (!config.schema) {
+        return fallback;
+      }
+      if (path === config.schema) {
+        return path;
+      }
+      const child = relative(config.schema, path);
+      if (!fallback || child.startsWith(".." + sep) || child === ".." || isAbsolute(child)) {
+        return undefined;
+      }
       return (await stat(config.schema)).isDirectory() ? config.schema : undefined;
     }
-    if (directory === root || directory === dirname(directory)) return fallback;
+    if (directory === root || directory === dirname(directory)) {
+      return fallback;
+    }
   }
 }
 
 const kinds = {
+  Column: vscode.SymbolKind.Field,
+  CreateIndex: vscode.SymbolKind.Key,
   CreateTable: vscode.SymbolKind.Struct,
   CreateTableAs: vscode.SymbolKind.Struct,
-  CreateView: vscode.SymbolKind.Interface,
-  CreateIndex: vscode.SymbolKind.Key,
   CreateTrigger: vscode.SymbolKind.Event,
-  Column: vscode.SymbolKind.Field,
+  CreateView: vscode.SymbolKind.Interface,
 };
 
 function outline(doc: vscode.TextDocument, symbol: SchemaSymbol): vscode.DocumentSymbol {
@@ -61,23 +69,29 @@ export function activate(context: vscode.ExtensionContext) {
   const diagnostics = vscode.languages.createDiagnosticCollection("uncutsql");
   const cache = new WeakMap<
     vscode.TextDocument,
-    { version: number; parsed: ReturnType<typeof analyzeSchema> }
+    { parsed: ReturnType<typeof analyzeSchema>; version: number }
   >();
   function analysis(doc: vscode.TextDocument) {
     const previous = cache.get(doc);
-    if (previous?.version === doc.version) return previous.parsed;
+    if (previous?.version === doc.version) {
+      return previous.parsed;
+    }
     const parsed = analyzeSchema(doc.getText());
-    cache.set(doc, { version: doc.version, parsed });
+    cache.set(doc, { parsed, version: doc.version });
     return parsed;
   }
   const pending = new WeakMap<vscode.TextDocument, object>();
   async function refresh(doc: vscode.TextDocument) {
-    if (!matches(doc)) return;
+    if (!matches(doc)) {
+      return;
+    }
     const request = {};
     pending.set(doc, request);
     try {
       const path = await schemaPath(doc);
-      if (pending.get(doc) !== request || doc.isClosed) return;
+      if (pending.get(doc) !== request || doc.isClosed) {
+        return;
+      }
       diagnostics.set(
         doc.uri,
         path
@@ -93,7 +107,9 @@ export function activate(context: vscode.ExtensionContext) {
           : [],
       );
     } catch (error) {
-      if (pending.get(doc) === request && !doc.isClosed) diagnostics.delete(doc.uri);
+      if (pending.get(doc) === request && !doc.isClosed) {
+        diagnostics.delete(doc.uri);
+      }
       console.error(error);
     }
   }
@@ -116,19 +132,26 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.languages.registerDocumentSymbolProvider(selector, {
       async provideDocumentSymbols(doc) {
-        if (await schemaPath(doc))
+        if (await schemaPath(doc)) {
           return analysis(doc).symbols.map((symbol) => outline(doc, symbol));
+        }
       },
     }),
     vscode.languages.registerDefinitionProvider(selector, {
       async provideDefinition(doc, position, token) {
         const path = await schemaPath(doc);
-        if (!path) return;
+        if (!path) {
+          return;
+        }
         const reference = referenceAt(analysis(doc), doc.offsetAt(position));
-        if (!reference) return;
+        if (!reference) {
+          return;
+        }
         const locations: vscode.Location[] = [];
         for (const file of await schemaFiles(path)) {
-          if (token.isCancellationRequested) return;
+          if (token.isCancellationRequested) {
+            return;
+          }
           const uri = vscode.Uri.file(file);
           const target = vscode.workspace.textDocuments.find((doc) => doc.uri.fsPath === file);
           if (target) {

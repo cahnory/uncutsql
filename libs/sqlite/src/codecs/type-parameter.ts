@@ -1,12 +1,8 @@
 import { Effect } from "effect";
-import {
-  type Codec,
-  type Value,
-  EncodeError,
-  make,
-  parseError,
-  taggedUnion,
-} from "@uncutsql/codec";
+
+import { EncodeError, make, parseError, taggedUnion } from "@uncutsql/codec";
+import type { Codec, Value } from "@uncutsql/codec";
+
 import { numericLiteral } from "./numeric-literal.ts";
 import { signedNumber } from "./signed-number.ts";
 

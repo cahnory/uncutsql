@@ -46,7 +46,11 @@ Packages remain private; build configuration includes distribution export maps.
 
 Use `pnpm --filter @uncutsql/sqlite check` to check one library,
 `pnpm check:types` for workspace type checks, and `pnpm fix:format` to format.
-The root `pnpm test` alias still runs all runtime tests.
+Run `pnpm fix:lint` before `pnpm fix:format` to apply both sets of fixes.
+Use braces around control-flow bodies and separate type-only imports and exports
+from runtime declarations. Sort properties and named imports and exports alphabetically.
+Keep fields passed to `struct` and `taggedUnion` in grammar order because they
+determine parsing order. The root `pnpm test` alias runs all runtime tests.
 
 ## Schema CLI
 
@@ -362,6 +366,7 @@ integration tests live in `apps/demo`, which explicitly installs the chosen plug
 
 ```ts
 import { Effect } from "effect";
+
 import * as Sqlite from "@uncutsql/sqlite";
 
 const program = Effect.gen(function* () {
@@ -402,6 +407,7 @@ column numbers, expectations and commitment status.
 
 ```ts
 import { Effect, Logger, References } from "effect";
+
 import * as Codec from "@uncutsql/codec";
 import * as Sqlite from "@uncutsql/sqlite";
 import { trivia } from "@uncutsql/sqlite/tokens";
