@@ -10,7 +10,7 @@ import {
 import { keyword } from "../operators/keyword.ts";
 import { parenthesized } from "../operators/parenthesized.ts";
 import { punctuation } from "../operators/punctuation.ts";
-import { identifier } from "./identifier.ts";
+import { nameIdentifier } from "./identifier.ts";
 import { foreignKeyOption, type ForeignKeyOption } from "./foreign-key/action.ts";
 import { deferrability, type Deferrability } from "./foreign-key/deferrable.ts";
 
@@ -29,11 +29,11 @@ export const foreignKeyClause: Codec<ForeignKeyClause> = located(
     transform(
       struct(
         {
-          table: identifier,
+          table: nameIdentifier,
           columns: optional(
             located(
               "ReferencedColumns",
-              parenthesized(repeat(identifier, { min: 1, separator: punctuation(",", ", ") })),
+              parenthesized(repeat(nameIdentifier, { min: 1, separator: punctuation(",", ", ") })),
             ),
           ),
           options: repeat(foreignKeyOption, { join: " " }),

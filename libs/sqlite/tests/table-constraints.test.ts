@@ -259,3 +259,20 @@ test("generated constraints reject empty key/reference lists", () => {
     ) instanceof EncodeError,
   );
 });
+
+test("single-quoted foreign key names preserve SQLite enforcement after formatting", () => {
+  const source = "CREATE TABLE child ('key', FOREIGN KEY ('key') REFERENCES 'parent' ('it''s id'))";
+  for (const sql of versions(source)) {
+    const db = new DatabaseSync(":memory:");
+    try {
+      db.exec(
+        "PRAGMA foreign_keys=ON; CREATE TABLE parent ('it''s id' PRIMARY KEY); INSERT INTO parent VALUES (1)",
+      );
+      db.exec(sql);
+      db.exec("INSERT INTO child VALUES (1)");
+      assert.throws(() => db.exec("INSERT INTO child VALUES (2)"), /FOREIGN KEY constraint failed/);
+    } finally {
+      db.close();
+    }
+  }
+});

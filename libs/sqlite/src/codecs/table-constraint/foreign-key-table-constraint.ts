@@ -2,7 +2,7 @@ import { prefixed, repeat, struct, transform } from "@uncutsql/codec";
 import { keywordSequence } from "../../operators/keyword-sequence.ts";
 import { parenthesized } from "../../operators/parenthesized.ts";
 import { punctuation } from "../../operators/punctuation.ts";
-import { identifier } from "../identifier.ts";
+import { nameIdentifier } from "../identifier.ts";
 import { foreignKeyClause, type ForeignKeyClause } from "../foreign-key-clause.ts";
 
 export interface ForeignKeyTableConstraint {
@@ -16,7 +16,9 @@ export const foreignKeyTableConstraint = prefixed(
   transform(
     struct(
       {
-        columns: parenthesized(repeat(identifier, { min: 1, separator: punctuation(",", ", ") })),
+        columns: parenthesized(
+          repeat(nameIdentifier, { min: 1, separator: punctuation(",", ", ") }),
+        ),
         references: foreignKeyClause,
       },
       " ",

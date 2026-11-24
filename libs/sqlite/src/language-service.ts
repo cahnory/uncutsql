@@ -1,7 +1,7 @@
 import type { SourceNode } from "@uncutsql/codec";
 import { Effect } from "effect";
 import { schema, type Statement } from "./schema.ts";
-import { identifier } from "./tokens.ts";
+import { nameIdentifier } from "./codecs/identifier.ts";
 import { uppercaseAscii } from "./lexer/characters.ts";
 
 export interface Span {
@@ -43,7 +43,7 @@ export function analyzeSchema(source: string): SchemaDocument {
     return document;
   }
   const nameOf = (node: SourceNode) =>
-    Effect.runSync(identifier.decode({ source, offset: node.start })).value;
+    Effect.runSync(nameIdentifier.decode({ source, offset: node.start })).value;
   for (const [index, statement] of parsed.success.value.entries()) {
     const node = parsed.success.sourceMap[index]!;
     const header = node.children.find((child) => child.kind === "TableReference")!;

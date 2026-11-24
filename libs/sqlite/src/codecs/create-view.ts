@@ -15,7 +15,7 @@ import { terminator } from "../operators/terminator.ts";
 import { trivia } from "../operators/trivia.ts";
 import { createRelationHeader, type CreateTableHeader } from "./create-table-header.ts";
 import { expression } from "./expression.ts";
-import { identifier } from "./identifier.ts";
+import { nameIdentifier } from "./identifier.ts";
 import { query } from "./query/query.ts";
 import type { Query } from "./query/types.ts";
 
@@ -30,7 +30,7 @@ export const createViewBodyGrammar: Codec<CreateView> = transform(
     {
       header: createRelationHeader("VIEW"),
       columns: optional(
-        parenthesized(repeat(identifier, { min: 1, separator: punctuation(",", ", ") })),
+        parenthesized(repeat(nameIdentifier, { min: 1, separator: punctuation(",", ", ") })),
       ),
       query: prefixed(keyword("AS"), query(expression, true), " "),
     },

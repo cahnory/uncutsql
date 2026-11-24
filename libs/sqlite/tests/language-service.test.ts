@@ -28,3 +28,16 @@ test("reports the parser offset at EOF and outlines explicit view columns", () =
     ["a", "b"],
   );
 });
+
+test("resolves single-quoted foreign keys to their original declaration spans", () => {
+  const source = "CREATE TABLE 'parent' ('it''s id' PRIMARY KEY);";
+  const target = analyzeSchema(source);
+  const sql = "CREATE TABLE child ('key', FOREIGN KEY ('key') REFERENCES 'parent' ('it''s id'));";
+  const child = analyzeSchema(sql);
+  assert.deepEqual(child.diagnostics, []);
+  for (const token of ["'parent'", "'it''s id'"]) {
+    const reference = referenceAt(child, sql.indexOf(token) + 1)!;
+    const [span] = definitions(reference, target);
+    assert.equal(source.slice(span!.start, span!.end), token);
+  }
+});
