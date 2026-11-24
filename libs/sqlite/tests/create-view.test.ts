@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { Effect } from "effect";
-import { createView, schema, toDatabaseSchema } from "../src/index.ts";
+import { createView, fromDatabaseSchema, schema, toDatabaseSchema } from "../src/index.ts";
 
 test("view round trips retain native column names and results", () => {
   for (const sql of [
@@ -22,7 +22,9 @@ test("view round trips retain native column names and results", () => {
       }
     };
     assert.deepEqual(inspect(formatted), inspect(sql));
-    assert.throws(() => Effect.runSync(toDatabaseSchema([ast])), /CREATE VIEW/);
+    const model = Effect.runSync(toDatabaseSchema([ast]));
+    const restored = Effect.runSync(fromDatabaseSchema(JSON.parse(JSON.stringify(model))));
+    assert.deepEqual(Effect.runSync(toDatabaseSchema(restored)), model);
   }
 });
 

@@ -11,6 +11,7 @@ import { createTable, type CreateTable } from "./create-table.ts";
 import { semanticValue, syntaxValue } from "./schema-value.ts";
 import { createIndex, type CreateIndex } from "./codecs/create-index.ts";
 import { indexesFromDatabaseSchema, indexModel } from "./indexes.ts";
+import { viewsFromDatabaseSchema } from "./views.ts";
 import type { Statement } from "./schema.ts";
 import { foldIdentifier, tableIdentity } from "./schema-identity.ts";
 
@@ -30,9 +31,7 @@ export const toDatabaseSchema = (
   side: DiffDiagnostic["side"] = "after",
 ) =>
   Effect.gen(function* () {
-    const unsupported = statements.filter(
-      (statement) => statement._tag === "CreateTableAs" || statement._tag === "CreateView",
-    );
+    const unsupported = statements.filter((statement) => statement._tag === "CreateTableAs");
     if (unsupported.length)
       return yield* Effect.fail(
         new SchemaDiffError({
@@ -44,13 +43,12 @@ export const toDatabaseSchema = (
               name: statement.name,
             },
             message:
-              statement._tag === "CreateView"
-                ? "CREATE VIEW is supported for checking and formatting only; view migration planning is unavailable"
-                : "CREATE TABLE AS queries require SQLite evaluation to determine columns and populate data; use an explicit table definition for declarative schema comparison",
+              "CREATE TABLE AS queries require SQLite evaluation to determine columns and populate data; use an explicit table definition for declarative schema comparison",
           })),
         }),
       );
     const tables = statements.filter((statement) => statement._tag === "CreateTable");
+    const views = statements.filter((statement) => statement._tag === "CreateView");
     const indexGroups = new Map<string, CreateIndex[]>();
     const indexDiagnostics: DiffDiagnostic[] = [];
     const objectNames = new Set(tables.map((table) => JSON.stringify(tableIdentity(table))));
@@ -100,6 +98,16 @@ export const toDatabaseSchema = (
         });
     }
     const database: DatabaseSchema = {
+      ...(views.length
+        ? {
+            views: views.map((view) => ({
+              identity: { catalog: tableIdentity(view).schema, name: foldIdentifier(view.name) },
+              name: view.name,
+              ...(view.columns ? { columns: view.columns } : {}),
+              query: semanticValue(view.query),
+            })),
+          }
+        : {}),
       tables: tables.map((table) => {
         const identity = tableIdentity(table);
         return {
@@ -129,14 +137,14 @@ export const toDatabaseSchema = (
       }),
     };
     const diagnostics = [...indexDiagnostics, ...validateDatabase(database, side)];
-    for (const table of tables) {
+    for (const table of [...tables, ...views]) {
       const id = tableIdentity(table);
       if (table.temporary && id.schema !== "temp")
         diagnostics.push({
           code: "InvalidTemporarySchema",
           side,
           table: { catalog: id.schema, name: id.name },
-          message: `TEMP table ${JSON.stringify([id.schema, id.name])} must use the temp schema`,
+          message: `TEMP declaration ${JSON.stringify([id.schema, id.name])} must use the temp schema`,
         });
     }
     if (diagnostics.length) return yield* Effect.fail(new SchemaDiffError({ diagnostics }));
@@ -146,6 +154,7 @@ export const toDatabaseSchema = (
       createIndex.encode,
       { discard: true },
     );
+    yield* viewsFromDatabaseSchema(database);
     return database;
   });
 
@@ -227,5 +236,5 @@ export const fromDatabaseSchema = (database: DatabaseSchema) =>
   Effect.gen(function* () {
     const tables = yield* tablesFromDatabaseSchema(database);
     const indexes = yield* indexesFromDatabaseSchema(database);
-    return [...tables, ...indexes];
+    return [...tables, ...indexes, ...(yield* viewsFromDatabaseSchema(database))];
   });
