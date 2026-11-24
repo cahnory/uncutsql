@@ -223,3 +223,22 @@ test("ordinary values cannot be silently replaced by a same-name generated colum
     );
   }
 });
+
+test("rebuild preserves distinct rowids and rejects competing integer primary key copies", () => {
+  const before = "CREATE TABLE t (id INTEGER, value TEXT)";
+  for (const after of [
+    "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT)",
+    'CREATE TABLE t (id "integer", value TEXT, PRIMARY KEY (ID DESC))',
+  ])
+    assert.throws(() => migration(before, after), /Cannot preserve both the rowid and column/);
+
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec(before);
+    db.exec("INSERT INTO t(rowid, id, value) VALUES (42, 7, 'kept')");
+    db.exec(migration(before, "CREATE TABLE t (id INTEGER PRIMARY KEY DESC, value TEXT)"));
+    assert.deepEqual({ ...db.prepare("SELECT rowid, id FROM t").get() }, { rowid: 42, id: 7 });
+  } finally {
+    db.close();
+  }
+});

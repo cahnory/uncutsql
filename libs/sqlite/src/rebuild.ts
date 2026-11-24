@@ -32,6 +32,22 @@ const rowidAlias = (table: CreateTable) =>
     (name) => !table.columns.some((column) => foldIdentifier(column.name) === name),
   );
 
+// Only the exact INTEGER type aliases the rowid. SQLite treats inline
+// PRIMARY KEY DESC differently from DESC in a table-level primary key.
+const integerPrimaryKey = (table: CreateTable) =>
+  table.columns.find((column) => {
+    if (!/^(?:integer|"integer"|`integer`|\[integer\])$/i.test(column.typeName ?? "")) return false;
+    return (
+      column.constraints.some((item) => item._tag === "PrimaryKey" && item.order !== "DESC") ||
+      table.tableConstraints.some(
+        (item) =>
+          item._tag === "PrimaryKey" &&
+          item.columns.length === 1 &&
+          foldIdentifier(item.columns[0]!.column) === foldIdentifier(column.name),
+      )
+    );
+  })?.name;
+
 /** Return explicit name-based copy columns, including accessible hidden rowids. */
 export const rebuildCopy = (
   before: CreateTable,
@@ -70,8 +86,16 @@ export const rebuildCopy = (
       return `Cannot copy ${JSON.stringify(old.name)} into generated column ${JSON.stringify(column.name)}`;
   }
   if (hasRowid(before) && hasRowid(after)) {
-    const source = rowidAlias(before);
-    const target = rowidAlias(after);
+    const oldKey = integerPrimaryKey(before);
+    const newKey = integerPrimaryKey(after);
+    const keyCopy = columns.find((column) => column.target === newKey);
+    if (keyCopy) {
+      if (keyCopy.source !== oldKey)
+        return `Cannot preserve both the rowid and column ${JSON.stringify(keyCopy.source)} in integer primary key ${JSON.stringify(newKey)}`;
+      return columns;
+    }
+    const source = oldKey ?? rowidAlias(before);
+    const target = newKey ?? rowidAlias(after);
     if (!source || !target) return "Cannot preserve rowids when all rowid aliases are shadowed";
     columns.unshift({ source, target });
   }
