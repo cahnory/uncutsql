@@ -164,6 +164,13 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 
 ### Current work in priority order
 
+1. [ ] Prevent rebuilds from mapping two independent values onto the same integer primary key.
+2. [ ] Validate the reserved history table's column constraints before using it.
+3. [ ] Bound concurrent migration-file reads during apply.
+4. [ ] Accept SQLite single-quoted query aliases and verify the formatted result with SQLite.
+
+### Previous pass
+
 1. [x] Reject rebuilds that discard ordinary column values on conversion to generated columns.
 2. [x] Make index snapshot ordering reproducible across locales and declaration orders.
 3. [x] Match SQLite tokenization of a trailing bare block-comment opener.
