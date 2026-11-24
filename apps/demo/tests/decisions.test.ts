@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -28,7 +28,7 @@ test("CLI requires reviewable decisions, persists them, and applies renamed data
     const before = "CREATE TABLE t(id INTEGER PRIMARY KEY, old TEXT)",
       after = "CREATE TABLE t(id INTEGER PRIMARY KEY, new TEXT NOT NULL)";
     const dbPath = join(cwd, "db.sqlite"),
-      decisions = join(cwd, "choices.json");
+      decisions = join(cwd, "uncutsql.decisions.json");
     assert.equal(run(cwd, ["generate", "-"], before).status, 0);
     assert.equal(run(cwd, ["apply", dbPath]).status, 0);
     const db = new DatabaseSync(dbPath);
@@ -38,12 +38,12 @@ test("CLI requires reviewable decisions, persists them, and applies renamed data
     assert.equal(unresolved.status, 1);
     assert.match(unresolved.stderr, /Unresolved migration decisions/);
     assert.equal(existsSync(join(cwd, "migrations", "000002.sql")), false);
-    const prepared = run(cwd, ["generate", "-", "--write-decisions", decisions], after);
+    const prepared = run(cwd, ["generate", "-", "--write-decisions"], after);
     assert.equal(prepared.status, 0, prepared.stderr);
     const pending = JSON.parse(readFileSync(decisions, "utf8")) as MigrationDecisions;
     assert.deepEqual(pending.decisions[0]!.candidates, ["new"]);
     assert.equal(pending.decisions[0]!.resolution, null);
-    const second = run(cwd, ["generate", "-", "--write-decisions", decisions], after);
+    const second = run(cwd, ["generate", "-", "--write-decisions"], after);
     assert.equal(second.status, 1);
     assert.deepEqual(JSON.parse(readFileSync(decisions, "utf8")), pending);
     writeFileSync(
@@ -56,7 +56,7 @@ test("CLI requires reviewable decisions, persists them, and applies renamed data
         })),
       }),
     );
-    const generated = run(cwd, ["generate", "-", "--decisions", decisions], after);
+    const generated = run(cwd, ["generate", "-"], after);
     assert.equal(generated.status, 0, generated.stderr);
     const sql = readFileSync(join(cwd, "migrations", "000002.sql"), "utf8");
     assert.match(sql, /uncutsql-decisions:/);
@@ -108,5 +108,65 @@ test("migration decision output and explicit drop preserve add-default semantics
     }
   } finally {
     rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("default and configured decision files can be prepared and loaded without path flags", () => {
+  for (const configured of [false, true]) {
+    const cwd = mkdtempSync(join(tmpdir(), "uncutsql-decision-config-"));
+    try {
+      mkdirSync(join(cwd, "project"));
+      const config = join(cwd, "project/settings.json");
+      writeFileSync(config, JSON.stringify(configured ? { decisions: "review.json" } : {}));
+      const prefix = ["--config", config];
+      const before = join(cwd, "before.sql"),
+        after = join(cwd, "after.sql");
+      writeFileSync(before, "CREATE TABLE t(old)");
+      writeFileSync(after, "CREATE TABLE t(new)");
+      const args = [...prefix, "migration", before, after];
+      const missing = run(cwd, args);
+      assert.equal(missing.status, 1);
+      assert.match(
+        missing.stderr,
+        configured ? /Cannot read decisions/ : /Unresolved migration decisions/,
+      );
+      const prepared = run(cwd, [...args, "--write-decisions"]);
+      assert.equal(prepared.status, 0, prepared.stderr);
+      const path = join(cwd, "project", configured ? "review.json" : "uncutsql.decisions.json");
+      const pending = JSON.parse(readFileSync(path, "utf8")) as MigrationDecisions;
+      assert.equal(run(cwd, [...args, "--write-decisions"]).status, 1);
+      writeFileSync(
+        path,
+        JSON.stringify({
+          ...pending,
+          decisions: pending.decisions.map((item) => ({
+            ...item,
+            resolution: { _tag: "Rename", target: "new" },
+          })),
+        }),
+      );
+      const rendered = run(cwd, args);
+      assert.equal(rendered.status, 0, rendered.stderr);
+      assert.match(rendered.stdout, /"_tag":"Rename"/);
+      writeFileSync(path, "invalid json");
+      assert.match(run(cwd, args).stderr, /Cannot read decisions/);
+      assert.equal(run(cwd, [...prefix, "format", before]).status, 0);
+      const override = join(cwd, "override.json");
+      writeFileSync(
+        override,
+        JSON.stringify({
+          ...pending,
+          decisions: pending.decisions.map((item) => ({
+            ...item,
+            resolution: { _tag: "Drop" },
+          })),
+        }),
+      );
+      const overridden = run(cwd, [...args, "--decisions", "override.json"]);
+      assert.equal(overridden.status, 0, overridden.stderr);
+      assert.match(overridden.stdout, /removes column data/);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
   }
 });

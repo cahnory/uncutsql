@@ -104,12 +104,7 @@ test("CLI diff reports structured changes and supports one stdin input", () => {
     assert.equal(malformed.status, 1);
     assert.equal(malformed.stdout, "");
     assert.match(malformed.stderr, /<stdin>:1:1/);
-    for (const args of [
-      ["diff"],
-      ["diff", before],
-      ["diff", "-", "-"],
-      ["diff", before, after, "extra"],
-    ]) {
+    for (const args of [["diff"], ["diff", "-", "-"], ["diff", before, after, "extra"]]) {
       assert.equal(run(args).status, 2);
     }
     assert.equal(readFileSync(before, "utf8"), "CREATE TABLE t (a INTEGER)");
@@ -183,12 +178,59 @@ test("configured multipart schemas use config-relative paths and retain part dia
     const generated = invoke("generate");
     assert.equal(generated.status, 0, generated.stderr);
     assert.match(readFileSync(join(cwd, "project/history/000001.sql"), "utf8"), /CREATE INDEX/);
+    assert.deepEqual(JSON.parse(invoke("diff").stdout), { changes: [] });
+    put("nested/t.uncut.sql", "CREATE TABLE t (id, name TEXT)");
+    assert.match(invoke("diff").stdout, /ColumnAdded/);
     const applied = invoke("apply", "db.sqlite");
     assert.equal(applied.status, 0, applied.stderr);
     put("nested/t.uncut.sql", "-- line one\ninvalid");
     const invalid = invoke("format");
     assert.equal(invalid.stdout, "");
     assert.match(invalid.stderr, /t\.uncut\.sql:2:1/);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("project diff uses the lock, discovers config, and never generates output", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "uncutsql-project-diff-"));
+  try {
+    const schema = join(cwd, "schema.sql");
+    writeFileSync(schema, "CREATE TABLE t (id)");
+    writeFileSync(
+      join(cwd, "uncutsql.config.json"),
+      JSON.stringify({
+        schema: "schema.sql",
+        migrations: "history",
+      }),
+    );
+    const initial = run([], "", cwd);
+    assert.equal(initial.status, 0, initial.stderr);
+    assert.match(initial.stdout, /TableAdded/);
+    assert.throws(() => readFileSync(join(cwd, "history/uncutsql.lock.json")));
+    const generated = run(["generate"], "", cwd);
+    assert.equal(generated.status, 0, generated.stderr);
+    const lock = readFileSync(join(cwd, "history/uncutsql.lock.json"), "utf8");
+    assert.deepEqual(JSON.parse(run(["diff"], "", cwd).stdout), { changes: [] });
+    writeFileSync(schema, "CREATE TABLE t (id, name TEXT)");
+    const changed = run(["--config", "uncutsql.config.json"], "", cwd);
+    assert.equal(changed.status, 0, changed.stderr);
+    assert.match(changed.stdout, /ColumnAdded/);
+    writeFileSync(join(cwd, "override.sql"), "CREATE TABLE t (id)");
+    const overridden = run(
+      ["diff", "--schema", "override.sql", "--migrations", "history"],
+      "",
+      cwd,
+    );
+    assert.equal(overridden.status, 0, overridden.stderr);
+    assert.deepEqual(JSON.parse(overridden.stdout), { changes: [] });
+    assert.match(
+      run(["diff", "schema.sql", "--schema", "override.sql"], "", cwd).stdout,
+      /ColumnAdded/,
+    );
+    assert.equal(readFileSync(join(cwd, "history/uncutsql.lock.json"), "utf8"), lock);
+    writeFileSync(join(cwd, "history/000001.sql"), "tampered");
+    assert.match(run(["diff"], "", cwd).stderr, /migration hash/);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }

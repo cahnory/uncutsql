@@ -74,7 +74,14 @@ export const readBaseline = (directory: string, dialect: string) =>
   Effect.gen(function* () {
     const path = join(directory, lockName);
     const source = yield* io(path, () => readOptional(path));
-    const files = (yield* io(directory, () => readdir(directory)))
+    const files = (yield* io(directory, async () => {
+      try {
+        return await readdir(directory);
+      } catch (cause) {
+        if (hasCode(cause, "ENOENT")) return [];
+        throw cause;
+      }
+    }))
       .filter((name) => /^\d+\.sql$/.test(name))
       .sort((left, right) => Number(left.slice(0, -4)) - Number(right.slice(0, -4)));
     if (source === undefined) {
@@ -276,4 +283,17 @@ export const prepareGeneratedDecisions = <Ast, Plan, E extends Error, R>(
         return yield* prepareMigrationDecisions(baseline.database, after);
       }),
     );
+  });
+
+/** Read-only comparison against the saved migration baseline; never creates output. */
+export const compareGeneratedSchema = <Ast, Plan, E extends Error, R>(
+  dialect: Dialect<Ast, Plan, E, R>,
+  ast: Ast,
+  directory: string,
+) =>
+  Effect.gen(function* () {
+    const after = yield* dialect.toDatabaseSchema(ast, "after");
+    const baseline = yield* readBaseline(directory, dialect.name);
+    const diff = yield* diffDatabases(baseline.database, after);
+    return { before: baseline.database, after, diff };
   });

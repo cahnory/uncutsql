@@ -321,6 +321,14 @@ Install chosen plugins in the calling project and configure module specifiers:
 }
 ```
 
+Edit your schema file or directory directly, then run `uncutsql diff` to compare it
+against `uncutsql.lock.json` in the migration directory. With a configured schema,
+`uncutsql` alone performs the same read-only diff. Run `uncutsql generate` explicitly
+to write a migration and update the lock. A missing baseline is an empty schema.
+Use `--schema path` and `--migrations directory` to override config from the CLI;
+positional paths take precedence over flags. Without a configured schema, a bare
+invocation reports a usage error.
+
 Set `schema` and `migrations` to use project defaults for the input and output paths. See the [multipart schema example](libs/cli/README.md#keep-schema-paths-in-project-config).
 
 Save this as `uncutsql.config.json` (or use `.uncutsqlrc.json`, a default-exported

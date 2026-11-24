@@ -8,6 +8,8 @@ export interface UncutConfig {
   readonly schema?: string;
   /** Directory containing numbered migrations and the lock, relative to this config. */
   readonly migrations?: string;
+  /** Review decisions file, relative to this config. */
+  readonly decisions?: string;
   readonly dialect?: string;
   readonly driver?: string;
 }
@@ -21,7 +23,7 @@ const record = (value: unknown): value is Record<string, unknown> =>
 const validate = (value: unknown): UncutConfig => {
   if (!record(value)) throw new Error("Expected a configuration object");
   for (const key of Object.keys(value)) {
-    if (key !== "dialect" && key !== "driver" && key !== "schema" && key !== "migrations")
+    if (!["dialect", "driver", "schema", "migrations", "decisions"].includes(key))
       throw new Error(`Unknown configuration option: ${key}`);
     if (typeof value[key] !== "string" || !value[key].trim())
       throw new Error(`${key} must be a nonempty string`);
@@ -35,10 +37,12 @@ export const parseOptions = (args: readonly string[]) =>
       const positional: string[] = [];
       const options: {
         config?: string;
+        schema?: string;
+        migrations?: string;
         dialect?: string;
         driver?: string;
         decisions?: string;
-        writeDecisions?: string;
+        writeDecisions?: string | true;
       } = {};
       for (let index = 0; index < args.length; index++) {
         const arg = args[index]!;
@@ -48,6 +52,8 @@ export const parseOptions = (args: readonly string[]) =>
         }
         const [name, ...inline] = arg.split("=");
         if (
+          name !== "--schema" &&
+          name !== "--migrations" &&
           name !== "--config" &&
           name !== "--dialect" &&
           name !== "--driver" &&
@@ -55,6 +61,16 @@ export const parseOptions = (args: readonly string[]) =>
           name !== "--write-decisions"
         ) {
           positional.push(arg);
+          continue;
+        }
+        if (
+          name === "--write-decisions" &&
+          !inline.length &&
+          (args[index + 1] === undefined || args[index + 1]!.startsWith("--"))
+        ) {
+          if (options.writeDecisions !== undefined)
+            throw new Error(`${name} was specified more than once`);
+          options.writeDecisions = true;
           continue;
         }
         const value = inline.length ? inline.join("=") : args[++index];
@@ -76,7 +92,14 @@ export interface PluginSelection {
   readonly directory: string;
 }
 export const resolveConfig = (
-  options: { config?: string; dialect?: string; driver?: string },
+  options: {
+    config?: string;
+    dialect?: string;
+    driver?: string;
+    schema?: string;
+    migrations?: string;
+    decisions?: string;
+  },
   cwd: string,
 ) =>
   Effect.tryPromise({
@@ -131,10 +154,23 @@ export const resolveConfig = (
         return specifier === undefined ? undefined : { specifier, directory };
       };
       return {
+        decisions:
+          options.decisions === undefined
+            ? resolve(directory, config.decisions ?? "uncutsql.decisions.json")
+            : resolve(cwd, options.decisions),
+        decisionsRequired: options.decisions !== undefined || config.decisions !== undefined,
         dialect: select("dialect"),
         driver: select("driver"),
-        schema: config.schema && resolve(directory, config.schema),
-        migrations: config.migrations && resolve(directory, config.migrations),
+        schema:
+          options.schema === undefined
+            ? config.schema && resolve(directory, config.schema)
+            : options.schema === "-"
+              ? "-"
+              : resolve(cwd, options.schema),
+        migrations:
+          options.migrations === undefined
+            ? config.migrations && resolve(directory, config.migrations)
+            : resolve(cwd, options.migrations),
       };
     },
     catch: (cause) =>

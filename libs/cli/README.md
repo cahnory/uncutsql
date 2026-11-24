@@ -59,6 +59,7 @@ export default defineConfig({
   driver: "@uncutsql/sqlite-driver",
   schema: "./db/schema",
   migrations: "./db/migrations",
+  decisions: "./db/decisions.json",
 });
 ```
 
@@ -74,3 +75,50 @@ a directory. Directories include regular `*.uncut.sql` files recursively in sort
 path order. Each file contains complete statements and can omit its final semicolon.
 An empty directory produces an error. Use an empty SQL file to express an empty schema.
 Use an explicit `-` to read stdin when a project schema is configured.
+
+## Diff the edited schema against its lock
+
+`uncutsql diff` compares the configured schema with the saved database model in
+`<migrations>/uncutsql.lock.json`. Edit the schema file or directory directly, review
+the diff, then run `uncutsql generate` to publish the migration and update the lock.
+A missing baseline means an empty schema; existing migration history and hashes
+are checked before comparison. Diff never creates migration files or directories.
+
+```sh
+uncutsql                              # read-only diff using discovered config
+uncutsql --config ./db/settings.json   # read-only diff using this config
+uncutsql diff --schema ./db/schema --migrations ./db/migrations --dialect @uncutsql/sqlite
+uncutsql diff ./db/schema              # override the configured schema
+uncutsql diff before.sql after.sql     # explicit two-schema comparison
+```
+
+Discovery checks the working directory: `package.json`'s `uncutsql` property first,
+then `.uncutsqlrc.json`, then `uncutsql.config` with extensions `.json`, `.js`,
+`.cjs`, `.mjs`, `.ts`, `.cts`, `.mts`, in that order. It does not search parent
+directories or guess schema paths. With no configured or explicit schema, a bare
+invocation returns a usage error. Migration output defaults to `./migrations`.
+
+`--schema` and `--migrations` override config and resolve from the working directory.
+Positional paths take precedence over those flags. `--dialect` and `--driver` also
+override config. Database application always requires `apply` and an explicit target.
+
+## Default decision file
+
+`migration` and `generate` automatically read `decisions` from config. The default
+is `uncutsql.decisions.json` beside the config, or in the working directory when
+no config is found. An absent default is ignored; an absent explicitly configured
+file or `--decisions` path is an error. Malformed and stale files fail validation.
+Other commands do not read this file.
+
+```sh
+uncutsql generate --write-decisions  # create the configured/default review file
+# Edit its resolution fields.
+uncutsql generate                    # load the answers automatically
+```
+
+`--decisions path` overrides the read path; `--write-decisions path` overrides the
+preparation destination. Explicit paths resolve from the working directory;
+configured paths resolve from the config directory. Preparation never overwrites
+an existing file and never loads the old answers. After generation, remove or
+archive the review file before preparing the next change: its snapshots describe
+only the reviewed baseline and target.

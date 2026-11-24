@@ -25,6 +25,23 @@ pnpm demo:cli migration examples/schema.sql examples/schema-next.sql
 to that directory. `pnpm cli` remains the generic CLI running from your current
 working directory; it does not implicitly choose the demo's config.
 
+## Try a multipart schema
+
+The multipart example splits the same baseline into `users.uncut.sql` and
+`blog/posts.uncut.sql`. The posts table references users across files. From the
+repository root, compare the directory with the single-file version, then use the
+example's config to generate and apply its migration.
+
+```sh
+pnpm demo:cli diff examples/schema.sql examples/multipart/schema
+pnpm demo:cli --config examples/multipart/uncutsql.config.json generate
+pnpm demo:cli --config examples/multipart/uncutsql.config.json apply .local/multipart/app.sqlite
+```
+
+The diff should report `{"changes":[]}`. The config selects the schema directory
+and keeps this example's migration history under `.local/multipart/migrations`.
+Run the last two commands again to see the up-to-date messages.
+
 ## Generate and apply migrations
 
 Run the following in order. Generated files and the SQLite database live in the
