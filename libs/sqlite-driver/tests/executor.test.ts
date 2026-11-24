@@ -430,3 +430,31 @@ test("live view snapshots survive rebuilds and detect drift before the next migr
     target.close();
   }
 });
+
+test("live schema inspection matches legacy quoted declarations to canonical names", async () => {
+  const target = fixture();
+  const legacy = `
+    CREATE TABLE 'parent' ('it''s id' INTEGER PRIMARY KEY);
+    CREATE TABLE 'child' ('key' REFERENCES 'parent' ('it''s id'));
+    CREATE INDEX 'child keys' ON 'child' ("key");
+    CREATE VIEW 'report' ('display name') AS SELECT 'key' FROM 'child';
+  `;
+  const desired = model(`
+    CREATE TABLE "parent" ("it's id" INTEGER PRIMARY KEY);
+    CREATE TABLE "child" ("key" REFERENCES "parent" ("it's id"));
+    CREATE INDEX "child keys" ON "child" ("key");
+    CREATE VIEW "report" ("display name") AS SELECT 'key' FROM "child";
+  `);
+  const migration = source(1, `BEGIN; ${legacy} COMMIT;`);
+  try {
+    await Effect.runPromise(applyMigrations(target.path, [migration], desired, verify));
+    exec(target.path, "INSERT INTO parent VALUES (7); INSERT INTO child VALUES (7)");
+    assert.deepEqual(read(target.path, "SELECT * FROM report"), [{ "display name": "key" }]);
+    const resumed = await Effect.runPromise(
+      applyMigrations(target.path, [migration], desired, verify),
+    );
+    assert.deepEqual(resumed.appliedIds, []);
+  } finally {
+    target.close();
+  }
+});

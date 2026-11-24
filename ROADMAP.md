@@ -12,7 +12,9 @@ The trigger migration and initial VS Code milestones are complete.
 
 SQLite snapshots now round-trip triggers on tables and views through JSON. Generated migrations now suspend triggers before rebuilding tables or replacing their views. The demo verifies that deleting through a view fires its trigger after a rebuild and that CLI apply detects a changed trigger body.
 
-SQLite contextual keyword and legacy quoting work can proceed independently of these handoffs.
+SQLite now accepts legacy single quotes around relation names, declared columns and foreign key targets. The driver verifies these names when applying and resuming a migration, and the editor resolves quoted foreign key targets across documents.
+
+Next, extend contextual keyword support in explicit alias positions. Test implicit aliases separately because a following keyword can also introduce a query clause.
 
 ## VS Code support
 
