@@ -166,7 +166,7 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 
 ## Roadmap
 
-1. Parse and format trigger declarations and bodies, then implement trigger model conversion and rebuild preservation.
+1. Parse and format trigger declarations and bodies. Test that source-map ranges select the trigger name and its target table name precisely. Then implement trigger model conversion and rebuild preservation.
 2. Extend contextual keyword and legacy quoting compatibility. The lexical and query checklists track individual syntax features.
 
 See the [workspace roadmap](../../ROADMAP.md) for the core and executor dependencies.
