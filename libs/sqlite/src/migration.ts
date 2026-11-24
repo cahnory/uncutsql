@@ -1,4 +1,4 @@
-import { viewsFromDatabaseSchema } from "./views.ts";
+import { planViewOperations, viewsFromDatabaseSchema } from "./views.ts";
 import { createView, type CreateView } from "./codecs/create-view.ts";
 import { identifier } from "./codecs/identifier.ts";
 import { createIndex, type CreateIndex } from "./codecs/create-index.ts";
@@ -341,49 +341,22 @@ export const lowerMigration = (
         op._tag === "RebuildTable" || op._tag === "RenameTable" ? [op.table.schema, "temp"] : [],
       ),
     );
-    const viewDrops = new Set<string>();
-    const viewCreates = new Set<string>();
-    for (const procedure of procedures.procedures) {
-      if (!("view" in procedure) && procedure._tag !== "ReplaceView") continue;
-      const view = "view" in procedure ? procedure.view : procedure.before;
-      const key = tableKey({ schema: view.identity.catalog ?? "", name: view.identity.name });
-      if (procedure._tag !== "CreateView") viewDrops.add(key);
-      if (procedure._tag !== "DropView") viewCreates.add(key);
-    }
-    const dropViews: MigrationOperation[] = [];
-    const createViews: MigrationOperation[] = [];
-    for (const view of beforeViews) {
-      const table = tableIdentity(view);
-      const key = tableKey(table);
-      if (viewDrops.delete(key) || affectedSchemas.has(table.schema)) {
-        dropViews.push({ _tag: "DropView", table });
-        // Suspend unchanged views as well, including chains of views and TEMP dependencies.
-        if (
-          affectedSchemas.has(table.schema) &&
-          afterViews.some((item) => tableKey(tableIdentity(item)) === key)
-        )
-          viewCreates.add(key);
-      }
-    }
-    for (const definition of afterViews) {
-      const table = tableIdentity(definition);
-      if (viewCreates.delete(tableKey(table)))
-        createViews.push({ _tag: "CreateView", table, definition });
-    }
-    if (viewDrops.size || viewCreates.size)
-      return yield* Effect.fail(
-        new EncodeError({ message: "View procedure does not match its database context" }),
-      );
+    const viewSteps = yield* planViewOperations(
+      procedures,
+      beforeViews,
+      afterViews,
+      affectedSchemas,
+    );
     const guards = (procedures.dropGuards ?? []).map((guard): MigrationOperation => ({
       _tag: "CheckDrop",
       table: { schema: guard.table.catalog ?? "main", name: guard.table.name },
       ...(guard.column !== undefined ? { column: guard.column } : {}),
       scratch: { schema: "temp", name: allocate("temp", "__uncutsql_drop_guard") },
     }));
-    operations.unshift(...guards, ...dropViews, ...indexDrops.values());
-    operations.push(...indexCreates.values(), ...createViews);
+    operations.unshift(...guards, ...viewSteps.drops, ...indexDrops.values());
+    operations.push(...indexCreates.values(), ...viewSteps.creates);
     if (operations.length)
-      for (const view of afterViews)
+      for (const view of viewSteps.retained)
         operations.push({ _tag: "VerifyView", table: tableIdentity(view) });
     if (diagnostics.length) return yield* Effect.fail(new MigrationPlanError({ diagnostics }));
     const guardTable = operations.some(
