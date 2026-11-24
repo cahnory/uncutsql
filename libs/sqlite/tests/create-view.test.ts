@@ -72,7 +72,7 @@ test("rebuilds preserve chained views and refuse unmodeled triggers on a view", 
 test("a partial logical plan rebuilds using the existing view definition", () => {
   const beforeSql = "CREATE TABLE t(n INT); CREATE VIEW v AS SELECT n FROM t";
   const afterSql =
-    "CREATE TABLE t(n INT UNIQUE); CREATE VIEW v AS SELECT 99 AS n; CREATE VIEW deferred AS VALUES (1)";
+    "CREATE TABLE t(n INT UNIQUE); CREATE VIEW v AS SELECT 99 AS n; CREATE VIEW later_view AS VALUES (1)";
   const model = (sql: string) =>
     Effect.runSync(Effect.flatMap(schema.decode(sql), toDatabaseSchema));
   const before = model(beforeSql);

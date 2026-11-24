@@ -389,9 +389,12 @@ rename, validate foreign keys and commit, then enable enforcement. Copy uses
 INSERT OR ROLLBACK so ON CONFLICT IGNORE/REPLACE cannot silently discard rows.
 A temporary CHECK-constrained guard turns nonzero foreign_key_check counts into
 rollback failures. Checks run for each affected schema. Runtime preflight checks
-reject unrepresented explicit indexes/triggers on rebuilt tables and views in
-affected schemas, plus temporary views/triggers that could refer across schemas.
-Such objects cannot yet be reconstructed from the supported schema inputs.
+reject unknown explicit indexes and triggers on rebuilt tables, undeclared views in
+affected schemas (including temp), and triggers on views scheduled for removal.
+Before a rebuild or rename, the planner drops declared views in the affected schema
+and in temp. It recreates them after table and index operations and resolves each
+retained view with a zero-row query before commit. Suspending all declared views
+in those schemas covers dependencies through other views.
 
 These remain generated scripts, not an application runner: execution must stop
 on the first error, roll back if needed, and restore foreign_keys=ON after failure.
@@ -429,8 +432,7 @@ Tests exercise core without importing SQLite or codecs, including case-sensitive
 keys, multiple namespace components, structured types and arbitrary vendor options.
 SQLite adapter tests round-trip JSON models and execute migrations planned solely
 from those models. These establish reusable boundaries, not support for a second
-SQL parser or arbitrary cross-dialect semantic conversion. Standalone indexes,
-views and other object kinds still need model extensions as they are implemented.
+SQL parser or arbitrary cross-dialect semantic conversion. Standalone indexes belong to tables in the shared model. Views carry a namespace, name, optional column list and dialect-normalized query.
 
 ## Consumer-owned wiring
 
