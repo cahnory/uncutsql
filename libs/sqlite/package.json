@@ -12,8 +12,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./create-table": "./src/create-table.ts",
-    "./tokens": "./src/tokens.ts",
     "./language-service": "./src/language-service.ts",
+    "./tokens": "./src/tokens.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -26,15 +26,15 @@
         "import": "./dist/create-table.js",
         "require": "./dist/create-table.cjs"
       },
+      "./language-service": {
+        "import": "./dist/language-service.js",
+        "require": "./dist/language-service.cjs"
+      },
       "./tokens": {
         "import": "./dist/tokens.js",
         "require": "./dist/tokens.cjs"
       },
-      "./package.json": "./package.json",
-      "./language-service": {
-        "import": "./dist/language-service.js",
-        "require": "./dist/language-service.cjs"
-      }
+      "./package.json": "./package.json"
     }
   },
   "scripts": {

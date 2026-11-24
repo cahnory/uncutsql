@@ -3,13 +3,14 @@
   "displayName": "UncutSQL",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "description": "SQLite schema diagnostics, Outline and foreign key navigation for UncutSQL.",
   "publisher": "uncutsql",
+  "type": "module",
   "main": "./dist/extension.cjs",
   "scripts": {
     "build": "tsdown",
     "vscode:prepublish": "pnpm build",
+    "check:editor": "pnpm build && node tests/run.ts",
     "check:types": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {

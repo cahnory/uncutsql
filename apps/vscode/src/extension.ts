@@ -1,5 +1,5 @@
 import { dirname, isAbsolute, relative, sep } from "node:path";
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import * as vscode from "vscode";
 import { Effect } from "effect";
 import { resolveConfig, schemaFiles } from "@uncutsql/cli";
@@ -129,9 +129,28 @@ export function activate(context: vscode.ExtensionContext) {
         const locations: vscode.Location[] = [];
         for (const file of await schemaFiles(path)) {
           if (token.isCancellationRequested) return;
-          const target = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
-          for (const span of definitions(reference, analysis(target)))
-            locations.push(new vscode.Location(target.uri, range(target, span)));
+          const uri = vscode.Uri.file(file);
+          const target = vscode.workspace.textDocuments.find((doc) => doc.uri.fsPath === file);
+          if (target) {
+            for (const span of definitions(reference, analysis(target))) {
+              locations.push(new vscode.Location(uri, range(target, span)));
+            }
+            continue;
+          }
+          const diskText = await readFile(file, "utf8");
+          const parsed = analyzeSchema(diskText);
+          const positionAt = (offset: number) => {
+            const lines = diskText.slice(0, offset).split(/\r\n|\r|\n/);
+            return new vscode.Position(lines.length - 1, lines.at(-1)!.length);
+          };
+          for (const span of definitions(reference, parsed)) {
+            locations.push(
+              new vscode.Location(
+                uri,
+                new vscode.Range(positionAt(span.start), positionAt(span.end)),
+              ),
+            );
+          }
         }
         return locations;
       },
