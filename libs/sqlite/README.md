@@ -8,17 +8,17 @@ Bidirectional SQLite syntax codecs and migration rendering, built on
 The current focus is **table-schema management**, not a general-purpose SQLite
 query parser. Schema files support table, standalone index and view declarations. Expression support is substantial but incomplete.
 
-| Area                   | Status             | Current boundary                                                                                      |
-| ---------------------- | ------------------ | ----------------------------------------------------------------------------------------------------- |
-| Lexical syntax         | Supported subset   | Comments, quoted identifiers, literals and operators; contextual keyword fallbacks remain limited     |
-| Expressions            | Partial            | Arithmetic, comparisons, calls, IN/BETWEEN, COLLATE and JSON extraction; remaining forms listed below |
-| CREATE TABLE           | Supported subset   | Columns, constraints, references, generated columns and table options; including AS queries           |
-| Schema files           | Supported subset   | Ordered table, index and view declarations, empty statements and optional final semicolon             |
-| Queries                | Supported subset   | SELECT/VALUES, joins, compounds, subqueries and WITH/recursive CTEs                                   |
-| Other input statements | Not implemented    | Other DDL, DML and administrative statements                                                          |
-| AST ↔ database model   | Tables and indexes | Columns, constraints, options and schema identity; views and triggers pending                         |
-| Migration output       | Supported subset   | Create, drop, add column and rebuild; this is separate from input parsing                             |
-| Database execution     | Separate package   | `@uncutsql/sqlite-driver` owns native SQLite access                                                   |
+| Area                   | Status                    | Current boundary                                                                                      |
+| ---------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Lexical syntax         | Supported subset          | Comments, quoted identifiers, literals and operators; contextual keyword fallbacks remain limited     |
+| Expressions            | Partial                   | Arithmetic, comparisons, calls, IN/BETWEEN, COLLATE and JSON extraction; remaining forms listed below |
+| CREATE TABLE           | Supported subset          | Columns, constraints, references, generated columns and table options; including AS queries           |
+| Schema files           | Supported subset          | Ordered table, index and view declarations, empty statements and optional final semicolon             |
+| Queries                | Supported subset          | SELECT/VALUES, joins, compounds, subqueries and WITH/recursive CTEs                                   |
+| Other input statements | Not implemented           | Other DDL, DML and administrative statements                                                          |
+| AST ↔ database model   | Tables, indexes and views | Columns, constraints, options, view queries and schema identity                                       |
+| Migration output       | Supported subset          | Create, drop, add column and rebuild; this is separate from input parsing                             |
+| Database execution     | Separate package          | `@uncutsql/sqlite-driver` owns native SQLite access                                                   |
 
 There is no overall syntax percentage yet: a keyword count would overstate
 coverage, and a grammar-production count would give very different weights to
@@ -109,7 +109,7 @@ context restrictions, including prohibiting subqueries.
 - [x] CREATE TABLE AS SELECT/VALUES/WITH, with schema qualification and TEMP/IF NOT EXISTS.
       Parsing/formatting supports these statements; declarative schema comparison rejects them
       because deriving columns and populating data requires query evaluation.
-- [x] CREATE VIEW, including TEMP, IF NOT EXISTS, schema qualification, optional column names and AS queries. Use `createView` for one declaration. Comparison and migration generation reject views until the database model represents them.
+- [x] CREATE VIEW, including TEMP, IF NOT EXISTS, schema qualification, optional column names and AS queries. Use `createView` for one declaration.
 - [ ] CREATE VIRTUAL TABLE and module-specific arguments.
 - [ ] Remaining SQLite grammar edge cases beyond this explicit subset; this is
       not a claim of exhaustive CREATE TABLE compatibility.
@@ -147,7 +147,8 @@ for them. For example, generating ALTER TABLE ADD COLUMN does **not** mean that
 - [x] Apply explicit column-rename decisions through rebuild copy mappings, including type/constraint changes.
 - [ ] Infer rename candidates by similarity or define custom data transformations.
 - [x] Parse and model standalone indexes, including unique, expression and partial indexes. Recreate desired indexes after rebuilds.
-- [ ] Model and preserve views and triggers during rebuilds.
+- [x] Model and preserve views during rebuilds.
+- [ ] Model and preserve triggers during rebuilds.
 - [ ] General cross-dialect conversion or arbitrary migration-script parsing.
 
 Core owns comparison and logical planning; this dialect lowers those procedures
@@ -165,9 +166,8 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 
 ## Roadmap
 
-1. Map view declarations into the shared view model, lower logical changes to SQL and preserve dependent views during table rebuilds.
-2. Parse and format trigger declarations and bodies, then implement trigger model conversion and rebuild preservation.
-3. Extend contextual keyword and legacy quoting compatibility. The lexical and query checklists track individual syntax features.
+1. Parse and format trigger declarations and bodies, then implement trigger model conversion and rebuild preservation.
+2. Extend contextual keyword and legacy quoting compatibility. The lexical and query checklists track individual syntax features.
 
 See the [workspace roadmap](../../ROADMAP.md) for the core and executor dependencies.
 

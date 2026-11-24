@@ -71,7 +71,7 @@ with a filename, line, column and source excerpt. Exit codes are 0 for success,
 
 Files can contain multiple supported CREATE TABLE, CREATE INDEX and CREATE VIEW statements, separated by
 semicolons. The final semicolon is optional; empty statements and empty files
-are accepted. Views can be checked and formatted. Comparing or migrating a schema containing a view returns a diagnostic. The [SQLite package roadmap](libs/sqlite/README.md) lists the supported query forms.
+are accepted. Views participate in schema comparison and migration generation. The [SQLite package roadmap](libs/sqlite/README.md) lists the supported query forms.
 
 The library exposes the same file grammar through `Sqlite.schema.decode(sql)`,
 `encode(statements)` and `decodeWithSourceMap(sql)`. It returns an ordered
@@ -204,8 +204,7 @@ Standalone indexes, including unique, expression and partial indexes, are modele
 separately from PRIMARY KEY/UNIQUE constraints. Index-only changes use DROP/CREATE
 INDEX; rebuilds recreate all desired indexes after copying the table.
 Runtime checks refuse unrepresented or missing explicit indexes, triggers on rebuilt
-tables and any views in affected schemas (including temporary views/triggers).
-Views and triggers cannot yet be preserved. Rebuilds with an inaccessible rowid, no writable copy mapping, retained references to removed
+tables, triggers on views scheduled for removal, and undeclared views in affected schemas (including temporary views). The planner drops declared views before a rebuild and recreates them afterward. It checks that desired views resolve before committing. Rebuilds with an inaccessible rowid, no writable copy mapping, retained references to removed
 tables, and cyclic/self-referential table drops still produce planning errors.
 The baseline must cover all table declarations involved; a live database can still
 have drift or other semantic errors that cause execution to fail.

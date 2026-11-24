@@ -1,3 +1,5 @@
+import { viewsFromDatabaseSchema } from "./views.ts";
+import { createView, type CreateView } from "./codecs/create-view.ts";
 import { identifier } from "./codecs/identifier.ts";
 import { createIndex, type CreateIndex } from "./codecs/create-index.ts";
 import { indexesFromDatabaseSchema } from "./indexes.ts";
@@ -24,6 +26,9 @@ import { foldIdentifier, tableIdentity, tableKey } from "./schema-identity.ts";
 import type { Expression } from "./codecs/expression.ts";
 
 export type MigrationOperation =
+  | { readonly _tag: "DropView"; readonly table: TableIdentity }
+  | { readonly _tag: "VerifyView"; readonly table: TableIdentity }
+  | { readonly _tag: "CreateView"; readonly table: TableIdentity; readonly definition: CreateView }
   | {
       readonly _tag: "CheckDrop";
       readonly table: TableIdentity;
@@ -138,6 +143,8 @@ export const lowerMigration = (
   Effect.gen(function* () {
     const before = yield* tablesFromDatabaseSchema(previous);
     const after = yield* tablesFromDatabaseSchema(next);
+    const beforeViews = yield* viewsFromDatabaseSchema(previous);
+    const afterViews = yield* viewsFromDatabaseSchema(next);
     const beforeIndexes = yield* indexesFromDatabaseSchema(previous);
     const afterIndexes = yield* indexesFromDatabaseSchema(next);
     const indexesFor = (indexes: readonly CreateIndex[], table: TableIdentity) =>
@@ -172,7 +179,11 @@ export const lowerMigration = (
     }
     const operations: MigrationOperation[] = [];
     const warnings: MigrationWarning[] = [];
-    const reserved = new Set([...before, ...after].map((table) => tableKey(tableIdentity(table))));
+    const reserved = new Set(
+      [...before, ...after, ...beforeViews, ...afterViews].map((table) =>
+        tableKey(tableIdentity(table)),
+      ),
+    );
     for (const index of [...beforeIndexes, ...afterIndexes])
       reserved.add(
         tableKey({
@@ -285,8 +296,7 @@ export const lowerMigration = (
         .map((operation) => tableKey(operation.table)),
     );
     for (const procedure of procedures.procedures) {
-      if ("view" in procedure || procedure._tag === "ReplaceView")
-        return yield* Effect.fail(new EncodeError({ message: "View lowering is unsupported" }));
+      if ("view" in procedure || procedure._tag === "ReplaceView") continue;
       const model = "after" in procedure ? procedure.after : procedure.table;
       const table = { schema: model.identity.catalog!, name: model.identity.name };
       const source = "before" in procedure ? procedure.before.identity : model.identity;
@@ -326,16 +336,59 @@ export const lowerMigration = (
           }
         }
     }
+    const affectedSchemas = new Set(
+      operations.flatMap((op) =>
+        op._tag === "RebuildTable" || op._tag === "RenameTable" ? [op.table.schema, "temp"] : [],
+      ),
+    );
+    const viewDrops = new Set<string>();
+    const viewCreates = new Set<string>();
+    for (const procedure of procedures.procedures) {
+      if (!("view" in procedure) && procedure._tag !== "ReplaceView") continue;
+      const view = "view" in procedure ? procedure.view : procedure.before;
+      const key = tableKey({ schema: view.identity.catalog ?? "", name: view.identity.name });
+      if (procedure._tag !== "CreateView") viewDrops.add(key);
+      if (procedure._tag !== "DropView") viewCreates.add(key);
+    }
+    const dropViews: MigrationOperation[] = [];
+    const createViews: MigrationOperation[] = [];
+    for (const view of beforeViews) {
+      const table = tableIdentity(view);
+      const key = tableKey(table);
+      if (viewDrops.delete(key) || affectedSchemas.has(table.schema)) {
+        dropViews.push({ _tag: "DropView", table });
+        // Suspend unchanged views as well, including chains of views and TEMP dependencies.
+        if (
+          affectedSchemas.has(table.schema) &&
+          afterViews.some((item) => tableKey(tableIdentity(item)) === key)
+        )
+          viewCreates.add(key);
+      }
+    }
+    for (const definition of afterViews) {
+      const table = tableIdentity(definition);
+      if (viewCreates.delete(tableKey(table)))
+        createViews.push({ _tag: "CreateView", table, definition });
+    }
+    if (viewDrops.size || viewCreates.size)
+      return yield* Effect.fail(
+        new EncodeError({ message: "View procedure does not match its database context" }),
+      );
     const guards = (procedures.dropGuards ?? []).map((guard): MigrationOperation => ({
       _tag: "CheckDrop",
       table: { schema: guard.table.catalog ?? "main", name: guard.table.name },
       ...(guard.column !== undefined ? { column: guard.column } : {}),
       scratch: { schema: "temp", name: allocate("temp", "__uncutsql_drop_guard") },
     }));
-    operations.unshift(...guards, ...indexDrops.values());
-    operations.push(...indexCreates.values());
+    operations.unshift(...guards, ...dropViews, ...indexDrops.values());
+    operations.push(...indexCreates.values(), ...createViews);
+    if (operations.length)
+      for (const view of afterViews)
+        operations.push({ _tag: "VerifyView", table: tableIdentity(view) });
     if (diagnostics.length) return yield* Effect.fail(new MigrationPlanError({ diagnostics }));
-    const guardTable = operations.some((operation) => operation._tag === "RebuildTable")
+    const guardTable = operations.some(
+      (operation) => operation._tag === "RebuildTable" || operation._tag === "DropView",
+    )
       ? { schema: "temp", name: allocate("temp", "__uncutsql_migration_guard") }
       : undefined;
     return { operations, warnings, ...(guardTable ? { guardTable } : {}) };
@@ -363,6 +416,12 @@ export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, Enco
               `DROP TABLE ${scratch};`,
             ].join("\n");
           }
+          case "CreateView":
+            return yield* createView.encode(operation.definition);
+          case "DropView":
+            return `DROP VIEW ${yield* qualified(operation.table)};`;
+          case "VerifyView":
+            return `SELECT * FROM ${yield* qualified(operation.table)} LIMIT 0;`;
           case "CreateIndex":
             return yield* createIndex.encode(operation.definition);
           case "DropIndex":
@@ -395,13 +454,34 @@ export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, Enco
     const begin = plan.operations.some((operation) => operation._tag === "CheckDrop")
       ? "BEGIN IMMEDIATE;"
       : "BEGIN;";
-    if (!rebuilds.length) return [...warnings, begin, ...statements, "COMMIT;"].join("\n");
+    const droppedViews = plan.operations.filter((op) => op._tag === "DropView");
+    if (!rebuilds.length && !droppedViews.length)
+      return [...warnings, begin, ...statements, "COMMIT;"].join("\n");
     if (!plan.guardTable)
       return yield* Effect.fail(
         new EncodeError({ message: "A rebuild plan requires a guard table" }),
       );
     const guard = yield* qualified(plan.guardTable);
     const preflight: string[] = [];
+    for (const view of droppedViews) {
+      const name = yield* sqlString(view.table.name);
+      for (const schema of new Set([view.table.schema, "temp"])) {
+        const catalog = yield* qualified({ schema, name: "sqlite_schema" });
+        preflight.push(
+          `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM ${catalog} WHERE type = 'trigger' AND tbl_name = ${name} COLLATE NOCASE;`,
+        );
+      }
+    }
+    const unknownViews = (schema: string) =>
+      Effect.gen(function* () {
+        const known = yield* Effect.forEach(
+          droppedViews.filter((view) => view.table.schema === schema),
+          (view) => sqlString(view.table.name),
+        );
+        return known.length
+          ? `(type = 'view' AND name COLLATE NOCASE NOT IN (${known.join(", ")}))`
+          : "type = 'view'";
+      });
     for (const operation of rebuilds) {
       const catalog = yield* qualified({ ...operation.table, name: "sqlite_schema" });
       const name = yield* sqlString(operation.before.name);
@@ -412,16 +492,26 @@ export const encodeMigration = (plan: MigrationPlan): Effect.Effect<string, Enco
         ? ` AND name COLLATE NOCASE NOT IN (${known.join(", ")})`
         : "";
       preflight.push(
-        `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM ${catalog} WHERE type = 'view' OR (tbl_name = ${name} COLLATE NOCASE AND (type = 'trigger' OR (type = 'index' AND sql IS NOT NULL${unknownIndex})));`,
+        `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM ${catalog} WHERE ${yield* unknownViews(operation.table.schema)} OR (tbl_name = ${name} COLLATE NOCASE AND (type = 'trigger' OR (type = 'index' AND sql IS NOT NULL${unknownIndex})));`,
       );
       if (known.length)
         preflight.push(
           `INSERT OR ROLLBACK INTO ${guard} SELECT abs(count(*) - ${known.length}) FROM ${catalog} WHERE type = 'index' AND sql IS NOT NULL AND tbl_name = ${name} COLLATE NOCASE AND name COLLATE NOCASE IN (${known.join(", ")});`,
         );
       preflight.push(
-        `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM temp.sqlite_schema WHERE type = 'view' OR (type = 'trigger' AND tbl_name = ${name} COLLATE NOCASE);`,
+        `INSERT OR ROLLBACK INTO ${guard} SELECT count(*) FROM temp.sqlite_schema WHERE ${yield* unknownViews("temp")} OR (type = 'trigger' AND tbl_name = ${name} COLLATE NOCASE);`,
       );
     }
+    if (!rebuilds.length)
+      return [
+        ...warnings,
+        begin,
+        `CREATE TABLE ${guard} (violations INTEGER CHECK (violations = 0));`,
+        ...preflight,
+        ...statements,
+        `DROP TABLE ${guard};`,
+        "COMMIT;",
+      ].join("\n");
     const schemas = new Set(
       plan.operations.map((operation) =>
         operation._tag === "CreateTable"
