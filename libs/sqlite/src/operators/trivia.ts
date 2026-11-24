@@ -13,7 +13,7 @@ export const skipSqliteTrivia = (source: string, start: number): number => {
     } else if (source.startsWith("--", offset)) {
       const end = source.indexOf("\n", offset + 2);
       offset = end < 0 ? source.length : end;
-    } else if (source.startsWith("/*", offset)) {
+    } else if (offset + 2 < source.length && source.startsWith("/*", offset)) {
       const end = source.indexOf("*/", offset + 2);
       offset = end < 0 ? source.length : end + 2;
     } else break;

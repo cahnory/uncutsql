@@ -165,7 +165,7 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 
 1. [x] Reject rebuilds that discard ordinary column values on conversion to generated columns.
 2. [x] Make index snapshot ordering reproducible across locales and declaration orders.
-3. [ ] Match SQLite tokenization of a trailing bare block-comment opener.
+3. [x] Match SQLite tokenization of a trailing bare block-comment opener.
 4. [ ] Parse and format view declarations, with explicit diagnostics at the migration boundary.
 
 ### Subsequent milestones

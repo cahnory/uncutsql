@@ -76,3 +76,21 @@ test("schema errors and source maps retain original file positions", () => {
     ),
   );
 });
+
+test("a trailing /* needs a third character to start a SQLite comment", () => {
+  const database = new DatabaseSync(":memory:");
+  try {
+    for (const suffix of ["/*", "/*x", "/**/", "/*/"]) {
+      const source = "CREATE TABLE t(a) " + suffix;
+      if (suffix === "/*") {
+        assert.throws(() => database.prepare(source));
+        assert.throws(() => decode(source));
+      } else {
+        database.prepare(source);
+        assert.deepEqual(decode(source), decode("CREATE TABLE t(a)"));
+      }
+    }
+  } finally {
+    database.close();
+  }
+});
