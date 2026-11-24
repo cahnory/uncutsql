@@ -14,6 +14,8 @@ test("SELECT cores preserve native results, aliases and window names", () => {
   try {
     for (const source of [
       "SELECT 1 AS value",
+      "SELECT x.value AS 'it''s a label' FROM t AS 'x' ORDER BY x.value",
+      "SELECT 'literal' 'select' FROM t 'source' ORDER BY source.value",
       "SELECT DISTINCT category FROM t ORDER BY category",
       "SELECT ALL t.* FROM main.t ORDER BY value DESC NULLS LAST",
       "SELECT * FROM t WHERE value BETWEEN 1 AND 2 ORDER BY value",

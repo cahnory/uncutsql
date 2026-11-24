@@ -39,6 +39,7 @@ SQLite conformance.** Update this checklist when adding a grammar feature.
 - [x] Custom, multiword and parameterized type declarations. One or two signed
       numeric dimensions are accepted; digit separators in dimensions are rejected.
 - [x] Bind parameters: `?`, `?NNN`, `:name`, `@name`, `$name` and extended names.
+- [x] Single-quoted result and table aliases, including doubled apostrophes. Formatting emits double-quoted aliases.
 - [ ] General contextual keyword fallbacks and SQLite's legacy quote reinterpretation.
       Reserved-word identifiers require quotes, except the built-in `temp` schema
       before a dot. TRUE/FALSE retain their contextual expression semantics.
@@ -167,7 +168,7 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 1. [x] Prevent rebuilds from mapping two independent values onto the same integer primary key.
 2. [x] Validate the reserved history table's column constraints before using it.
 3. [x] Bound concurrent migration-file reads during apply.
-4. [ ] Accept SQLite single-quoted query aliases and verify the formatted result with SQLite.
+4. [x] Accept SQLite single-quoted query aliases and verify the formatted result with SQLite.
 
 ### Previous pass
 
