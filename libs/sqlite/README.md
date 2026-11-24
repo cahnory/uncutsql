@@ -70,7 +70,7 @@ recognizing a keyword does not imply support for the construct it introduces.
       Type spelling is preserved; SQLite performs the conversion.
 - [x] CASE expressions, both simple and searched forms, with nesting and optional ELSE.
 - [x] RAISE expressions: IGNORE and ROLLBACK/ABORT/FAIL with expression messages.
-      The expression codec supports these; complete CREATE TRIGGER parsing is still pending.
+      Trigger conditions and action expressions use the same expression codec.
 - [x] Aggregate syntax: `*`, DISTINCT/ALL and argument ORDER BY, with ASC/DESC
       and NULLS FIRST/LAST retained explicitly.
 - [x] FILTER (WHERE expression).
@@ -109,6 +109,7 @@ context restrictions, including prohibiting subqueries.
 - [x] CREATE TABLE AS SELECT/VALUES/WITH, with schema qualification and TEMP/IF NOT EXISTS.
       Parsing/formatting supports these statements; declarative schema comparison rejects them
       because deriving columns and populating data requires query evaluation.
+- [x] CREATE TRIGGER with optional timing, UPDATE OF columns, FOR EACH ROW and WHEN. Use `createTrigger` for one declaration or `schema` for a file. Bodies support queries, INSERT from VALUES or a query, UPDATE assignments and DELETE with an optional WHERE. UPSERT and UPDATE FROM are outside the current body grammar.
 - [x] CREATE VIEW, including TEMP, IF NOT EXISTS, schema qualification, optional column names and AS queries. Use `createView` for one declaration.
 - [ ] CREATE VIRTUAL TABLE and module-specific arguments.
 - [ ] Remaining SQLite grammar edge cases beyond this explicit subset; this is
@@ -126,7 +127,7 @@ and generated-column dependencies remain SQLite's responsibility.
 | Family                  | Remaining input syntax                                                 |
 | ----------------------- | ---------------------------------------------------------------------- |
 | Queries                 | Contextual-keyword/legacy-quoting compatibility and further edge cases |
-| Schema DDL              | ALTER TABLE, DROP TABLE, DROP INDEX, DROP VIEW and TRIGGER             |
+| Schema DDL              | ALTER TABLE, DROP TABLE, DROP INDEX, DROP VIEW and DROP TRIGGER        |
 | Data changes            | INSERT/REPLACE, UPSERT, UPDATE, DELETE and RETURNING                   |
 | Transactions            | BEGIN, COMMIT/END, ROLLBACK, SAVEPOINT and RELEASE                     |
 | Database administration | ATTACH/DETACH, PRAGMA, VACUUM, ANALYZE, REINDEX and EXPLAIN            |
@@ -166,7 +167,7 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 
 ## Roadmap
 
-1. Parse and format trigger declarations and bodies. Test that source-map ranges select the trigger name and its target table name precisely. Then implement trigger model conversion and rebuild preservation.
+1. Convert parsed trigger declarations to and from snapshots, then implement rebuild preservation. Declaration and body parsing, formatting and identifier source ranges are covered by the trigger codec tests.
 2. Extend contextual keyword and legacy quoting compatibility. The lexical and query checklists track individual syntax features.
 
 See the [workspace roadmap](../../ROADMAP.md) for the core and executor dependencies.

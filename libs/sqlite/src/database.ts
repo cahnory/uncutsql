@@ -31,7 +31,9 @@ export const toDatabaseSchema = (
   side: DiffDiagnostic["side"] = "after",
 ) =>
   Effect.gen(function* () {
-    const unsupported = statements.filter((statement) => statement._tag === "CreateTableAs");
+    const unsupported = statements.filter(
+      (statement) => statement._tag === "CreateTableAs" || statement._tag === "CreateTrigger",
+    );
     if (unsupported.length)
       return yield* Effect.fail(
         new SchemaDiffError({
@@ -43,7 +45,9 @@ export const toDatabaseSchema = (
               name: statement.name,
             },
             message:
-              "CREATE TABLE AS queries require SQLite evaluation to determine columns and populate data; use an explicit table definition for declarative schema comparison",
+              statement._tag === "CreateTrigger"
+                ? "CREATE TRIGGER migration generation is not supported yet"
+                : "CREATE TABLE AS queries require SQLite evaluation to determine columns and populate data; use an explicit table definition for declarative schema comparison",
           })),
         }),
       );

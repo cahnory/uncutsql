@@ -4,13 +4,13 @@ View migrations now run through the CLI and SQLite driver. Snapshots, diffs and 
 
 The next workspace milestone is to preserve triggers during migrations.
 
-| Step                                   | Handoff                                                                                                                             |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Represent and parse triggers        | Core defines serializable snapshots, diffs and logical procedures. SQLite trigger grammar and formatting can proceed independently. |
-| 2. Generate trigger migrations         | SQLite maps declarations to the core model and orders trigger removal and recreation around table and view changes.                 |
-| 3. Apply and verify trigger migrations | The driver inspects live triggers. The CLI and demo exercise generation, rebuild preservation and drift detection.                  |
+| Step                                   | Handoff                                                                                                                   |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 1. Represent and parse triggers (done) | Core models and compares triggers. SQLite parses and formats declarations with SELECT, INSERT, UPDATE and DELETE actions. |
+| 2. Generate trigger migrations         | SQLite maps declarations to the core model and orders trigger removal and recreation around table and view changes.       |
+| 3. Apply and verify trigger migrations | The driver inspects live triggers. The CLI and demo exercise generation, rebuild preservation and drift detection.        |
 
-Core trigger snapshots, structural comparison and logical procedures are implemented. The SQLite declaration and body grammar is the remaining part of step 1.
+Next, map SQLite trigger declarations into snapshots and restore them from JSON. Cover triggers on both tables and views before lowering migration procedures.
 
 SQLite contextual keyword and legacy quoting work can proceed independently of these handoffs.
 

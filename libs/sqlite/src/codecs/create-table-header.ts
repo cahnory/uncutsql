@@ -10,7 +10,9 @@ export interface CreateTableHeader {
   readonly schema?: string;
 }
 
-export const createRelationHeader = (kind: "TABLE" | "VIEW"): Codec<CreateTableHeader> =>
+export const createRelationHeader = (
+  kind: "TABLE" | "VIEW" | "TRIGGER",
+): Codec<CreateTableHeader> =>
   prefixed(
     keyword("CREATE"),
     transform(

@@ -15,6 +15,7 @@ import {
   type CreateTableStatement,
 } from "./codecs/create-table-statement.ts";
 import { createIndexBodyGrammar, type CreateIndex } from "./codecs/create-index.ts";
+import { createTriggerBodyGrammar, type CreateTrigger } from "./codecs/create-trigger.ts";
 import { createViewBodyGrammar, type CreateView } from "./codecs/create-view.ts";
 import { keyword } from "./operators/keyword.ts";
 import { keywordChoice } from "./operators/keyword-choice.ts";
@@ -22,7 +23,7 @@ import { terminator } from "./operators/terminator.ts";
 import { trivia } from "./operators/trivia.ts";
 
 /** Supported schema statements, in source order. Extend this union with further DDL. */
-export type Statement = CreateTableStatement | CreateIndex | CreateView;
+export type Statement = CreateTableStatement | CreateIndex | CreateView | CreateTrigger;
 
 const statementBody: Codec<Statement> = make<Statement>({
   decode: (cursor) =>
@@ -31,7 +32,10 @@ const statementBody: Codec<Statement> = make<Statement>({
       const modifier = yield* optional(keywordChoice(["UNIQUE", "TEMP", "TEMPORARY"])).decode(
         start.next,
       );
-      const kind = yield* keywordChoice(["TABLE", "INDEX", "VIEW"]).decode(modifier.next);
+      const kind = yield* keywordChoice(["TABLE", "INDEX", "VIEW", "TRIGGER"]).decode(
+        modifier.next,
+      );
+      if (kind.value === "TRIGGER") return yield* createTriggerBodyGrammar.decode(cursor);
       if (kind.value === "VIEW") return yield* createViewBodyGrammar.decode(cursor);
       return yield* kind.value === "INDEX"
         ? createIndexBodyGrammar.decode(cursor)
@@ -40,9 +44,11 @@ const statementBody: Codec<Statement> = make<Statement>({
   encode: (value) =>
     value._tag === "CreateIndex"
       ? createIndexBodyGrammar.encode(value)
-      : value._tag === "CreateView"
-        ? createViewBodyGrammar.encode(value)
-        : createTableStatementBodyGrammar.encode(value),
+      : value._tag === "CreateTrigger"
+        ? createTriggerBodyGrammar.encode(value)
+        : value._tag === "CreateView"
+          ? createViewBodyGrammar.encode(value)
+          : createTableStatementBodyGrammar.encode(value),
 });
 
 const statementList = repeat(followedBy(statementBody, terminator), { join: "\n" });

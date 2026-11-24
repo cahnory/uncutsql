@@ -89,4 +89,6 @@ export {
 } from "./query.ts";
 
 export { createIndex, type CreateIndex, type IndexTerm } from "./codecs/create-index.ts";
+export { createTrigger, type CreateTrigger } from "./codecs/create-trigger.ts";
+export type { TriggerAction } from "./codecs/trigger-action.ts";
 export { createView, type CreateView } from "./codecs/create-view.ts";
