@@ -13,6 +13,7 @@
     ".": "./src/index.ts",
     "./create-table": "./src/create-table.ts",
     "./tokens": "./src/tokens.ts",
+    "./language-service": "./src/language-service.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -29,7 +30,11 @@
         "import": "./dist/tokens.js",
         "require": "./dist/tokens.cjs"
       },
-      "./package.json": "./package.json"
+      "./package.json": "./package.json",
+      "./language-service": {
+        "import": "./dist/language-service.js",
+        "require": "./dist/language-service.cjs"
+      }
     }
   },
   "scripts": {

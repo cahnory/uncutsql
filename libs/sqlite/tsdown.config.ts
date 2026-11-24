@@ -1,7 +1,7 @@
 import { defineConfig } from "tsdown";
 
 export default defineConfig({
-  entry: ["src/index.ts", "src/tokens.ts", "src/create-table.ts"],
+  entry: ["src/index.ts", "src/tokens.ts", "src/language-service.ts", "src/create-table.ts"],
   clean: true,
   deps: { neverBundle: true },
   exports: { devExports: true },

@@ -1,4 +1,12 @@
-import { type Codec, optional, prefixed, repeat, struct, transform } from "@uncutsql/codec";
+import {
+  type Codec,
+  located,
+  optional,
+  prefixed,
+  repeat,
+  struct,
+  transform,
+} from "@uncutsql/codec";
 import { keyword } from "../operators/keyword.ts";
 import { parenthesized } from "../operators/parenthesized.ts";
 import { punctuation } from "../operators/punctuation.ts";
@@ -14,34 +22,40 @@ export interface ForeignKeyClause {
   readonly deferrability?: Deferrability;
 }
 
-export const foreignKeyClause: Codec<ForeignKeyClause> = prefixed(
-  keyword("REFERENCES"),
-  transform(
-    struct(
+export const foreignKeyClause: Codec<ForeignKeyClause> = located(
+  "ForeignKeyClause",
+  prefixed(
+    keyword("REFERENCES"),
+    transform(
+      struct(
+        {
+          table: identifier,
+          columns: optional(
+            located(
+              "ReferencedColumns",
+              parenthesized(repeat(identifier, { min: 1, separator: punctuation(",", ", ") })),
+            ),
+          ),
+          options: repeat(foreignKeyOption, { join: " " }),
+          deferrability: optional(deferrability),
+        },
+        " ",
+      ),
       {
-        table: identifier,
-        columns: optional(
-          parenthesized(repeat(identifier, { min: 1, separator: punctuation(",", ", ") })),
-        ),
-        options: repeat(foreignKeyOption, { join: " " }),
-        deferrability: optional(deferrability),
+        decode: ({ table, columns, options, deferrability }): ForeignKeyClause => ({
+          table,
+          options,
+          ...(columns === undefined ? {} : { columns }),
+          ...(deferrability === undefined ? {} : { deferrability }),
+        }),
+        encode: (value: ForeignKeyClause) => ({
+          table: value.table,
+          columns: value.columns,
+          options: value.options,
+          deferrability: value.deferrability,
+        }),
       },
-      " ",
     ),
-    {
-      decode: ({ table, columns, options, deferrability }): ForeignKeyClause => ({
-        table,
-        options,
-        ...(columns === undefined ? {} : { columns }),
-        ...(deferrability === undefined ? {} : { deferrability }),
-      }),
-      encode: (value: ForeignKeyClause) => ({
-        table: value.table,
-        columns: value.columns,
-        options: value.options,
-        deferrability: value.deferrability,
-      }),
-    },
+    " ",
   ),
-  " ",
 );
