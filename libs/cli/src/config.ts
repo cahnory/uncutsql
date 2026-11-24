@@ -139,18 +139,22 @@ export const resolveConfig = (
           : validate((await import(pathToFileURL(path).href)).default);
       let config: UncutConfig = {};
       let directory = cwd;
+      let configured = false;
       if (options.config !== undefined) {
         const path = resolve(cwd, options.config);
         const text = await read(path);
         if (text === undefined) throw new Error(`Configuration file not found: ${path}`);
+        configured = true;
         config = await load(path, text);
         directory = dirname(path);
       } else {
         // Match the previous project's precedence: package.json before config files.
         const pkgText = await read(resolve(cwd, "package.json"));
         const pkg: unknown = pkgText === undefined ? {} : JSON.parse(pkgText);
-        if (record(pkg) && "uncutsql" in pkg) config = validate(pkg.uncutsql);
-        else
+        if (record(pkg) && "uncutsql" in pkg) {
+          configured = true;
+          config = validate(pkg.uncutsql);
+        } else
           for (const filename of [
             ".uncutsqlrc.json",
             "uncutsql.config.json",
@@ -164,6 +168,7 @@ export const resolveConfig = (
             const path = resolve(cwd, filename);
             const text = await read(path);
             if (text === undefined) continue;
+            configured = true;
             config = await load(path, text);
             break;
           }
@@ -175,6 +180,7 @@ export const resolveConfig = (
         return specifier === undefined ? undefined : { specifier, directory };
       };
       return {
+        configured,
         decisions:
           options.decisions === undefined
             ? resolve(directory, config.decisions ?? "uncutsql.decisions.json")

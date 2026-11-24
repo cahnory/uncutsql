@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { readFile, readdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { schemaFiles } from "./schema-files.ts";
 import { Data, Effect, Result } from "effect";
 import { SchemaDiffError, MigrationDecisionError, prepareMigrationDecisions } from "@uncutsql/core";
 import { ParseError } from "@uncutsql/codec";
@@ -90,14 +90,7 @@ const readSchemaWith = (dialect: Dialect<unknown, unknown>, path: string) =>
   Effect.gen(function* () {
     if (path === "-") return yield* readFileWith(dialect, path);
     const files = yield* Effect.tryPromise({
-      try: async () => {
-        if (!(await stat(path)).isDirectory()) return [path];
-        const entries = await readdir(path, { recursive: true, withFileTypes: true });
-        return entries
-          .filter((entry) => entry.isFile() && entry.name.endsWith(".uncut.sql"))
-          .map((entry) => join(entry.parentPath, entry.name))
-          .sort();
-      },
+      try: () => schemaFiles(path),
       catch: (cause) => new InputError({ message: `${path}: ${String(cause)}` }),
     });
     if (!files.length)
