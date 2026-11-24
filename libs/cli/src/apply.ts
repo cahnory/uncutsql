@@ -27,15 +27,15 @@ export const applyGenerated = <E extends Error, R>(
               message: "No generated baseline found; generate migrations first",
             }),
           );
-        const migrations: MigrationSource[] = yield* Effect.tryPromise({
-          try: () =>
-            Promise.all(
-              Array.from({ length: baseline.lastMigrationId }, async (_, index) => {
-                const id = index + 1;
-                const sql = await readFile(join(directory, migrationFilename(id)), "utf8");
-                return { id, sql, sha256: hashMigration(sql) };
-              }),
-            ),
+        const migrations = yield* Effect.tryPromise({
+          try: async () => {
+            const files: MigrationSource[] = [];
+            for (let id = 1; id <= baseline.lastMigrationId; id++) {
+              const sql = await readFile(join(directory, migrationFilename(id)), "utf8");
+              files.push({ id, sql, sha256: hashMigration(sql) });
+            }
+            return files;
+          },
           catch: (cause) =>
             new ApplicationError({
               message: cause instanceof Error ? cause.message : String(cause),

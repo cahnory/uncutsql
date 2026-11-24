@@ -166,7 +166,7 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 
 1. [x] Prevent rebuilds from mapping two independent values onto the same integer primary key.
 2. [x] Validate the reserved history table's column constraints before using it.
-3. [ ] Bound concurrent migration-file reads during apply.
+3. [x] Bound concurrent migration-file reads during apply.
 4. [ ] Accept SQLite single-quoted query aliases and verify the formatted result with SQLite.
 
 ### Previous pass
