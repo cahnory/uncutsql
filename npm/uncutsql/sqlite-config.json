@@ -1,0 +1,6 @@
+{
+  "dialect": "@uncutsql/sqlite",
+  "driver": "@uncutsql/sqlite-driver",
+  "schema": "schema.uncut.sql",
+  "migrations": "migrations"
+}
