@@ -52,3 +52,11 @@ const stringName = lexeme(located("Identifier", quoted("'")));
 export const nameWithKeywords = (allowed: ReadonlySet<string>) =>
   alternatives(identifierWithKeywords(allowed), stringName);
 export const nameIdentifier = nameWithKeywords(contextualNameKeywords);
+
+// At the start of a result expression, SQLite parses these as expressions before
+// considering whether the token can stand for a table name.
+const qualifierKeywords = new Set(contextualNameKeywords);
+for (const word of ["CAST", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "RAISE"]) {
+  qualifierKeywords.delete(word);
+}
+export const qualifierName = nameWithKeywords(qualifierKeywords);

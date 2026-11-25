@@ -3,12 +3,14 @@ import { Effect } from "effect";
 import { EncodeError, located, make, optional, parseError, prefixed, read } from "@uncutsql/codec";
 import type { Codec } from "@uncutsql/codec";
 
+import { uppercaseAscii } from "../../lexer/characters.ts";
+import { keywords } from "../../lexer/keywords.ts";
 import { lexeme } from "../../operators/lexeme.ts";
 import { punctuation } from "../../operators/punctuation.ts";
-import { identifier } from "../identifier.ts";
+import { identifier, nameIdentifier, qualifierName } from "../identifier.ts";
 import type { ColumnReference } from "./types.ts";
 
-const nextPart = optional(prefixed(punctuation("."), identifier));
+const nextPart = optional(prefixed(punctuation("."), nameIdentifier));
 
 export const columnReference: Codec<ColumnReference> = lexeme(
   located(
@@ -20,12 +22,16 @@ export const columnReference: Codec<ColumnReference> = lexeme(
           if (/^[xX]'/.test(cursor.source.slice(cursor.offset))) {
             return yield* Effect.fail(parseError(cursor, "column reference"));
           }
-          const first = yield* identifier.decode(cursor);
+          const first = yield* qualifierName.decode(cursor);
           const second = yield* nextPart.decode(first.next);
           if (second.value === undefined) {
-            // These spellings are contextual SQLite literals when unqualified. The
-            // literal codec preserves them verbatim for SQLite's later name resolution.
-            if (/^(?:TRUE|FALSE)$/i.test(cursor.source.slice(cursor.offset, first.next.offset))) {
+            // The broader qualifier grammar only applies before a dot.
+            const token = cursor.source.slice(cursor.offset, first.next.offset);
+            if (
+              token.startsWith("'") ||
+              keywords.has(uppercaseAscii(token)) ||
+              /^(?:TRUE|FALSE)$/i.test(token)
+            ) {
               return yield* Effect.fail(parseError(cursor, "quoted or qualified column reference"));
             }
             return read({ _tag: "ColumnReference", parts: [first.value] }, first.next, first.nodes);

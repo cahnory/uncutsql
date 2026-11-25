@@ -14,9 +14,13 @@ test("SELECT cores preserve native results, aliases and window names", () => {
   db.exec(
     "CREATE TABLE t(value, category); INSERT INTO t VALUES(1,'a'),(2,'a'),(NULL,'b'),(3,'b')",
   );
+  db.exec("CREATE TEMP TABLE 'Raise'('Cast'); INSERT INTO temp.'Raise' VALUES(7)");
   try {
     for (const source of [
       "SELECT 1 AS value",
+      "SELECT Temp.'Raise'.Cast, 'Temp'.Raise.'Cast' AS other FROM temp.'Raise'",
+      "WITH Abort(v) AS (VALUES(1)) SELECT 'Abort', 'Abort'.v, Abort.v AS other FROM Abort",
+      "WITH True(v) AS (VALUES(7)) SELECT TRUE, FALSE, True.v, 'True'.v AS other FROM True",
       "WITH Abort(v) AS (VALUES(1)) SELECT 'Abort', 'Abort'.* FROM Abort",
       "SELECT 'value' AS label, value FROM 'main'.'t' ORDER BY value",
       "SELECT x.value AS 'it''s a label' FROM t AS 'x' ORDER BY x.value",
@@ -63,6 +67,37 @@ test("qualified stars match SQLite for bare and quoted keyword table names", () 
       assert.deepEqual(decode(rendered), parsed.success, source);
       assert.deepEqual(db.prepare(rendered).all(), rows, source);
     }
+  }
+});
+
+test("qualified column names match SQLite at each position", () => {
+  using db = new DatabaseSync(":memory:");
+  for (const word of [...keywords, "owner's name"]) {
+    const name = word[0] + word.slice(1).toLowerCase();
+    db.exec(`CREATE TABLE "${name}"("${name}"); INSERT INTO "${name}" VALUES(7)`);
+    for (const token of [name, `'${name.replaceAll("'", "''")}'`]) {
+      for (const reference of [
+        `${token}."${name}"`,
+        `"${name}".${token}`,
+        `main.${token}."${name}"`,
+        `main."${name}".${token}`,
+      ]) {
+        const source = `SELECT ${reference} FROM "${name}"`;
+        const parsed = Effect.runSync(Effect.result(sqlQuery.decode(source)));
+        let rows;
+        try {
+          rows = db.prepare(source).all();
+        } catch {
+          assert.ok(Result.isFailure(parsed), source);
+          continue;
+        }
+        assert.ok(Result.isSuccess(parsed), source);
+        const rendered = Effect.runSync(sqlQuery.encode(parsed.success));
+        assert.deepEqual(decode(rendered), parsed.success, source);
+        assert.deepEqual(db.prepare(rendered).all(), rows, source);
+      }
+    }
+    db.exec(`DROP TABLE "${name}"`);
   }
 });
 
