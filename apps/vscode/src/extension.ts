@@ -135,6 +135,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (await schemaPath(doc)) {
           return analysis(doc).symbols.map((symbol) => outline(doc, symbol));
         }
+        return undefined;
       },
     }),
     vscode.languages.registerDefinitionProvider(selector, {
