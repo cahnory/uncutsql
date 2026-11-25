@@ -202,3 +202,196 @@ test("package boundaries keep the CLI independent and the dialect driver-free", 
     assert.doesNotMatch(source, /node:sqlite|@uncutsql\/sqlite/);
   }
 });
+
+test("init confirms before writing and reuses existing project files on rerun", () => {
+  const f = fixture();
+  try {
+    const args = ["init", "--dialect", "./dialect.mjs", "--driver", "./bad.mjs"];
+    assert.match(f.run(args, "\ndb/schema/\ndb/migrations\n").stderr, /cancelled/);
+    assert.deepEqual(readdirSync(f.cwd).sort(), ["bad.mjs", "dialect.mjs"]);
+    const first = f.run(args, "\ndb/schema/\ndb/migrations\ny\n");
+    assert.equal(first.status, 0, first.stderr);
+    const config = readFileSync(join(f.cwd, "uncutsql.config.json"), "utf8");
+    f.put("db/schema/schema.uncut.sql", "original schema");
+    f.put("db/migrations/000001.sql", "migration history");
+    const again = f.run(["init"], "\ny\n");
+    assert.equal(again.status, 0, again.stderr);
+    assert.equal(readFileSync(join(f.cwd, "uncutsql.config.json"), "utf8"), config);
+    assert.equal(f.run(["format"]).stdout, "fixture:original schema\n");
+    assert.equal(
+      readFileSync(join(f.cwd, "db/migrations/000001.sql"), "utf8"),
+      "migration history",
+    );
+  } finally {
+    f.close();
+  }
+});
+
+test("init uses the directory of an existing module config and detects path conflicts", () => {
+  const f = fixture();
+  try {
+    mkdirSync(join(f.cwd, "project"));
+    f.put("project/settings.mjs", "export default { migrations: './history' };");
+    f.put("project/history", "existing file");
+    const args = [
+      "init",
+      "--config",
+      "project/settings.mjs",
+      "--dialect",
+      "./dialect.mjs",
+      "--driver",
+      "./bad.mjs",
+    ];
+    const conflict = f.run(args, "\ny\n");
+    assert.equal(conflict.status, 1);
+    assert.match(conflict.stderr, /Expected a migrations directory/);
+    assert.deepEqual(readdirSync(join(f.cwd, "project")).sort(), ["history", "settings.mjs"]);
+    rmSync(join(f.cwd, "project/history"));
+    const result = f.run(args, "\ny\n");
+    assert.equal(result.status, 0, result.stderr);
+    const check = f.run(["check", "--config", "project/settings.mjs"]);
+    assert.equal(check.status, 0, check.stderr);
+    assert.match(readFileSync(join(f.cwd, "project/settings.mjs"), "utf8"), /schema\.uncut\.sql/);
+    assert.deepEqual(readdirSync(join(f.cwd, "project")).sort(), [
+      "history",
+      "schema.uncut.sql",
+      "settings.mjs",
+    ]);
+  } finally {
+    f.close();
+  }
+});
+
+test("init asks only for missing migrations and honors an explicit flag", () => {
+  const f = fixture();
+  try {
+    for (const migrations of [undefined, "history"]) {
+      f.put(
+        "uncutsql.config.json",
+        JSON.stringify({
+          dialect: "./dialect.mjs",
+          driver: "./bad.mjs",
+          migrations,
+          schema: "schema.sql",
+        }),
+      );
+      const target = migrations ?? "db/migrations";
+      const result = f.run(["init"], migrations ? "\ny\n" : `\n${target}\ny\n`);
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stderr.includes("Migrations directory [migrations]"), !migrations);
+      assert.equal(
+        JSON.parse(readFileSync(join(f.cwd, "uncutsql.config.json"), "utf8")).migrations,
+        target,
+      );
+      assert.deepEqual(readdirSync(join(f.cwd, target)), []);
+    }
+    const flagged = f.run(["init", "--migrations", "from-flag"], "\ny\n");
+    assert.equal(flagged.status, 0, flagged.stderr);
+    assert.deepEqual(readdirSync(join(f.cwd, "from-flag")), []);
+  } finally {
+    f.close();
+  }
+});
+
+test("init offers official plugins by number and accepts custom modules independently", () => {
+  for (const [dialectAnswer, driverAnswer, dialect, driver] of [
+    ["1", "1", "@uncutsql/sqlite", "@uncutsql/sqlite-driver"],
+    ["1", "./custom-driver.mjs", "@uncutsql/sqlite", "./custom-driver.mjs"],
+    ["./dialect.mjs", "1", "./dialect.mjs", "@uncutsql/sqlite-driver"],
+    ["", "", undefined, undefined],
+  ] as const) {
+    const f = fixture();
+    try {
+      const result = f.run(["init"], ["", dialectAnswer, driverAnswer, "", "", "y", ""].join("\n"));
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stderr, /1\) @uncutsql\/sqlite\n/);
+      assert.match(result.stderr, /1\) @uncutsql\/sqlite-driver\n/);
+      const config = JSON.parse(readFileSync(join(f.cwd, "uncutsql.config.json"), "utf8"));
+      assert.equal(config.dialect, dialect);
+      assert.equal(config.driver, driver);
+    } finally {
+      f.close();
+    }
+  }
+});
+
+test("init creates an independent named config from the prompt or flag", () => {
+  const f = fixture();
+  try {
+    f.put("uncutsql.config.json", "invalid default");
+    for (const flag of [false, true]) {
+      const name = flag ? "alternate/flag.json" : "alternate/prompt.json";
+      const args = ["init", "--dialect", "./dialect.mjs", "--driver", "./bad.mjs"];
+      if (flag) {
+        args.push("--config", name);
+      }
+      const result = f.run(args, (flag ? "" : name + "\n") + "tables.sql\nhistory\ny\n");
+      assert.equal(result.status, 0, result.stderr);
+      assert.ok(result.stdout.includes(name));
+      const config = JSON.parse(readFileSync(join(f.cwd, name), "utf8"));
+      assert.equal(config.schema, "tables.sql");
+      assert.equal(config.migrations, "history");
+      const check = f.run(["check", "--config", name]);
+      assert.equal(check.status, 0, check.stderr);
+    }
+    assert.equal(readFileSync(join(f.cwd, "uncutsql.config.json"), "utf8"), "invalid default");
+  } finally {
+    f.close();
+  }
+});
+
+test("init saves missing fields in the discovered package config only after confirmation", () => {
+  const f = fixture();
+  try {
+    const manifest = {
+      name: "project",
+      uncutsql: { decisions: "review.json", dialect: "./dialect.mjs" },
+    };
+    const original = JSON.stringify(manifest);
+    f.put("package.json", original);
+    const answers = "\n./bad.mjs\ndb/schema.sql\ndb/history\n";
+    const cancelled = f.run(["init"], answers + "n\n");
+    assert.equal(cancelled.status, 0, cancelled.stderr);
+    assert.equal(readFileSync(join(f.cwd, "package.json"), "utf8"), original);
+    const result = f.run(["init"], answers + "y\n");
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(readFileSync(join(f.cwd, "package.json"), "utf8")), {
+      name: "project",
+      uncutsql: {
+        ...manifest.uncutsql,
+        driver: "./bad.mjs",
+        migrations: "db/history",
+        schema: "db/schema.sql",
+      },
+    });
+    const check = f.run(["check"]);
+    assert.equal(check.status, 0, check.stderr);
+  } finally {
+    f.close();
+  }
+});
+
+test("init lists available configs and displays all six steps for the selected file", () => {
+  const f = fixture();
+  try {
+    f.put("uncutsql.config.mjs", "throw Error('unselected config loaded')");
+    f.put(
+      "reporting.json",
+      JSON.stringify({ dialect: "./dialect.mjs", driver: "./bad.mjs", schema: "report.sql" }),
+    );
+    const result = f.run(["init"], "2\nreports/history\ny\n");
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /1\) uncutsql.config.mjs\n  2\) reporting.json/);
+    assert.deepEqual(
+      [...result.stderr.matchAll(/(\d+)\/6  ([^\n]+)/g)].map((match) => match[2]),
+      ["Config file", "Dialect", "Driver", "Schema", "Migrations", "Confirm setup"],
+    );
+    assert.match(result.stderr, /Dialect\nUsing .+already set in config/);
+    assert.equal(
+      JSON.parse(readFileSync(join(f.cwd, "reporting.json"), "utf8")).migrations,
+      "reports/history",
+    );
+  } finally {
+    f.close();
+  }
+});

@@ -16,6 +16,7 @@ import {
   generateMigration,
   prepareGeneratedDecisions,
 } from "./generate.ts";
+import { initProject } from "./init.ts";
 import { promptDecisions } from "./interactive.ts";
 import { baselineFilename, migrationFilename } from "./lock.ts";
 import { loadDialect, loadDriver } from "./plugins.ts";
@@ -23,7 +24,8 @@ import { schemaFiles } from "./schema-files.ts";
 import { style } from "./terminal.ts";
 import { compareSchemas, renderMigration } from "./workflow.ts";
 
-const help = `Usage: pnpm cli <check|format> [file|-]
+const help = `Usage: pnpm cli init
+       pnpm cli <check|format> [file|-]
        pnpm cli diff [schema-path|-]
        pnpm cli <diff|decisions|migration> <before-file|-> <after-file|->
        pnpm cli generate [schema-path|-] [output-dir]
@@ -46,6 +48,7 @@ Use '-' for stdin. Without config.schema, check and format default to stdin.
 generate, apply, up and down use config.migrations unless an output directory is supplied.
 Decisions default to config.decisions or uncutsql.decisions.json beside the config
 (working directory without config). Choose one decision-file option for migration or generate.
+  init    Interactively set up a schema and migrations directory.
   check   Validate syntax supported by the selected dialect (no execution).
   format  Print canonical SQL to stdout; comments and formatting are discarded.
   diff    Compare the configured schema (or one path) to the migration lock.
@@ -135,6 +138,7 @@ const program = Effect.gen(function* () {
   const [command = "diff", filename = "-"] = args;
   if (
     ![
+      "init",
       "check",
       "format",
       "diff",
@@ -151,7 +155,7 @@ const program = Effect.gen(function* () {
     return yield* Effect.fail(
       new UsageError({
         message:
-          "Expected check, format, diff, decisions, migration, generate, compact, verify, apply, up or down.",
+          "Expected init, check, format, diff, decisions, migration, generate, compact, verify, apply, up or down.",
       }),
     );
   }
@@ -184,6 +188,16 @@ const program = Effect.gen(function* () {
   }
   if (options.yes && command !== "compact") {
     return yield* Effect.fail(new UsageError({ message: "--yes requires compact." }));
+  }
+  if (command === "init") {
+    if (args.length !== 1 || options.schema === "-") {
+      return yield* Effect.fail(
+        new UsageError({
+          message: "init accepts no positional arguments and requires a filesystem schema path.",
+        }),
+      );
+    }
+    return yield* initProject(options, process.cwd());
   }
   const selected = yield* resolveConfig(options, process.cwd());
   const decisions: unknown =

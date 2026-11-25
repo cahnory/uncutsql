@@ -1,5 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { readdir, readFile } from "node:fs/promises";
+import { basename, dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { Data, Effect } from "effect";
@@ -135,6 +135,53 @@ export interface PluginSelection {
   readonly directory: string;
   readonly specifier: string;
 }
+export interface ConfigSource {
+  manifest: boolean;
+  path: string;
+  text: string;
+}
+
+const configNames = [
+  ".uncutsqlrc.json",
+  "uncutsql.config.json",
+  "uncutsql.config.js",
+  "uncutsql.config.cjs",
+  "uncutsql.config.mjs",
+  "uncutsql.config.ts",
+  "uncutsql.config.cts",
+  "uncutsql.config.mts",
+];
+
+export async function discoverInitConfigs(cwd: string) {
+  const entries = await readdir(cwd, { withFileTypes: true });
+  const files = new Set(
+    entries.filter((entry) => entry.isFile() || entry.isSymbolicLink()).map((entry) => entry.name),
+  );
+  const found = configNames.filter((name) => files.has(name));
+  for (const name of [...files].sort()) {
+    if (!name.endsWith(".json") || configNames.includes(name)) {
+      continue;
+    }
+    try {
+      const value: unknown = JSON.parse(await readFile(resolve(cwd, name), "utf8"));
+      if (name === "package.json") {
+        if (record(value) && "uncutsql" in value) {
+          found.unshift(name);
+        }
+      } else if (
+        record(value) &&
+        ["dialect", "driver", "schema", "migrations", "decisions"].some((key) => key in value)
+      ) {
+        validate(value);
+        found.push(name);
+      }
+    } catch {
+      // Unrelated JSON files need not be readable project configurations.
+    }
+  }
+  return found;
+}
+
 export const resolveConfig = (
   options: {
     config?: string;
@@ -145,6 +192,7 @@ export const resolveConfig = (
     schema?: string;
   },
   cwd: string,
+  allowNewConfig = false,
 ) =>
   Effect.tryPromise({
     catch: (cause) =>
@@ -168,40 +216,40 @@ export const resolveConfig = (
           : validate((await import(pathToFileURL(path).href)).default);
       let config: UncutConfig = {};
       let directory = cwd;
-      let configured = false;
+      let source: ConfigSource | undefined;
       if (options.config !== undefined) {
         const path = resolve(cwd, options.config);
         const text = await read(path);
         if (text === undefined) {
-          throw new Error(`Configuration file not found: ${path}`);
+          if (!allowNewConfig) {
+            throw new Error(`Configuration file not found: ${path}`);
+          }
+        } else {
+          const manifest = basename(path) === "package.json";
+          source = { manifest, path, text };
+          if (manifest) {
+            const pkg = JSON.parse(text);
+            config = validate(allowNewConfig && pkg.uncutsql === undefined ? {} : pkg.uncutsql);
+          } else {
+            config = await load(path, text);
+          }
         }
-        configured = true;
-        config = await load(path, text);
         directory = dirname(path);
       } else {
         // Match the previous project's precedence: package.json before config files.
         const pkgText = await read(resolve(cwd, "package.json"));
         const pkg: unknown = pkgText === undefined ? {} : JSON.parse(pkgText);
         if (record(pkg) && "uncutsql" in pkg) {
-          configured = true;
+          source = { manifest: true, path: resolve(cwd, "package.json"), text: pkgText! };
           config = validate(pkg.uncutsql);
         } else {
-          for (const filename of [
-            ".uncutsqlrc.json",
-            "uncutsql.config.json",
-            "uncutsql.config.js",
-            "uncutsql.config.cjs",
-            "uncutsql.config.mjs",
-            "uncutsql.config.ts",
-            "uncutsql.config.cts",
-            "uncutsql.config.mts",
-          ]) {
+          for (const filename of configNames) {
             const path = resolve(cwd, filename);
             const text = await read(path);
             if (text === undefined) {
               continue;
             }
-            configured = true;
+            source = { manifest: false, path, text };
             config = await load(path, text);
             break;
           }
@@ -216,13 +264,15 @@ export const resolveConfig = (
         return specifier === undefined ? undefined : { directory, specifier };
       };
       return {
-        configured,
+        config,
+        configured: source !== undefined,
         decisions:
           options.decisions === undefined
             ? resolve(directory, config.decisions ?? "uncutsql.decisions.json")
             : resolve(cwd, options.decisions),
         decisionsRequired: options.decisions !== undefined || config.decisions !== undefined,
         dialect: select("dialect"),
+        directory,
         driver: select("driver"),
         migrations:
           options.migrations === undefined
@@ -234,6 +284,7 @@ export const resolveConfig = (
             : options.schema === "-"
               ? "-"
               : resolve(cwd, options.schema),
+        source,
       };
     },
   });

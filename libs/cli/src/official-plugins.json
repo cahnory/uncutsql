@@ -1,0 +1,6 @@
+[
+  {
+    "dialect": "@uncutsql/sqlite",
+    "drivers": ["@uncutsql/sqlite-driver"]
+  }
+]

@@ -12,6 +12,34 @@ configuration for JavaScript/TypeScript config files.
 Unit tests use fixture adapters. SQLite end-to-end tests live in `apps/demo`, whose
 manifest explicitly declares its selected dialect and driver.
 
+## Initialize a project
+
+Run `uncutsql init` from the project directory. The wizard lists available configs
+there, including the `uncutsql` section in `package.json`, standard config filenames,
+and named JSON files with UncutSQL settings. Choose a config or enter a custom
+filename. If none are found, the filename prompt defaults to `uncutsql.config.json`.
+You can also supply the filename directly, for example
+`uncutsql init --config db/reporting.json`. Use the same `--config` option on
+subsequent commands. Paths entered in the wizard resolve beside the chosen config.
+
+Use the arrow keys and Enter to select an official
+plugin, **Custom module…** to enter a package name or path, or **Configure later** to skip.
+With piped input, enter a choice number, a custom module, or a blank line. Choosing `@uncutsql/sqlite`
+offers its matching driver, `@uncutsql/sqlite-driver`. With a custom dialect, the
+wizard lists all official drivers. Press Enter to accept a suggested path, then enter `y` to create the files shown. Install the selected
+dialect and driver packages in your project to use them.
+
+For a new project the defaults are `uncutsql.config.json`, an empty
+`schema.uncut.sql`, and a `migrations` directory. To start with a multipart
+schema, enter a directory path ending in `/`. Init reuses discovered configuration
+(including `package.json` and JS/TS configs) or an existing file selected with
+`--config`. It preserves existing declarations and migrations. Init prompts for missing
+plugins and schema paths, then saves the confirmed settings in the selected config.
+Every run shows the config file, dialect, driver, schema, migrations, and confirmation
+steps. Values already supplied by config or flags are displayed with their source.
+For a missing migrations directory, the suggested path is `migrations`.
+Use `--migrations <directory>` to override a configured path.
+
 ## Review migration decisions
 
 Migration generation stops when columns or tables are removed until their intent
