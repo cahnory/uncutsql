@@ -14,10 +14,10 @@ node -e "const fs = require('node:fs'); fs.copyFileSync(require.resolve('uncutsq
 
 ## Scoped packages
 
-| Package | Purpose |
-| --- | --- |
-| `@uncutsql/cli` | Check schemas, generate migration files, and apply migrations. |
-| `@uncutsql/sqlite` | Parse SQLite schemas and generate SQLite migration SQL. |
-| `@uncutsql/sqlite-driver` | Inspect SQLite databases and execute migrations. |
+| Package                   | Purpose                                                        |
+| ------------------------- | -------------------------------------------------------------- |
+| `@uncutsql/cli`           | Check schemas, generate migration files, and apply migrations. |
+| `@uncutsql/sqlite`        | Parse SQLite schemas and generate SQLite migration SQL.        |
+| `@uncutsql/sqlite-driver` | Inspect SQLite databases and execute migrations.               |
 
 The CLI, dialect, and driver are installed separately.

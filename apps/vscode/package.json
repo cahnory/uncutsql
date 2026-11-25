@@ -2,11 +2,17 @@
   "name": "uncutsql-vscode",
   "displayName": "UncutSQL",
   "version": "0.1.0",
-  "private": true,
   "description": "SQLite schema diagnostics, Outline and foreign key navigation for UncutSQL.",
   "publisher": "uncutsql",
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "main": "./dist/extension.cjs",
+  "publishConfig": {
+    "name": "@uncutsql/vscode",
+    "access": "public"
+  },
   "scripts": {
     "build": "tsdown",
     "vscode:prepublish": "pnpm build",

@@ -2,10 +2,10 @@
   "name": "uncutsql",
   "version": "0.1.0",
   "description": "SQLite configuration preset and package guide for UncutSQL.",
-  "exports": {
-    "./sqlite-config.json": "./sqlite-config.json"
-  },
   "files": [
     "sqlite-config.json"
-  ]
+  ],
+  "exports": {
+    "./sqlite-config.json": "./sqlite-config.json"
+  }
 }

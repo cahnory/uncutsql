@@ -42,7 +42,7 @@ TypeScript settings live in `tsconfig.base.json` and `tsconfig.node.json`.
 Workspace exports resolve to TypeScript source so tests and the demo work without
 building first. `pnpm build` builds libraries in dependency order with tsdown,
 producing ESM, CommonJS and declarations in each library's `dist` directory.
-Packages remain private; build configuration includes distribution export maps.
+The root workspace is private. The libraries publish built JavaScript and TypeScript declarations under the `@uncutsql` scope.
 
 Use `pnpm --filter @uncutsql/sqlite check` to check one library,
 `pnpm check:types` for workspace type checks, and `pnpm fix:format` to format.

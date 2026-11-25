@@ -1,13 +1,21 @@
 {
   "name": "@uncutsql/demo",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "files": [
+    "dist/index.js",
+    "examples"
+  ],
   "type": "module",
+  "publishConfig": {
+    "main": "./dist/index.js",
+    "access": "public"
+  },
   "scripts": {
     "dev": "node src/index.ts",
     "check:types": "tsc --noEmit -p tsconfig.json",
     "check:test": "node --test --test-reporter=../../scripts/test-reporter.ts tests/*.test.ts",
-    "cli": "uncutsql"
+    "cli": "uncutsql",
+    "build": "tsc --noCheck --noResolve --module esnext --target esnext --outDir dist src/index.ts"
   },
   "dependencies": {
     "@uncutsql/codec": "workspace:*",
