@@ -118,7 +118,10 @@ test("configuration and invalid adapter failures are actionable typed errors", a
       assert.ok(Result.isFailure(result));
       assert.ok(result.failure instanceof PluginError);
     }
-    f.put("driver.mjs", "export const executor = {dialect:'fixture', apply() {}};");
+    f.put(
+      "driver.mjs",
+      "export const executor = {dialect:'fixture', checkpoint() {}, apply() {}};",
+    );
     assert.equal(
       (await Effect.runPromise(loadDriver({ directory: f.cwd, specifier: "./driver.mjs" })))
         .dialect,
@@ -157,7 +160,7 @@ test("apply does not load the dialect and verifies the driver's identity against
     f.put("uncutsql.config.json", JSON.stringify({ dialect: "./bad.mjs", driver: "./driver.mjs" }));
     f.put(
       "driver.mjs",
-      "export const executor = {dialect:'different', apply() { throw Error('must not execute'); }};",
+      "export const executor = {dialect:'different', checkpoint() {}, apply() { throw Error('must not execute'); }};",
     );
     mkdirSync(join(f.cwd, "migrations"));
     f.put(
@@ -165,7 +168,7 @@ test("apply does not load the dialect and verifies the driver's identity against
       JSON.stringify({
         database: { tables: [] },
         dialect: "fixture",
-        formatVersion: 1,
+        formatVersion: 2,
         lastMigrationId: 1,
         lastMigrationSha256: "a".repeat(64),
       }),

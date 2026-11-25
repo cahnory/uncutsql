@@ -108,7 +108,7 @@ test("CLI failures leave a pending migration unrecorded and can resume after dat
   }
 });
 
-test("CLI detects edited applied files and live schema drift", () => {
+test("verify checks applied files while apply reads pending files and checks live drift", () => {
   const cwd = directory();
   try {
     assert.equal(run(cwd, ["generate", "-"], "CREATE TABLE t (a)").status, 0);
@@ -117,18 +117,47 @@ test("CLI detects edited applied files and live schema drift", () => {
     const first = join(cwd, "migrations", "000001.sql");
     const original = readFileSync(first, "utf8");
     writeFileSync(first, `${original}\n-- edited`);
-    const edited = run(cwd, ["apply", "app.sqlite"]);
+    const edited = run(cwd, ["verify"]);
     assert.equal(edited.status, 1);
-    assert.match(edited.stderr, /matching prefix/);
+    assert.match(edited.stderr, /000002.sql: parent hash/);
+    const fresh = run(cwd, ["apply", "fresh.sqlite"]);
+    assert.equal(fresh.status, 1);
+    assert.equal(existsSync(join(cwd, "fresh.sqlite")), false);
+    rmSync(first);
+    const incremental = run(cwd, ["apply", "app.sqlite"]);
+    assert.equal(incremental.status, 0, incremental.stderr);
     writeFileSync(first, original);
+    assert.equal(run(cwd, ["verify"]).status, 0);
     exec(join(cwd, "app.sqlite"), "ALTER TABLE t ADD COLUMN unexpected TEXT");
     const drift = run(cwd, ["apply", "app.sqlite"]);
     assert.equal(drift.status, 1);
     assert.match(drift.stderr, /last applied snapshot/);
     assert.equal(
       rows(join(cwd, "app.sqlite"), "SELECT count(*) AS n FROM __uncutsql_migrations")[0]!.n,
-      1,
+      2,
     );
+  } finally {
+    rmSync(cwd, { recursive: true });
+  }
+});
+
+test("apply checks a database checkpoint even when there are no pending files", () => {
+  const cwd = directory();
+  try {
+    assert.equal(run(cwd, ["generate", "-"], "CREATE TABLE t (a)").status, 0);
+    assert.equal(run(cwd, ["apply", "db"]).status, 0);
+    const path = join(cwd, "migrations", "000001.sql");
+    const lockPath = join(cwd, "migrations", "uncutsql.lock.json");
+    const lock = JSON.parse(readFileSync(lockPath, "utf8"));
+    writeFileSync(lockPath, JSON.stringify({ ...lock, database: { tables: [] } }));
+    assert.match(run(cwd, ["verify"]).stderr, /schema snapshot/);
+    rmSync(path);
+    writeFileSync(lockPath, JSON.stringify(lock));
+    const noop = run(cwd, ["apply", "db"]);
+    assert.equal(noop.status, 0, noop.stderr);
+    assert.match(noop.stdout, /up to date/);
+    writeFileSync(lockPath, JSON.stringify({ ...lock, lastMigrationSha256: "0".repeat(64) }));
+    assert.match(run(cwd, ["apply", "db"]).stderr, /checkpoint does not match/);
   } finally {
     rmSync(cwd, { recursive: true });
   }
@@ -182,6 +211,7 @@ test("application orchestration uses a swappable executor and core-owned verific
         yield* verify(database, desired, "desired");
         return { appliedIds: [1], lastAppliedId: 1 };
       }),
+    checkpoint: () => Effect.succeed({ id: 0, sha256: null }),
     dialect: "fixture",
   };
   try {
@@ -283,7 +313,7 @@ test("down guards data, restores one applied snapshot and allows reapplication",
   }
 });
 
-test("legacy migrations remain applicable and irreversible migrations retain their history", () => {
+test("unlinked migrations are rejected and irreversible migrations retain their history", () => {
   const cwd = directory();
   const db = join(cwd, "db.sqlite");
   try {
@@ -291,6 +321,8 @@ test("legacy migrations remain applicable and irreversible migrations retain the
     const lock = join(cwd, "migrations", "uncutsql.lock.json");
     const oldSql = "BEGIN;\nCREATE TABLE t (id INTEGER);\nCOMMIT;\n";
     assert.equal(run(cwd, ["generate", "-"], "CREATE TABLE t (id INTEGER)").status, 0);
+    const original = readFileSync(path, "utf8");
+    const originalLock = readFileSync(lock, "utf8");
     writeFileSync(path, oldSql);
     writeFileSync(
       lock,
@@ -300,8 +332,11 @@ test("legacy migrations remain applicable and irreversible migrations retain the
       }),
     );
     const up = run(cwd, ["up", db]);
-    assert.equal(up.status, 0, up.stderr);
-    assert.match(run(cwd, ["down", db]).stderr, /no recorded down SQL/);
+    assert.equal(up.status, 1);
+    assert.match(up.stderr, /chain header/);
+    writeFileSync(path, original);
+    writeFileSync(lock, originalLock);
+    assert.equal(run(cwd, ["up", db]).status, 0);
     const generate = run(cwd, ["generate", "-"], "CREATE TABLE t (id TEXT)");
     assert.equal(generate.status, 0, generate.stderr);
     const apply = run(cwd, ["apply", db]);

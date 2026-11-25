@@ -465,7 +465,7 @@ Dialect selection, files, IDs and SQL checksums never enter core or SQLite.
 acquires an exclusive writer file, reads and validates the lock, compares shared
 models with core, then runs the same consumer-owned lowering/rendering workflow.
 A missing lock is an empty baseline only if no numbered migrations exist. The
-lock records formatVersion=1, dialect, lastMigrationId, lastMigrationSha256 and
+lock records formatVersion=2, dialect, lastMigrationId, lastMigrationSha256 and
 database. History filenames must be contiguous and canonical from 000001.sql;
 the most recent SQL bytes must match the saved checksum. No-op comparison leaves
 the saved baseline and IDs untouched. Empty SQL for a nonempty diff is rejected.
@@ -491,9 +491,9 @@ application history is stored separately as described below.
 
 ## Migration execution
 
-Core adds only MigrationSource, ExecutionResult and MigrationExecutor contracts.
-The CLI dynamically loads the selected driver, snapshots the
-numbered files under the generation directory lock, computes their checksums,
+Core defines the migration source, checkpoint, result and executor contracts.
+The CLI dynamically loads the selected driver, reads the database checkpoint, verifies the
+pending files against it and the lock tip under the generation directory lock,
 and supplies a core-based schema verifier. The file lock is released after loading;
 the SQLite database's writer transaction serializes actual execution. Generation
 metadata is never changed by application.
@@ -501,8 +501,9 @@ metadata is never changed by application.
 The separate @uncutsql/sqlite-driver package implements execution with Node's
 DatabaseSync. The regular syntax/model entry point does not import node:sqlite.
 This first executor supports persistent main databases only and reserves
-__uncutsql_migrations. It reads the full ordered history from ID 1, checks its DB
-history is a matching prefix, and validates stored JSON schema snapshots. It
+__uncutsql_migrations. It reads the latest history row by primary key for apply and the latest two for rollback,
+validates their schema snapshots and rechecks the checkpoint inside the write transaction.
+The database-free `verify` command checks every numbered file from the root to the lock tip. It
 rejects untracked nonempty databases and unsupported live objects.
 
 Each iteration starts BEGIN IMMEDIATE, inspects the live schema and lets the

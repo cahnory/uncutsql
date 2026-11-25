@@ -6,7 +6,14 @@ import { Effect } from "effect";
 import { decodeDatabaseSchema, diffDatabases, prepareMigrationDecisions } from "@uncutsql/core";
 import type { Dialect } from "@uncutsql/core";
 
-import { decodeLock, GenerationError, hashMigration, migrationFilename } from "./lock.ts";
+import {
+  decodeLock,
+  GenerationError,
+  hashMigration,
+  migrationFilename,
+  readMigrationFile,
+  schemaDigest,
+} from "./lock.ts";
 import type { SchemaLock } from "./lock.ts";
 import { renderMigrationFile } from "./workflow.ts";
 
@@ -68,11 +75,9 @@ const writeNew = async (path: string, contents: string) => {
   }
 };
 
-export const readBaseline = (directory: string, dialect: string) =>
+export const numberedFiles = (directory: string) =>
   Effect.gen(function* () {
-    const path = join(directory, lockName);
-    const source = yield* io(path, () => readOptional(path));
-    const files = (yield* io(directory, async () => {
+    return (yield* io(directory, async () => {
       try {
         return await readdir(directory);
       } catch (cause) {
@@ -84,6 +89,20 @@ export const readBaseline = (directory: string, dialect: string) =>
     }))
       .filter((name) => /^\d+\.sql$/.test(name))
       .sort((left, right) => Number(left.slice(0, -4)) - Number(right.slice(0, -4)));
+  });
+
+export const readMigrationLock = (directory: string, dialect?: string) => {
+  const path = join(directory, lockName);
+  return io(path, () => readFile(path, "utf8")).pipe(
+    Effect.flatMap((source) => decodeLock(source, dialect)),
+  );
+};
+
+export const readBaseline = (directory: string, dialect: string) =>
+  Effect.gen(function* () {
+    const path = join(directory, lockName);
+    const source = yield* io(path, () => readOptional(path));
+    const files = yield* numberedFiles(directory);
     if (source === undefined) {
       if (files.length) {
         return yield* Effect.fail(
@@ -92,7 +111,7 @@ export const readBaseline = (directory: string, dialect: string) =>
           }),
         );
       }
-      return { database: { tables: [] }, lastMigrationId: 0 };
+      return { database: { tables: [] }, lastMigrationId: 0, lastMigrationSha256: undefined };
     }
     const lock = yield* decodeLock(source, dialect).pipe(
       Effect.mapError((error) => new GenerationError({ message: `${path}: ${error.message}` })),
@@ -108,14 +127,7 @@ export const readBaseline = (directory: string, dialect: string) =>
       );
     }
     const latest = join(directory, migrationFilename(lock.lastMigrationId));
-    const sql = yield* io(latest, () => readFile(latest, "utf8"));
-    if (hashMigration(sql) !== lock.lastMigrationSha256) {
-      return yield* Effect.fail(
-        new GenerationError({
-          message: `${latest}: content does not match the lock's migration hash`,
-        }),
-      );
-    }
+    yield* io(latest, () => readMigrationFile(latest, lock));
     return lock;
   });
 
@@ -226,11 +238,12 @@ export const generateMigration = <Ast, Plan, E extends Error, R>(
             }),
           );
         }
-        const sql = rendered.endsWith("\n") ? rendered : `${rendered}\n`;
+        const parent = baseline.lastMigrationSha256 ?? "root";
+        const sql = `-- uncutsql-chain v1 ${parent} ${schemaDigest(after)}\n${rendered}${rendered.endsWith("\n") ? "" : "\n"}`;
         const lock: SchemaLock = {
           database: after,
           dialect: dialect.name,
-          formatVersion: 1,
+          formatVersion: 2,
           lastMigrationId: id,
           lastMigrationSha256: hashMigration(sql),
         };

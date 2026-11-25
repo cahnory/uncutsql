@@ -8,6 +8,10 @@ export interface MigrationSource {
   readonly sha256: string;
   readonly sql: string;
 }
+export interface MigrationCheckpoint {
+  readonly id: number;
+  readonly sha256: string | null;
+}
 export interface ExecutionResult {
   readonly appliedIds: readonly number[];
   readonly lastAppliedId: number;
@@ -25,7 +29,11 @@ export interface MigrationExecutor<E extends Error = Error, R = never> {
       expected: DatabaseSchema,
       stage: "applied" | "desired",
     ) => Effect.Effect<void, V, RV>,
+    /** With a checkpoint, files start immediately after it (at it for rollback).
+     * Recheck the database position under the write transaction before executing. */
+    checkpoint?: MigrationCheckpoint,
   ) => Effect.Effect<ExecutionResult, E | V, R | RV>;
+  readonly checkpoint: (target: string) => Effect.Effect<MigrationCheckpoint, E, R>;
   readonly dialect: string;
   /** Undo only the most recently applied migration. */
   readonly rollback?: MigrationExecutor<E, R>["apply"];

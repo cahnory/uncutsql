@@ -244,7 +244,7 @@ history mean an empty database baseline, so the first generation creates all
 specified tables. Generation never connects to a database or applies SQL.
 Commit numbered SQL files and the lock together.
 
-The lock stores version 1, the selected dialect name, the shared database model,
+The lock stores version 2, the selected dialect name, the shared database model,
 `lastMigrationId`, and the latest migration's SHA-256 hash. The stored model is
 shape-validated before comparison. IDs start at 1 (`000001.sql`) and advance only
 when a migration is published. Equivalent schemas print `No schema changes.` and
@@ -261,8 +261,7 @@ The output filesystem must support hard links, atomic rename and directory sync.
 Corrupt/unsupported locks, a different dialect, missing or extra numbered files,
 and a modified latest migration cause an error rather than resetting the baseline.
 All numbered files from 1 through the locked ID must remain present. The latest
-SQL checksum is verified; earlier migration contents are not rehashed by this
-format. Interrupted runs can leave a writer lock, staging files or an uncommitted
+SQL checksum and schema digest are verified during generation. Interrupted runs can leave a writer lock, staging files or an uncommitted
 SQL file. Reconcile those files with the recorded baseline before retrying; remove
 the writer lock only after confirming no command is using the migration directory. Automatic recovery
 is not implemented. Database application and its history are separate, as described
@@ -279,8 +278,16 @@ pnpm demo:cli apply .local/app.sqlite .local/migrations
 pnpm cli apply app.sqlite db/migrations
 ```
 
-`apply` loads a consistent generated history, validates the lock, and applies only
-pending files. It never changes generated SQL or the lock. Applied IDs, checksums,
+Each generated SQL file records its parent's SHA-256 digest (or `root` for the
+first migration) and the digest of its resulting schema snapshot. The lock records
+the digest of the entire latest file, including those links and both SQL directions.
+
+`apply` reads the database checkpoint and opens only the pending numbered files.
+It checks every pending link and the lock tip before executing the first script.
+An up-to-date database compares its checkpoint with the lock without reading SQL files.
+Run `uncutsql verify [migration-directory]` after a rebase or in CI to check
+all numbered filenames, links, and the lock snapshot without opening a database.
+An edit to an already-applied file is visible to this full check. Applied IDs, checksums,
 format/dialect metadata, timestamps and shared schema snapshots live separately in
 the database's reserved `__uncutsql_migrations` table. An up-to-date run prints
 `Database is up to date.`
@@ -300,15 +307,15 @@ Rolling back an added table requires it to be empty. Rolling back an added
 column requires every value to be NULL. A failed guard leaves the migration
 applied. Forward table or column removals and column type changes are marked
 irreversible. When a dialect cannot render the reverse plan, the file records
-the reason. Older forward-only files can still be applied.
+the reason.
 
 Each SQL file and its history row commit in the **same transaction**. A failed file
 is rolled back and remains pending; earlier successful files remain committed.
 After fixing the underlying data problem, rerun `apply` to resume. The driver
 restores foreign-key enforcement and closes the connection on success or failure.
 Independent database writers serialize with BEGIN IMMEDIATE and a five-second
-busy timeout. Application refuses edited applied files, incomplete/ahead history,
-and normalized schema drift from the last applied snapshot. Before the last
+busy timeout. Application rejects divergent checkpoints, broken pending links, and normalized
+schema drift from the last applied snapshot. Before the last
 pending file commits, the CLI also verifies its schema against the generation lock.
 
 The first executor uses Node's SQLite support and accepts a persistent **main

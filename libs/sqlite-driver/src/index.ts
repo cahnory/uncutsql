@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { statSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
 import { Data, Effect } from "effect";
@@ -7,6 +8,7 @@ import { decodeDatabaseSchema } from "@uncutsql/core";
 import type {
   DatabaseSchema,
   ExecutionResult,
+  MigrationCheckpoint,
   MigrationExecutor,
   MigrationSource,
 } from "@uncutsql/core";
@@ -77,13 +79,17 @@ const inspectDatabase = (database: DatabaseSync) =>
     );
   });
 
-const readHistory = (database: DatabaseSync, migrations: readonly MigrationSource[]) =>
+const readHistory = (database: DatabaseSync, down: boolean, initialize = true) =>
   Effect.gen(function* () {
     const object = yield* native("Inspect applied history", () =>
       database
         .prepare("SELECT type FROM main.sqlite_schema WHERE name = ? COLLATE NOCASE")
         .get(historyName),
     );
+    const empty: DatabaseSchema = { tables: [] };
+    if (!object && !initialize) {
+      return { lastId: 0, previous: empty, sha256: null, snapshot: empty };
+    }
     if (!object) {
       yield* native("Initialize applied history", () => database.exec(historyDdl));
     } else if (object.type !== "table") {
@@ -114,16 +120,21 @@ const readHistory = (database: DatabaseSync, migrations: readonly MigrationSourc
     const rows = yield* native("Read applied history", () =>
       database
         .prepare(
-          `SELECT id, sha256, dialect, format_version, database_json FROM ${historyTable} ORDER BY id`,
+          `SELECT id, sha256, dialect, format_version, database_json FROM ${historyTable} ORDER BY id DESC LIMIT ${down ? 2 : 1}`,
         )
-        .all(),
+        .all()
+        .reverse(),
     );
     if (
-      rows.length > migrations.length ||
       rows.some(
         (row, index) =>
-          row.id !== index + 1 ||
-          row.sha256 !== migrations[index]?.sha256 ||
+          typeof row.id !== "number" ||
+          !Number.isSafeInteger(row.id) ||
+          row.id < 1 ||
+          (down && index === 0 && rows.length === 1 && row.id !== 1) ||
+          (index > 0 && rows[index - 1]?.id !== row.id - 1) ||
+          typeof row.sha256 !== "string" ||
+          !/^[0-9a-f]{64}$/.test(row.sha256) ||
           row.dialect !== "sqlite" ||
           row.format_version !== 1,
       )
@@ -135,7 +146,7 @@ const readHistory = (database: DatabaseSync, migrations: readonly MigrationSourc
         }),
       );
     }
-    let snapshot: DatabaseSchema = { tables: [] };
+    let snapshot = empty;
     let previous = snapshot;
     for (const row of rows) {
       const value: unknown = yield* native("Decode applied schema snapshot", () => {
@@ -150,7 +161,35 @@ const readHistory = (database: DatabaseSync, migrations: readonly MigrationSourc
       previous = snapshot;
       snapshot = decoded;
     }
-    return { count: rows.length, previous, snapshot };
+    const tip = rows.at(-1);
+    return {
+      lastId: Number(tip?.id ?? 0),
+      previous,
+      sha256: tip ? String(tip.sha256) : null,
+      snapshot,
+    };
+  });
+
+const checkpoint: MigrationExecutor<SqliteExecutionError>["checkpoint"] = (target) =>
+  Effect.gen(function* () {
+    const exists = yield* native(
+      "Inspect database file",
+      () => statSync(target, { throwIfNoEntry: false }) !== undefined,
+    );
+    if (!exists) {
+      return { id: 0, sha256: null };
+    }
+    return yield* Effect.acquireUseRelease(
+      native(
+        "Open SQLite checkpoint",
+        () => new DatabaseSync(target, { readOnly: true, timeout: 5000 }),
+      ),
+      (database) =>
+        readHistory(database, false, false).pipe(
+          Effect.map((history) => ({ id: history.lastId, sha256: history.sha256 })),
+        ),
+      (database) => native("Close SQLite checkpoint", () => database.close()),
+    );
   });
 
 const runMigrations = <V extends Error, RV>(
@@ -163,6 +202,7 @@ const runMigrations = <V extends Error, RV>(
     expected: DatabaseSchema,
     stage: "applied" | "desired",
   ) => Effect.Effect<void, V, RV>,
+  start?: MigrationCheckpoint,
 ): Effect.Effect<ExecutionResult, SqliteExecutionError | V, RV> =>
   Effect.gen(function* () {
     if (
@@ -181,10 +221,17 @@ const runMigrations = <V extends Error, RV>(
         }),
       );
     }
+    const down = direction === "down";
+    const offset = start ? (down ? Math.max(0, start.id - 1) : start.id) : 0;
+    const lastId = offset + migrations.length;
     if (
+      (down &&
+        start &&
+        (migrations.length !== (start.id ? 1 : 0) ||
+          (start.id > 0 && migrations[0]?.sha256 !== start.sha256))) ||
       migrations.some(
         (migration, index) =>
-          migration.id !== index + 1 ||
+          migration.id !== offset + index + 1 ||
           !migration.sql.trim() ||
           migration.sql.includes("\0") ||
           digest(migration.sql) !== migration.sha256,
@@ -218,9 +265,27 @@ const runMigrations = <V extends Error, RV>(
               }),
               () =>
                 Effect.gen(function* () {
-                  const history = yield* readHistory(database, migrations);
+                  const history = yield* readHistory(database, down);
+                  const expected =
+                    start && history.lastId === start.id
+                      ? start.sha256
+                      : history.lastId === 0
+                        ? null
+                        : migrations[history.lastId - offset - 1]?.sha256;
+                  if (
+                    expected !== history.sha256 ||
+                    history.lastId < (start?.id ?? 0) ||
+                    (down && start && history.lastId !== start.id)
+                  ) {
+                    return yield* Effect.fail(
+                      new SqliteExecutionError({
+                        message:
+                          "Database checkpoint is not a matching prefix of the supplied migrations",
+                      }),
+                    );
+                  }
                   const actual = yield* inspectDatabase(database);
-                  if (history.count === 0 && (actual.tables.length || actual.views?.length)) {
+                  if (history.lastId === 0 && (actual.tables.length || actual.views?.length)) {
                     return yield* Effect.fail(
                       new SqliteExecutionError({
                         message:
@@ -229,14 +294,13 @@ const runMigrations = <V extends Error, RV>(
                     );
                   }
                   yield* verifySchema(actual, history.snapshot, "applied");
-                  const down = direction === "down";
-                  const next = migrations[down ? history.count - 1 : history.count];
+                  const next = migrations[history.lastId - offset - (down ? 1 : 0)];
                   if (!next) {
                     if (!down) {
                       yield* verifySchema(actual, desired, "desired");
                     }
                     yield* native("Commit history verification", () => database.exec("COMMIT"));
-                    return { done: true, id: history.count };
+                    return { done: true, id: history.lastId };
                   }
                   currentId = next.id;
                   let sql = next.sql;
@@ -272,7 +336,7 @@ const runMigrations = <V extends Error, RV>(
                     });
                     return { done: true, id: next.id - 1, rolledBackId: next.id };
                   }
-                  if (next.id === migrations.length) {
+                  if (next.id === lastId) {
                     yield* verifySchema(updated, desired, "desired");
                   }
                   yield* native("Record applied migration", () => {
@@ -325,6 +389,7 @@ export const rollbackMigration: MigrationExecutor<SqliteExecutionError>["apply"]
 
 export const executor: MigrationExecutor<SqliteExecutionError> = {
   apply: applyMigrations,
+  checkpoint,
   dialect: "sqlite",
   rollback: rollbackMigration,
 };

@@ -7,7 +7,7 @@ import { ParseError } from "@uncutsql/codec";
 import { MigrationDecisionError, prepareMigrationDecisions, SchemaDiffError } from "@uncutsql/core";
 import type { Dialect, MigrationDecisions } from "@uncutsql/core";
 
-import { applyGenerated } from "./apply.ts";
+import { applyGenerated, verifyGenerated } from "./apply.ts";
 import { parseOptions, resolveConfig, UsageError } from "./config.ts";
 import { decisionDocument, writeDecisionFile } from "./decision-file.ts";
 import {
@@ -25,6 +25,7 @@ const help = `Usage: pnpm cli <check|format> [file|-]
        pnpm cli diff [schema-path|-]
        pnpm cli <diff|decisions|migration> <before-file|-> <after-file|->
        pnpm cli generate [schema-path|-] [output-dir]
+       pnpm cli verify [output-dir]
        pnpm cli apply|up|down <database-target> [output-dir]
 
 Options: --config <file>, --dialect <module>, --driver <module>
@@ -51,6 +52,7 @@ Decisions default to config.decisions or uncutsql.decisions.json beside the conf
   decisions  Print unresolved migration choices as JSON (before -> after).
   migration  Print a transaction script for supported changes; never execute it.
   generate   Write the next migration and schema lock (default directory: migrations).
+  verify     Verify the complete migration chain and lock without opening a database.
   apply, up  Apply pending files to a database and record applied history.
   down       Roll back the most recently applied migration.
 
@@ -135,6 +137,7 @@ const program = Effect.gen(function* () {
       "decisions",
       "migration",
       "generate",
+      "verify",
       "apply",
       "up",
       "down",
@@ -142,7 +145,8 @@ const program = Effect.gen(function* () {
   ) {
     return yield* Effect.fail(
       new UsageError({
-        message: "Expected check, format, diff, decisions, migration, generate, apply, up or down.",
+        message:
+          "Expected check, format, diff, decisions, migration, generate, verify, apply, up or down.",
       }),
     );
   }
@@ -214,6 +218,16 @@ const program = Effect.gen(function* () {
       try: () => writeDecisionFile(document, path, writer.flag),
     });
   };
+  if (command === "verify") {
+    const directory = args[1] ?? selected.migrations ?? "migrations";
+    if (args.length > 2 || directory.startsWith("-")) {
+      return yield* Effect.fail(
+        new UsageError({ message: "verify accepts an optional migration directory." }),
+      );
+    }
+    const count = yield* verifyGenerated(directory);
+    return `Verified ${count} migration(s).\n`;
+  }
   // Apply only needs the driver's dialect ID; it does not load a SQL parser.
   const executing = command === "apply" || command === "up" || command === "down";
   const dialect = executing ? undefined : yield* loadDialect(selected.dialect);

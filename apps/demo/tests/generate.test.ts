@@ -68,7 +68,7 @@ test("CLI generates from a missing baseline, advances IDs and leaves no-op outpu
     assert.match(first.stdout, /Generated migrations\/000001.sql/);
     const firstSql = readFileSync(join(directory, "migrations", "000001.sql"), "utf8");
     const firstLock = readLock(directory);
-    assert.equal(firstLock.formatVersion, 1);
+    assert.equal(firstLock.formatVersion, 2);
     assert.equal(firstLock.dialect, "sqlite");
     assert.equal(firstLock.lastMigrationId, 1);
     assert.equal(firstLock.lastMigrationSha256, hashMigration(firstSql));

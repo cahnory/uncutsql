@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 
 import { Data, Effect } from "effect";
 
@@ -11,7 +12,7 @@ export class GenerationError extends Data.TaggedError("GenerationError")<{
 export interface SchemaLock {
   readonly database: DatabaseSchema;
   readonly dialect: string;
-  readonly formatVersion: 1;
+  readonly formatVersion: 2;
   readonly lastMigrationId: number;
   readonly lastMigrationSha256: string;
 }
@@ -22,7 +23,7 @@ export const hashMigration = (sql: string) =>
 /** The consumer owns lock metadata; core validates the embedded database model. */
 export const decodeLock = (
   source: string,
-  dialect: string,
+  dialect?: string,
 ): Effect.Effect<SchemaLock, GenerationError> =>
   Effect.gen(function* () {
     const value: unknown = yield* Effect.try({
@@ -44,7 +45,7 @@ export const decodeLock = (
             "database",
           ].includes(key),
       ) ||
-      item.formatVersion !== 1 ||
+      item.formatVersion !== 2 ||
       typeof item.dialect !== "string" ||
       typeof item.lastMigrationId !== "number" ||
       !Number.isSafeInteger(item.lastMigrationId) ||
@@ -54,11 +55,11 @@ export const decodeLock = (
     ) {
       return yield* Effect.fail(
         new GenerationError({
-          message: "Unsupported or malformed lock format (expected version 1)",
+          message: "Unsupported or malformed lock format (expected version 2)",
         }),
       );
     }
-    if (item.dialect !== dialect) {
+    if (dialect !== undefined && item.dialect !== dialect) {
       return yield* Effect.fail(
         new GenerationError({
           message: `Lock dialect ${JSON.stringify(item.dialect)} does not match ${JSON.stringify(dialect)}`,
@@ -79,14 +80,41 @@ export const decodeLock = (
     return {
       database,
       dialect: item.dialect,
-      formatVersion: 1,
+      formatVersion: 2,
       lastMigrationId: item.lastMigrationId,
       lastMigrationSha256: item.lastMigrationSha256,
     };
   });
 
+export const schemaDigest = (database: DatabaseSchema) =>
+  hashMigration(
+    JSON.stringify(database, (_key, value: unknown) =>
+      value && typeof value === "object" && !Array.isArray(value)
+        ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+        : value,
+    ),
+  );
+
+/** Hash the exact generated UTF-8 text, rejecting malformed byte sequences. */
+export const readMigrationFile = async (filename: string, tip?: SchemaLock) => {
+  const bytes = await readFile(filename);
+  const sql = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+  const sha256 = hashMigration(sql);
+  if (tip && sha256 !== tip.lastMigrationSha256) {
+    throw new Error(`${filename}: content does not match the lock's migration hash`);
+  }
+  const match = /^-- uncutsql-chain v1 (root|[a-f0-9]{64}) ([a-f0-9]{64})\n/.exec(sql);
+  if (!match) {
+    throw new Error(`${filename}: invalid migration chain header`);
+  }
+  if (tip && match[2] !== schemaDigest(tip.database)) {
+    throw new Error(`${filename}: schema snapshot does not match the migration lock`);
+  }
+  return { parent: match[1], sha256, sql };
+};
+
 export const readDownMigration = (source: string): { sql: string } | { reason: string } => {
-  const [header, ...lines] = source.split("\n");
+  const [header, ...lines] = source.slice(source.indexOf("\n") + 1).split("\n");
   if (header?.startsWith("-- uncutsql-down unavailable: ")) {
     return { reason: header.slice("-- uncutsql-down unavailable: ".length) };
   }

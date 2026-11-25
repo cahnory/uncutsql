@@ -43,7 +43,7 @@ const load = (selection: PluginSelection | undefined, kind: "dialect" | "driver"
       const methods =
         kind === "dialect"
           ? ["parse", "format", "toDatabaseSchema", "lowerMigration", "encodeMigration"]
-          : ["apply"];
+          : ["apply", "checkpoint"];
       for (const method of methods) {
         if (typeof exported[method] !== "function") {
           throw new Error(`Adapter is missing ${method}()`);
