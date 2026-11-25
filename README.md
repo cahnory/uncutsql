@@ -260,12 +260,27 @@ The output filesystem must support hard links, atomic rename and directory sync.
 
 Corrupt/unsupported locks, a different dialect, missing or extra numbered files,
 and a modified latest migration cause an error rather than resetting the baseline.
-All numbered files from 1 through the locked ID must remain present. The latest
+All numbered files after the compacted baseline (or from 1 for an uncompacted history) through the locked ID must remain present. The latest
 SQL checksum and schema digest are verified during generation. Interrupted runs can leave a writer lock, staging files or an uncommitted
 SQL file. Reconcile those files with the recorded baseline before retrying; remove
 the writer lock only after confirming no command is using the migration directory. Automatic recovery
 is not implemented. Database application and its history are separate, as described
 below.
+
+## Compact the first N migrations
+
+Run `uncutsql compact 800 [migration-directory]` to replace migrations 1 through
+800 with `baseline-000800.sql`. The SQLite driver replays the prefix in memory
+and writes the resulting schema and seed rows into one SQL migration. The CLI
+asks for confirmation before deleting the superseded files. Use `--yes` to
+confirm in a script. Commit the baseline, updated lock, and deletions together.
+
+Upgrade existing databases to at least migration 800 before distributing the
+change. A database inside the deleted range needs the previous revision to
+finish that upgrade. A fresh database applies the baseline once, and databases
+already at or beyond 800 continue from their recorded checkpoint. Later files
+keep their IDs and checksums. Rollback stops at 800. To compact again, pass
+the new ending migration number, including the prefix already compacted.
 
 ## Apply generated migrations
 

@@ -55,6 +55,7 @@ export const parseOptions = (args: readonly string[]) =>
         interactive?: boolean;
         migrations?: string;
         schema?: string;
+        yes?: boolean;
       } = {};
       for (let index = 0; index < args.length; index++) {
         const arg = args[index]!;
@@ -63,6 +64,13 @@ export const parseOptions = (args: readonly string[]) =>
           break;
         }
         const [name, ...inline] = arg.split("=");
+        if (name === "--yes") {
+          if (inline.length || options.yes) {
+            throw new Error("--yes takes no value and may appear only once");
+          }
+          options.yes = true;
+          continue;
+        }
         if (name === "--interactive") {
           if (inline.length) {
             throw new Error("--interactive takes no value");
@@ -112,7 +120,7 @@ export const parseOptions = (args: readonly string[]) =>
         }
         const key = name.slice(2) as Exclude<
           keyof typeof options,
-          "decisionWriter" | "interactive"
+          "decisionWriter" | "interactive" | "yes"
         >;
         if (options[key] !== undefined) {
           throw new Error(`${name} was specified more than once`);

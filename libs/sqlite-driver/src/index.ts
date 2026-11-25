@@ -14,6 +14,7 @@ import type {
 } from "@uncutsql/core";
 import { schema, toDatabaseSchema } from "@uncutsql/sqlite";
 
+import { compactSqlite } from "./compact.ts";
 import { executeScriptBody } from "./script.ts";
 
 export class SqliteExecutionError extends Data.TaggedError("SqliteExecutionError")<{
@@ -222,15 +223,25 @@ const runMigrations = <V extends Error, RV>(
       );
     }
     const down = direction === "down";
-    const offset = start ? (down ? Math.max(0, start.id - 1) : start.id) : 0;
+    const baseline = migrations[0]?.baselineCheckpoint !== undefined ? migrations[0] : undefined;
+    const checkpointId = start?.id ?? 0;
+    const firstUpId = baseline?.id ?? checkpointId + 1;
+    const offset = down ? Math.max(0, checkpointId - 1) : firstUpId - 1;
     const lastId = offset + migrations.length;
     if (
+      (baseline &&
+        (down ||
+          (start?.id ?? 0) !== 0 ||
+          !Number.isSafeInteger(baseline.id) ||
+          baseline.id < 2 ||
+          !/^[a-f0-9]{64}$/.test(baseline.baselineCheckpoint!))) ||
       (down &&
         start &&
         (migrations.length !== (start.id ? 1 : 0) ||
           (start.id > 0 && migrations[0]?.sha256 !== start.sha256))) ||
       migrations.some(
         (migration, index) =>
+          (index > 0 && migration.baselineCheckpoint !== undefined) ||
           migration.id !== offset + index + 1 ||
           !migration.sql.trim() ||
           migration.sql.includes("\0") ||
@@ -266,12 +277,13 @@ const runMigrations = <V extends Error, RV>(
               () =>
                 Effect.gen(function* () {
                   const history = yield* readHistory(database, down);
+                  const applied = migrations[history.lastId - offset - 1];
                   const expected =
                     start && history.lastId === start.id
                       ? start.sha256
                       : history.lastId === 0
                         ? null
-                        : migrations[history.lastId - offset - 1]?.sha256;
+                        : (applied?.baselineCheckpoint ?? applied?.sha256);
                   if (
                     expected !== history.sha256 ||
                     history.lastId < (start?.id ?? 0) ||
@@ -294,7 +306,10 @@ const runMigrations = <V extends Error, RV>(
                     );
                   }
                   yield* verifySchema(actual, history.snapshot, "applied");
-                  const next = migrations[history.lastId - offset - (down ? 1 : 0)];
+                  const next =
+                    baseline && history.lastId === 0
+                      ? baseline
+                      : migrations[history.lastId - offset - (down ? 1 : 0)];
                   if (!next) {
                     if (!down) {
                       yield* verifySchema(actual, desired, "desired");
@@ -344,7 +359,12 @@ const runMigrations = <V extends Error, RV>(
                       .prepare(
                         `INSERT INTO ${historyTable} (id, sha256, dialect, format_version, database_json, applied_at) VALUES (?, ?, 'sqlite', 1, ?, ?)`,
                       )
-                      .run(next.id, next.sha256, JSON.stringify(updated), new Date().toISOString());
+                      .run(
+                        next.id,
+                        next.baselineCheckpoint ?? next.sha256,
+                        JSON.stringify(updated),
+                        new Date().toISOString(),
+                      );
                     database.exec("COMMIT");
                   });
                   appliedIds.push(next.id);
@@ -390,6 +410,8 @@ export const rollbackMigration: MigrationExecutor<SqliteExecutionError>["apply"]
 export const executor: MigrationExecutor<SqliteExecutionError> = {
   apply: applyMigrations,
   checkpoint,
+  compact: (migrations) =>
+    native("Compact SQLite migrations", () => compactSqlite(migrations, historyName)),
   dialect: "sqlite",
   rollback: rollbackMigration,
 };

@@ -352,3 +352,52 @@ test("unlinked migrations are rejected and irreversible migrations retain their 
     rmSync(cwd, { recursive: true });
   }
 });
+
+test("compact confirms deletion, preserves checkpoints and supports later compaction", () => {
+  const cwd = directory();
+  const ok = (args: string[], input = "") => {
+    const result = run(cwd, args, input);
+    assert.equal(result.status, 0, result.stderr);
+    return result;
+  };
+  try {
+    const migrations = join(cwd, "migrations");
+    ok(["generate", "-"], "CREATE TABLE t(a)");
+    ok(["apply", "behind"]);
+    ok(["generate", "-"], "CREATE TABLE t(a,b)");
+    ok(["apply", "existing"]);
+    exec(join(cwd, "existing"), "INSERT INTO t VALUES(1,2)");
+    ok(["generate", "-"], "CREATE TABLE t(a,b,c)");
+    const suffix = readFileSync(join(migrations, "000003.sql"));
+    for (const input of ["n\n", "\n", ""]) {
+      assert.match(ok(["compact", "2"], input).stdout, /cancelled/);
+      assert.ok(existsSync(join(migrations, "000001.sql")));
+    }
+    ok(["compact", "2"], "yes\n");
+    for (const file of ["000001.sql", "000002.sql"]) {
+      assert.ok(!existsSync(join(migrations, file)));
+    }
+    assert.deepEqual(readFileSync(join(migrations, "000003.sql")), suffix);
+    ok(["verify"]);
+    assert.match(run(cwd, ["up", "behind"]).stderr, /pre-compaction/);
+    ok(["up", "existing"]);
+    assert.deepEqual(rows(join(cwd, "existing"), "SELECT * FROM t"), [{ a: 1, b: 2, c: null }]);
+    ok(["up", "fresh"]);
+    assert.deepEqual(rows(join(cwd, "fresh"), "SELECT id FROM __uncutsql_migrations ORDER BY id"), [
+      { id: 2 },
+      { id: 3 },
+    ]);
+    ok(["down", "fresh"]);
+    assert.match(run(cwd, ["down", "fresh"]).stderr, /compacted baseline/);
+    ok(["up", "fresh"]);
+    ok(["compact", "3", "--yes"]);
+    assert.ok(!existsSync(join(migrations, "baseline-000002.sql")));
+    ok(["up", "fresh2"]);
+    ok(["generate", "-"], "CREATE TABLE t(a,b,c,d)");
+    ok(["verify"]);
+    ok(["up", "fresh2"]);
+    ok(["up", "existing"]);
+  } finally {
+    rmSync(cwd, { recursive: true });
+  }
+});

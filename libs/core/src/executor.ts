@@ -3,6 +3,8 @@ import type { Effect } from "effect";
 import type { DatabaseSchema } from "./model.ts";
 
 export interface MigrationSource {
+  /** A root baseline records the original prefix tip as the logical checkpoint. */
+  readonly baselineCheckpoint?: string;
   readonly down?: { readonly sql: string } | { readonly reason: string };
   readonly id: number;
   readonly sha256: string;
@@ -34,6 +36,8 @@ export interface MigrationExecutor<E extends Error = Error, R = never> {
     checkpoint?: MigrationCheckpoint,
   ) => Effect.Effect<ExecutionResult, E | V, R | RV>;
   readonly checkpoint: (target: string) => Effect.Effect<MigrationCheckpoint, E, R>;
+  /** Replay a verified prefix on an empty database and render its state as one SQL migration. */
+  readonly compact?: (migrations: readonly MigrationSource[]) => Effect.Effect<string, E, R>;
   readonly dialect: string;
   /** Undo only the most recently applied migration. */
   readonly rollback?: MigrationExecutor<E, R>["apply"];

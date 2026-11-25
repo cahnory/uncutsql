@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import { Data, Effect } from "effect";
 
@@ -10,6 +11,7 @@ export class GenerationError extends Data.TaggedError("GenerationError")<{
   readonly message: string;
 }> {}
 export interface SchemaLock {
+  readonly baseline?: { readonly checkpoint: string; readonly id: number; readonly sha256: string };
   readonly database: DatabaseSchema;
   readonly dialect: string;
   readonly formatVersion: 2;
@@ -17,6 +19,7 @@ export interface SchemaLock {
   readonly lastMigrationSha256: string;
 }
 export const migrationFilename = (id: number) => `${String(id).padStart(6, "0")}.sql`;
+export const baselineFilename = (id: number) => `baseline-${migrationFilename(id)}`;
 export const hashMigration = (sql: string) =>
   createHash("sha256").update(sql, "utf8").digest("hex");
 
@@ -38,6 +41,7 @@ export const decodeLock = (
       Object.keys(item).some(
         (key) =>
           ![
+            "baseline",
             "formatVersion",
             "dialect",
             "lastMigrationId",
@@ -66,6 +70,22 @@ export const decodeLock = (
         }),
       );
     }
+    const baseline = item.baseline as SchemaLock["baseline"];
+    if (
+      baseline !== undefined &&
+      (!baseline ||
+        typeof baseline !== "object" ||
+        !Number.isSafeInteger(baseline.id) ||
+        baseline.id < 2 ||
+        baseline.id > item.lastMigrationId ||
+        typeof baseline.sha256 !== "string" ||
+        !/^[a-f0-9]{64}$/.test(baseline.sha256) ||
+        typeof baseline.checkpoint !== "string" ||
+        !/^[a-f0-9]{64}$/.test(baseline.checkpoint) ||
+        (baseline.id === item.lastMigrationId && baseline.checkpoint !== item.lastMigrationSha256))
+    ) {
+      return yield* Effect.fail(new GenerationError({ message: "Malformed compacted baseline" }));
+    }
     const database = yield* decodeDatabaseSchema(item.database).pipe(
       Effect.mapError(
         (error) => new GenerationError({ message: `Invalid lock database: ${error.message}` }),
@@ -78,6 +98,7 @@ export const decodeLock = (
       );
     }
     return {
+      ...(baseline && { baseline }),
       database,
       dialect: item.dialect,
       formatVersion: 2,
@@ -110,7 +131,21 @@ export const readMigrationFile = async (filename: string, tip?: SchemaLock) => {
   if (tip && match[2] !== schemaDigest(tip.database)) {
     throw new Error(`${filename}: schema snapshot does not match the migration lock`);
   }
-  return { parent: match[1], sha256, sql };
+  return { parent: match[1], schemaHash: match[2]!, sha256, sql };
+};
+
+export const readCompactedBaseline = async (directory: string, lock: SchemaLock) => {
+  const baseline = lock.baseline!;
+  const path = join(directory, baselineFilename(baseline.id));
+  const tip =
+    baseline.id === lock.lastMigrationId
+      ? { ...lock, lastMigrationSha256: baseline.sha256 }
+      : undefined;
+  const file = await readMigrationFile(path, tip);
+  if (file.sha256 !== baseline.sha256 || file.parent !== "root") {
+    throw new Error(`${path}: invalid baseline checksum or parent`);
+  }
+  return file;
 };
 
 export const readDownMigration = (source: string): { sql: string } | { reason: string } => {

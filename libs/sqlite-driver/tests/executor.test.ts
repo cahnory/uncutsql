@@ -14,6 +14,7 @@ import { diffDatabases, planDatabaseMigration } from "@uncutsql/core";
 import type { DatabaseSchema, MigrationSource } from "@uncutsql/core";
 import { encodeMigration, lowerMigration, schema, toDatabaseSchema } from "@uncutsql/sqlite";
 
+import { compactSqlite } from "../src/compact.ts";
 import { applyMigrations, SqliteExecutionError } from "../src/index.ts";
 
 const hash = (sql: string) => createHash("sha256").update(sql).digest("hex");
@@ -457,5 +458,52 @@ test("live schema inspection matches legacy quoted declarations to canonical nam
     assert.deepEqual(resumed.appliedIds, []);
   } finally {
     target.close();
+  }
+});
+
+test("SQLite baseline preserves seeded values, row IDs, triggers and the autoincrement sequence", () => {
+  const prefix = [
+    source(
+      1,
+      `BEGIN;
+      CREATE TABLE t(id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT, bytes BLOB, n REAL);
+      CREATE TABLE audit(msg);
+      CREATE TRIGGER log_insert AFTER INSERT ON t BEGIN INSERT INTO audit VALUES(new.label); END;
+      COMMIT;`,
+    ),
+    source(
+      2,
+      `BEGIN;
+      INSERT INTO t VALUES(42, CAST(X'610062' AS TEXT), X'00FF', 0.12345678901234567);
+      INSERT INTO t(id) VALUES(71);
+      DELETE FROM t WHERE id=71;
+      INSERT INTO audit(rowid,msg) VALUES(9007199254740993, 9223372036854775807);
+      COMMIT;`,
+    ),
+  ];
+  const sql = compactSqlite(prefix, "__uncutsql_migrations");
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec(sql);
+    assert.deepEqual(
+      { ...db.prepare("SELECT id, hex(label) AS text, hex(bytes) AS bytes, n FROM t").get() },
+      {
+        bytes: "00FF",
+        id: 42,
+        n: Number("0.12345678901234567"),
+        text: "610062",
+      },
+    );
+    assert.equal(db.prepare("SELECT count(*) AS n FROM audit").get()?.n, 3);
+    assert.equal(
+      db.prepare("SELECT CAST(msg AS TEXT) AS msg FROM audit WHERE rowid=9007199254740993").get()
+        ?.msg,
+      "9223372036854775807",
+    );
+    db.exec("INSERT INTO t(label) VALUES('next')");
+    assert.equal(db.prepare("SELECT max(id) AS id FROM t").get()?.id, 72);
+    assert.equal(db.prepare("SELECT count(*) AS n FROM audit WHERE msg='next'").get()?.n, 1);
+  } finally {
+    db.close();
   }
 });

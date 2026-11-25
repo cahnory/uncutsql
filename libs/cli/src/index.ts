@@ -8,6 +8,7 @@ import { MigrationDecisionError, prepareMigrationDecisions, SchemaDiffError } fr
 import type { Dialect, MigrationDecisions } from "@uncutsql/core";
 
 import { applyGenerated, verifyGenerated } from "./apply.ts";
+import { compactGenerated } from "./compact.ts";
 import { parseOptions, resolveConfig, UsageError } from "./config.ts";
 import { decisionDocument, writeDecisionFile } from "./decision-file.ts";
 import {
@@ -16,7 +17,7 @@ import {
   prepareGeneratedDecisions,
 } from "./generate.ts";
 import { promptDecisions } from "./interactive.ts";
-import { migrationFilename } from "./lock.ts";
+import { baselineFilename, migrationFilename } from "./lock.ts";
 import { loadDialect, loadDriver } from "./plugins.ts";
 import { schemaFiles } from "./schema-files.ts";
 import { compareSchemas, renderMigration } from "./workflow.ts";
@@ -25,6 +26,7 @@ const help = `Usage: pnpm cli <check|format> [file|-]
        pnpm cli diff [schema-path|-]
        pnpm cli <diff|decisions|migration> <before-file|-> <after-file|->
        pnpm cli generate [schema-path|-] [output-dir]
+       pnpm cli compact <N> [output-dir] [--yes]
        pnpm cli verify [output-dir]
        pnpm cli apply|up|down <database-target> [output-dir]
 
@@ -52,6 +54,7 @@ Decisions default to config.decisions or uncutsql.decisions.json beside the conf
   decisions  Print unresolved migration choices as JSON (before -> after).
   migration  Print a transaction script for supported changes; never execute it.
   generate   Write the next migration and schema lock (default directory: migrations).
+  compact    Replace migrations 1 through N with a baseline. --yes confirms deletion.
   verify     Verify the complete migration chain and lock without opening a database.
   apply, up  Apply pending files to a database and record applied history.
   down       Roll back the most recently applied migration.
@@ -137,6 +140,7 @@ const program = Effect.gen(function* () {
       "decisions",
       "migration",
       "generate",
+      "compact",
       "verify",
       "apply",
       "up",
@@ -146,7 +150,7 @@ const program = Effect.gen(function* () {
     return yield* Effect.fail(
       new UsageError({
         message:
-          "Expected check, format, diff, decisions, migration, generate, verify, apply, up or down.",
+          "Expected check, format, diff, decisions, migration, generate, compact, verify, apply, up or down.",
       }),
     );
   }
@@ -176,6 +180,9 @@ const program = Effect.gen(function* () {
           "--interactive requires generate and cannot be combined with decision-file options.",
       }),
     );
+  }
+  if (options.yes && command !== "compact") {
+    return yield* Effect.fail(new UsageError({ message: "--yes requires compact." }));
   }
   const selected = yield* resolveConfig(options, process.cwd());
   const decisions: unknown =
@@ -218,6 +225,26 @@ const program = Effect.gen(function* () {
       try: () => writeDecisionFile(document, path, writer.flag),
     });
   };
+  if (command === "compact") {
+    const directory = args[2] ?? selected.migrations ?? "migrations";
+    if (!/^\d+$/.test(filename) || args.length > 3 || directory.startsWith("-")) {
+      return yield* Effect.fail(
+        new UsageError({
+          message: "compact requires a migration number and an optional migration directory.",
+        }),
+      );
+    }
+    const executor = yield* loadDriver(selected.driver);
+    const done = yield* compactGenerated(
+      executor,
+      directory,
+      Number(filename),
+      options.yes ?? false,
+    );
+    return done
+      ? `Compacted migrations 1 through ${Number(filename)}.\n`
+      : "Compaction cancelled.\n";
+  }
   if (command === "verify") {
     const directory = args[1] ?? selected.migrations ?? "migrations";
     if (args.length > 2 || directory.startsWith("-")) {
@@ -260,7 +287,7 @@ const program = Effect.gen(function* () {
         : `Rolled back ${migrationFilename(result.rolledBackId)}.\n`;
     }
     return result.appliedIds.length
-      ? `Applied ${result.appliedIds.map(migrationFilename).join(", ")}.\n`
+      ? `Applied ${result.appliedIds.map((id) => (id === result.baselineId ? baselineFilename(id) : migrationFilename(id))).join(", ")}.\n`
       : "Database is up to date.\n";
   }
   if (command === "generate") {
