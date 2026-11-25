@@ -84,3 +84,23 @@ export const decodeLock = (
       lastMigrationSha256: item.lastMigrationSha256,
     };
   });
+
+export const readDownMigration = (source: string): { sql: string } | { reason: string } => {
+  const [header, ...lines] = source.split("\n");
+  if (header?.startsWith("-- uncutsql-down unavailable: ")) {
+    return { reason: header.slice("-- uncutsql-down unavailable: ".length) };
+  }
+  if (header !== "-- uncutsql-down v1") {
+    return { reason: "This migration has no recorded down SQL." };
+  }
+  const end = lines.indexOf("-- uncutsql-up");
+  const body = lines.slice(0, end);
+  if (end < 1 || body.some((line) => !line.startsWith("-- | "))) {
+    throw new Error("Malformed down migration");
+  }
+  const sql = body.map((line) => line.slice(5)).join("\n");
+  if (!sql.trim()) {
+    throw new Error("Empty down migration");
+  }
+  return { sql };
+};

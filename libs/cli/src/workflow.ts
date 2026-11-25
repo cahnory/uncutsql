@@ -4,6 +4,7 @@ import {
   diffDatabases,
   MigrationDecisionError,
   planDatabaseMigration,
+  planDownMigration,
   resolveMigrationDecisions,
   SchemaDiffError,
 } from "@uncutsql/core";
@@ -52,6 +53,13 @@ export const renderMigration = <Ast, Plan, E extends Error, R>(
   comparison: Comparison,
   decisions?: unknown,
 ): Effect.Effect<string, E | SchemaDiffError | MigrationDecisionError, R> =>
+  Effect.map(renderUp(dialect, comparison, decisions), (result) => result.sql);
+
+const renderUp = <Ast, Plan, E extends Error, R>(
+  dialect: Dialect<Ast, Plan, E, R>,
+  comparison: Comparison,
+  decisions?: unknown,
+) =>
   Effect.gen(function* () {
     const resolved = yield* resolveMigrationDecisions(
       comparison.before,
@@ -70,11 +78,50 @@ export const renderMigration = <Ast, Plan, E extends Error, R>(
     const plan = yield* dialect.lowerMigration(procedures, comparison.before, comparison.after);
     const sql = yield* dialect.encodeMigration(plan);
     if (!sql.trim()) {
-      return sql;
+      return { procedures, sql };
     }
     // Persist the validated choices inside the hashed migration, using a single JSON comment.
     const metadata = resolved.decisions.decisions.length
       ? `-- uncutsql-decisions: ${JSON.stringify(resolved.decisions).replaceAll("\u2028", "\\u2028").replaceAll("\u2029", "\\u2029")}\n`
       : "";
-    return metadata + sql;
+    return { procedures, sql: metadata + sql };
+  });
+
+// Keep the complete pair under the existing file checksum. SQL clients execute only up.
+export const renderMigrationFile = <Ast, Plan, E extends Error, R>(
+  dialect: Dialect<Ast, Plan, E, R>,
+  comparison: Comparison,
+  decisions?: unknown,
+) =>
+  Effect.gen(function* () {
+    const up = yield* renderUp(dialect, comparison, decisions);
+    if (!up.sql.trim()) {
+      return up.sql;
+    }
+    const down = planDownMigration(up.procedures);
+    const unavailable = (reason: string) =>
+      `-- uncutsql-down unavailable: ${reason.replace(/[\r\n]+/g, " ")}\n${up.sql}`;
+    if (typeof down === "string") {
+      return unavailable(down);
+    }
+    if (down.dropGuards?.length && !dialect.supportsDropGuards) {
+      return unavailable(`Dialect ${dialect.name} cannot guard destructive drops.`);
+    }
+    const result = yield* Effect.result(
+      Effect.gen(function* () {
+        const plan = yield* dialect.lowerMigration(down, comparison.after, comparison.before);
+        return yield* dialect.encodeMigration(plan);
+      }),
+    );
+    if (Result.isFailure(result)) {
+      return unavailable(result.failure.message);
+    }
+    if (!result.success.trim()) {
+      return unavailable("The dialect returned empty down SQL.");
+    }
+    const commented = result.success
+      .split("\n")
+      .map((line) => `-- | ${line}`)
+      .join("\n");
+    return `-- uncutsql-down v1\n${commented}\n-- uncutsql-up\n${up.sql}`;
   });

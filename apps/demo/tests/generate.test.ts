@@ -229,8 +229,10 @@ test("failed lock replacement removes the newly published SQL before returning",
   const directory = createDirectory();
   const dialect = adapter(() =>
     Effect.sync(() => {
-      renameSync(join(directory, "uncutsql.lock.json"), join(directory, "baseline.backup"));
-      mkdirSync(join(directory, "uncutsql.lock.json"));
+      if (!existsSync(join(directory, "baseline.backup"))) {
+        renameSync(join(directory, "uncutsql.lock.json"), join(directory, "baseline.backup"));
+        mkdirSync(join(directory, "uncutsql.lock.json"));
+      }
       return "ALTER THING;";
     }),
   );

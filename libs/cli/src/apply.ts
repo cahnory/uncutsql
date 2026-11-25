@@ -7,7 +7,7 @@ import { diffDatabases } from "@uncutsql/core";
 import type { MigrationExecutor, MigrationSource } from "@uncutsql/core";
 
 import { readBaseline, withMigrationDirectoryLock } from "./generate.ts";
-import { hashMigration, migrationFilename } from "./lock.ts";
+import { hashMigration, migrationFilename, readDownMigration } from "./lock.ts";
 
 export class ApplicationError extends Data.TaggedError("ApplicationError")<{
   readonly message: string;
@@ -18,8 +18,15 @@ export const applyGenerated = <E extends Error, R>(
   executor: MigrationExecutor<E, R>,
   target: string,
   directory: string,
+  direction: "up" | "down" = "up",
 ) =>
   Effect.gen(function* () {
+    const execute = direction === "down" ? executor.rollback : executor.apply;
+    if (typeof execute !== "function") {
+      return yield* Effect.fail(
+        new ApplicationError({ message: "This driver does not support down migrations." }),
+      );
+    }
     const loaded = yield* withMigrationDirectoryLock(
       directory,
       false,
@@ -41,7 +48,7 @@ export const applyGenerated = <E extends Error, R>(
             const files: MigrationSource[] = [];
             for (let id = 1; id <= baseline.lastMigrationId; id++) {
               const sql = await readFile(join(directory, migrationFilename(id)), "utf8");
-              files.push({ id, sha256: hashMigration(sql), sql });
+              files.push({ down: readDownMigration(sql), id, sha256: hashMigration(sql), sql });
             }
             return files;
           },
@@ -49,7 +56,7 @@ export const applyGenerated = <E extends Error, R>(
         return { database: baseline.database, migrations };
       }),
     );
-    return yield* executor.apply(
+    return yield* execute.bind(executor)(
       target,
       loaded.migrations,
       loaded.database,

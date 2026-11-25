@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 import { Effect } from "effect";
 
-import { applyGenerated } from "@uncutsql/cli";
+import { applyGenerated, hashMigration } from "@uncutsql/cli";
 import { generateMigration } from "@uncutsql/cli";
 import type { DatabaseSchema, MigrationExecutor } from "@uncutsql/core";
 import type { Dialect } from "@uncutsql/core";
@@ -244,6 +244,75 @@ test("demo apply preserves view trigger behavior across a rebuild and detects bo
     const drift = run(cwd, ["apply", path]);
     assert.equal(drift.status, 1);
     assert.match(drift.stderr, /TriggerChanged.*deactivate_user/);
+  } finally {
+    rmSync(cwd, { recursive: true });
+  }
+});
+
+test("down guards data, restores one applied snapshot and allows reapplication", () => {
+  const cwd = directory();
+  try {
+    const database = join(cwd, "db.sqlite");
+    const command = (args: string[], input = "") => {
+      const result = run(cwd, args, input);
+      assert.equal(result.status, 0, result.stderr);
+      return result.stdout;
+    };
+    command(["generate", "-"], "CREATE TABLE t (id INTEGER PRIMARY KEY)");
+    command(["generate", "-"], "CREATE TABLE t (id INTEGER PRIMARY KEY, email TEXT)");
+    command(["up", database]);
+    command(["generate", "-"], "CREATE TABLE t (id INTEGER PRIMARY KEY, email TEXT, name TEXT)");
+    exec(database, "INSERT INTO t VALUES (4, 'saved')");
+    const down = ["down", database];
+    assert.match(run(cwd, down).stderr, /contains data/);
+    assert.deepEqual(rows(database, "SELECT * FROM t"), [{ email: "saved", id: 4 }]);
+    assert.deepEqual(rows(database, "SELECT id FROM __uncutsql_migrations ORDER BY id"), [
+      { id: 1 },
+      { id: 2 },
+    ]);
+    exec(database, "UPDATE t SET email=NULL");
+    assert.match(command(down), /Rolled back 000002.sql/);
+    assert.deepEqual(rows(database, "SELECT * FROM t"), [{ id: 4 }]);
+    assert.match(run(cwd, down).stderr, /contains data/);
+    exec(database, "DELETE FROM t");
+    assert.match(command(down), /Rolled back 000001.sql/);
+    assert.equal(command(down), "No applied migrations.\n");
+    assert.match(command(["up", database]), /Applied 000001.sql, 000002.sql, 000003.sql/);
+  } finally {
+    rmSync(cwd, { recursive: true });
+  }
+});
+
+test("legacy migrations remain applicable and irreversible migrations retain their history", () => {
+  const cwd = directory();
+  const db = join(cwd, "db.sqlite");
+  try {
+    const path = join(cwd, "migrations", "000001.sql");
+    const lock = join(cwd, "migrations", "uncutsql.lock.json");
+    const oldSql = "BEGIN;\nCREATE TABLE t (id INTEGER);\nCOMMIT;\n";
+    assert.equal(run(cwd, ["generate", "-"], "CREATE TABLE t (id INTEGER)").status, 0);
+    writeFileSync(path, oldSql);
+    writeFileSync(
+      lock,
+      JSON.stringify({
+        ...JSON.parse(readFileSync(lock, "utf8")),
+        lastMigrationSha256: hashMigration(oldSql),
+      }),
+    );
+    const up = run(cwd, ["up", db]);
+    assert.equal(up.status, 0, up.stderr);
+    assert.match(run(cwd, ["down", db]).stderr, /no recorded down SQL/);
+    const generate = run(cwd, ["generate", "-"], "CREATE TABLE t (id TEXT)");
+    assert.equal(generate.status, 0, generate.stderr);
+    const apply = run(cwd, ["apply", db]);
+    assert.equal(apply.status, 0, apply.stderr);
+    const refused = run(cwd, ["down", db]);
+    assert.equal(refused.status, 1);
+    assert.match(refused.stderr, /changed the type of t.id/);
+    assert.deepEqual(rows(db, "SELECT id FROM __uncutsql_migrations ORDER BY id"), [
+      { id: 1 },
+      { id: 2 },
+    ]);
   } finally {
     rmSync(cwd, { recursive: true });
   }

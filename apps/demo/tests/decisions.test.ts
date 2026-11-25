@@ -75,6 +75,17 @@ test("CLI requires reviewable decisions, persists them, and applies renamed data
     } finally {
       actual.close();
     }
+    const down = run(cwd, ["down", dbPath]);
+    assert.equal(down.status, 0, down.stderr);
+    const restored = new DatabaseSync(dbPath);
+    try {
+      assert.deepEqual(
+        { ...restored.prepare("SELECT * FROM t").get() },
+        { id: 1, old: "preserved" },
+      );
+    } finally {
+      restored.close();
+    }
     const stale = run(cwd, ["generate", "-", "--decisions", decisions], after);
     assert.equal(stale.status, 1);
     assert.match(stale.stderr, /Stale migration decisions/);

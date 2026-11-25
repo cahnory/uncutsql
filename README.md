@@ -285,6 +285,23 @@ format/dialect metadata, timestamps and shared schema snapshots live separately 
 the database's reserved `__uncutsql_migrations` table. An up-to-date run prints
 `Database is up to date.`
 
+`up` is an alias for `apply`. To undo one applied migration and then reapply it:
+
+```sh
+pnpm demo:cli down .local/app.sqlite .local/migrations
+pnpm demo:cli up .local/app.sqlite .local/migrations
+```
+
+New numbered SQL files include the down script as line comments above the
+executable up script. The file checksum covers both directions. A rollback
+verifies the previous schema snapshot and removes the latest history row in
+the same transaction. Reviewed renames preserve their data in both directions.
+Rolling back an added table requires it to be empty. Rolling back an added
+column requires every value to be NULL. A failed guard leaves the migration
+applied. Forward table or column removals and column type changes are marked
+irreversible. When a dialect cannot render the reverse plan, the file records
+the reason. Older forward-only files can still be applied.
+
 Each SQL file and its history row commit in the **same transaction**. A failed file
 is rolled back and remains pending; earlier successful files remain committed.
 After fixing the underlying data problem, rerun `apply` to resume. The driver
@@ -296,9 +313,8 @@ pending file commits, the CLI also verifies its schema against the generation lo
 
 The first executor uses Node's SQLite support and accepts a persistent **main
 SQLite database file only**. It refuses to adopt an existing nonempty database
-without application history. Attached/temporary database migrations, baseline
-adoption and rollback/down migrations are not
-yet supported. `__uncutsql_migrations` is reserved for application metadata.
+without application history. Attached/temporary database migrations and baseline
+adoption are not yet supported. `__uncutsql_migrations` is reserved for application metadata.
 Migration scripts must use the generated BEGIN/COMMIT envelope; PRAGMAs outside
 it are limited to the emitted foreign-key settings. An initial failed attempt can
 leave an empty database file, which the runner does not delete automatically.

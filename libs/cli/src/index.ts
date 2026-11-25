@@ -25,7 +25,7 @@ const help = `Usage: pnpm cli <check|format> [file|-]
        pnpm cli diff [schema-path|-]
        pnpm cli <diff|decisions|migration> <before-file|-> <after-file|->
        pnpm cli generate [schema-path|-] [output-dir]
-       pnpm cli apply <database-target> [output-dir]
+       pnpm cli apply|up|down <database-target> [output-dir]
 
 Options: --config <file>, --dialect <module>, --driver <module>
          --schema <path|->, --migrations <directory>
@@ -34,12 +34,12 @@ Options: --config <file>, --dialect <module>, --driver <module>
          --write-decisions [file]    Create a new decision file
          --rewrite-decisions [file]  Reset all current decisions to pending
          --merge-decisions [file]    Refresh while keeping applicable choices
-Positional paths override flags; flags override configuration. Drivers are loaded only for apply.
+Positional paths override flags; flags override configuration. Execution commands load the driver.
 
 Schema paths accept files or directories of **/*.uncut.sql in sorted path order.
 check, format and generate use config.schema when the path is omitted.
 Use '-' for stdin. Without config.schema, check and format default to stdin.
-generate and apply use config.migrations unless an output directory is supplied.
+generate, apply, up and down use config.migrations unless an output directory is supplied.
 Decisions default to config.decisions or uncutsql.decisions.json beside the config
 (working directory without config). Choose one decision-file option for migration or generate.
   check   Validate syntax supported by the selected dialect (no execution).
@@ -51,7 +51,8 @@ Decisions default to config.decisions or uncutsql.decisions.json beside the conf
   decisions  Print unresolved migration choices as JSON (before -> after).
   migration  Print a transaction script for supported changes; never execute it.
   generate   Write the next migration and schema lock (default directory: migrations).
-  apply      Apply pending files to a database and record applied history.
+  apply, up  Apply pending files to a database and record applied history.
+  down       Roll back the most recently applied migration.
 
 Statements require separating semicolons; the final semicolon is optional.
 Input SQL files are never modified. Unsupported syntax is an error.
@@ -127,13 +128,21 @@ const program = Effect.gen(function* () {
   }
   const [command = "diff", filename = "-"] = args;
   if (
-    !["check", "format", "diff", "decisions", "migration", "generate", "apply"].includes(
-      command ?? "",
-    )
+    ![
+      "check",
+      "format",
+      "diff",
+      "decisions",
+      "migration",
+      "generate",
+      "apply",
+      "up",
+      "down",
+    ].includes(command ?? "")
   ) {
     return yield* Effect.fail(
       new UsageError({
-        message: "Expected check, format, diff, decisions, migration, generate or apply.",
+        message: "Expected check, format, diff, decisions, migration, generate, apply, up or down.",
       }),
     );
   }
@@ -206,9 +215,10 @@ const program = Effect.gen(function* () {
     });
   };
   // Apply only needs the driver's dialect ID; it does not load a SQL parser.
-  const dialect = command === "apply" ? undefined : yield* loadDialect(selected.dialect);
+  const executing = command === "apply" || command === "up" || command === "down";
+  const dialect = executing ? undefined : yield* loadDialect(selected.dialect);
   const readSchema = (path: string) => readSchemaWith(dialect!, path);
-  if (command === "apply") {
+  if (executing) {
     const directory = args[2] ?? selected.migrations ?? "migrations";
     if (
       args.length < 2 ||
@@ -219,12 +229,22 @@ const program = Effect.gen(function* () {
     ) {
       return yield* Effect.fail(
         new UsageError({
-          message: "apply requires a database target and an optional migration directory.",
+          message: `${command} requires a database target and an optional migration directory.`,
         }),
       );
     }
     const executor = yield* loadDriver(selected.driver);
-    const result = yield* applyGenerated(executor, filename, directory);
+    const result = yield* applyGenerated(
+      executor,
+      filename,
+      directory,
+      command === "down" ? "down" : "up",
+    );
+    if (command === "down") {
+      return result.rolledBackId === undefined
+        ? "No applied migrations.\n"
+        : `Rolled back ${migrationFilename(result.rolledBackId)}.\n`;
+    }
     return result.appliedIds.length
       ? `Applied ${result.appliedIds.map(migrationFilename).join(", ")}.\n`
       : "Database is up to date.\n";

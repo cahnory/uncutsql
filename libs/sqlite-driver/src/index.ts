@@ -136,6 +136,7 @@ const readHistory = (database: DatabaseSync, migrations: readonly MigrationSourc
       );
     }
     let snapshot: DatabaseSchema = { tables: [] };
+    let previous = snapshot;
     for (const row of rows) {
       const value: unknown = yield* native("Decode applied schema snapshot", () => {
         if (typeof row.database_json !== "string") {
@@ -146,12 +147,14 @@ const readHistory = (database: DatabaseSync, migrations: readonly MigrationSourc
       const decoded = yield* decodeDatabaseSchema(value).pipe(
         Effect.mapError((error) => new SqliteExecutionError({ message: error.message })),
       );
+      previous = snapshot;
       snapshot = decoded;
     }
-    return { count: rows.length, snapshot };
+    return { count: rows.length, previous, snapshot };
   });
 
-export const applyMigrations = <V extends Error, RV>(
+const runMigrations = <V extends Error, RV>(
+  direction: "up" | "down",
   target: string,
   migrations: readonly MigrationSource[],
   desired: DatabaseSchema,
@@ -226,15 +229,29 @@ export const applyMigrations = <V extends Error, RV>(
                     );
                   }
                   yield* verifySchema(actual, history.snapshot, "applied");
-                  const next = migrations[history.count];
+                  const down = direction === "down";
+                  const next = migrations[down ? history.count - 1 : history.count];
                   if (!next) {
-                    yield* verifySchema(actual, desired, "desired");
+                    if (!down) {
+                      yield* verifySchema(actual, desired, "desired");
+                    }
                     yield* native("Commit history verification", () => database.exec("COMMIT"));
                     return { done: true, id: history.count };
                   }
                   currentId = next.id;
+                  let sql = next.sql;
+                  if (down) {
+                    if (!next.down || !("sql" in next.down)) {
+                      return yield* Effect.fail(
+                        new SqliteExecutionError({
+                          message: `Cannot roll back migration ${next.id}. ${next.down?.reason ?? "No down SQL is available."}`,
+                        }),
+                      );
+                    }
+                    sql = next.down.sql;
+                  }
                   yield* native(`Execute migration ${next.id}`, () =>
-                    executeScriptBody(database, next.sql, historyName),
+                    executeScriptBody(database, sql, historyName),
                   );
                   const violations = yield* native("Check foreign keys", () =>
                     database.prepare("PRAGMA main.foreign_key_check").all(),
@@ -247,6 +264,14 @@ export const applyMigrations = <V extends Error, RV>(
                     );
                   }
                   const updated = yield* inspectDatabase(database);
+                  if (down) {
+                    yield* verifySchema(updated, history.previous, "applied");
+                    yield* native("Record rolled back migration", () => {
+                      database.prepare(`DELETE FROM ${historyTable} WHERE id = ?`).run(next.id);
+                      database.exec("COMMIT");
+                    });
+                    return { done: true, id: next.id - 1, rolledBackId: next.id };
+                  }
                   if (next.id === migrations.length) {
                     yield* verifySchema(updated, desired, "desired");
                   }
@@ -271,7 +296,11 @@ export const applyMigrations = <V extends Error, RV>(
                 }),
             );
             if (result.done) {
-              return { appliedIds, lastAppliedId: result.id };
+              return {
+                appliedIds,
+                lastAppliedId: result.id,
+                ...(result.rolledBackId === undefined ? {} : { rolledBackId: result.rolledBackId }),
+              };
             }
           }
         }),
@@ -288,7 +317,14 @@ export const applyMigrations = <V extends Error, RV>(
     );
   });
 
+export const applyMigrations: MigrationExecutor<SqliteExecutionError>["apply"] = (...args) =>
+  runMigrations("up", ...args);
+
+export const rollbackMigration: MigrationExecutor<SqliteExecutionError>["apply"] = (...args) =>
+  runMigrations("down", ...args);
+
 export const executor: MigrationExecutor<SqliteExecutionError> = {
   apply: applyMigrations,
   dialect: "sqlite",
+  rollback: rollbackMigration,
 };

@@ -8,7 +8,7 @@ import type { Dialect } from "@uncutsql/core";
 
 import { decodeLock, GenerationError, hashMigration, migrationFilename } from "./lock.ts";
 import type { SchemaLock } from "./lock.ts";
-import { renderMigration } from "./workflow.ts";
+import { renderMigrationFile } from "./workflow.ts";
 
 const lockName = "uncutsql.lock.json";
 const writerName = ".uncutsql-generation.lock";
@@ -207,7 +207,7 @@ export const generateMigration = <Ast, Plan, E extends Error, R>(
             new GenerationError({ message: "Migration ID range exhausted" }),
           );
         }
-        const rendered = yield* renderMigration(
+        const rendered = yield* renderMigrationFile(
           dialect,
           {
             after,

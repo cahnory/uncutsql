@@ -529,7 +529,9 @@ rollback, checksum edits, live drift, final-model verification, unexpected SQL
 after COMMIT, trigger-body/literal semicolons, non-SQLite executor substitution and
 independent executor processes applying the same files without duplicate history.
 The model/verifier boundary remains consumer-owned; no diff engine moves into the
-runtime adapter. Existing database adoption, down migrations and broader live
+runtime adapter. Down execution selects the latest applied file under the same writer
+lock, verifies the result against the prior history snapshot (empty for ID 1),
+and deletes its history row before commit. Existing database adoption and broader live
 schema object support are left for later work.
 
 ## Plugin loading and package independence
