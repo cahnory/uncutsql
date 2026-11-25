@@ -503,7 +503,7 @@ DatabaseSync. The regular syntax/model entry point does not import node:sqlite.
 This first executor supports persistent main databases only and reserves
 __uncutsql_migrations. It reads the latest history row by primary key for apply and the latest two for rollback,
 validates their schema snapshots and rechecks the checkpoint inside the write transaction.
-The database-free `verify` command checks every numbered file from the root to the lock tip. It
+The database-free `verify` command checks every numbered file from the root to the lock tip. Apply
 rejects untracked nonempty databases and unsupported live objects.
 
 Each iteration starts BEGIN IMMEDIATE, inspects the live schema and lets the
@@ -532,8 +532,10 @@ independent executor processes applying the same files without duplicate history
 The model/verifier boundary remains consumer-owned; no diff engine moves into the
 runtime adapter. Down execution selects the latest applied file under the same writer
 lock, verifies the result against the prior history snapshot (empty for ID 1),
-and deletes its history row before commit. Existing database adoption and broader live
-schema object support are left for later work.
+and deletes its history row before commit. The explicit adopt command replays a verified prefix
+in a scratch database, compares the live schema under a writer lock, and records
+the replayed snapshots and logical checkpoints in one transaction. Extract reads
+a consistent snapshot and groups schema declarations by owning table or view.
 
 ## Plugin loading and package independence
 

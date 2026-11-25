@@ -7,10 +7,11 @@ import { ParseError } from "@uncutsql/codec";
 import { MigrationDecisionError, prepareMigrationDecisions, SchemaDiffError } from "@uncutsql/core";
 import type { Dialect, MigrationDecisions } from "@uncutsql/core";
 
-import { applyGenerated, verifyGenerated } from "./apply.ts";
+import { adoptGenerated, applyGenerated, verifyGenerated } from "./apply.ts";
 import { compactGenerated } from "./compact.ts";
 import { parseOptions, resolveConfig, UsageError } from "./config.ts";
 import { decisionDocument, writeDecisionFile } from "./decision-file.ts";
+import { writeExtractedSchema } from "./extract.ts";
 import {
   compareGeneratedSchema,
   generateMigration,
@@ -30,6 +31,8 @@ const help = `Usage: pnpm cli init
        pnpm cli <diff|decisions|migration> <before-file|-> <after-file|->
        pnpm cli generate [schema-path|-] [output-dir]
        pnpm cli compact <N> [output-dir] [--yes]
+       pnpm cli extract <database-target> [schema-path|-]
+       pnpm cli adopt <database-target> <N> [output-dir]
        pnpm cli verify [output-dir]
        pnpm cli apply|up|down <database-target> [output-dir]
 
@@ -59,6 +62,8 @@ Decisions default to config.decisions or uncutsql.decisions.json beside the conf
   migration  Print a transaction script for supported changes; never execute it.
   generate   Write the next migration and schema lock (default directory: migrations).
   compact    Replace migrations 1 through N with a baseline. --yes confirms deletion.
+  extract    Export schema to a file, directory, or stdout (default: config.schema or stdout).
+  adopt      Verify an existing database at migration N and initialize its migration history.
   verify     Verify the complete migration chain and lock without opening a database.
   apply, up  Apply pending files to a database and record applied history.
   down       Roll back the most recently applied migration.
@@ -145,6 +150,8 @@ const program = Effect.gen(function* () {
       "decisions",
       "migration",
       "generate",
+      "extract",
+      "adopt",
       "compact",
       "verify",
       "apply",
@@ -155,7 +162,7 @@ const program = Effect.gen(function* () {
     return yield* Effect.fail(
       new UsageError({
         message:
-          "Expected init, check, format, diff, decisions, migration, generate, compact, verify, apply, up or down.",
+          "Expected init, check, format, diff, decisions, migration, generate, compact, extract, adopt, verify, apply, up or down.",
       }),
     );
   }
@@ -240,6 +247,54 @@ const program = Effect.gen(function* () {
       try: () => writeDecisionFile(document, path, writer.flag),
     });
   };
+  if (command === "extract") {
+    const destination = args[2] ?? selected.schema ?? "-";
+    if (!args[1] || filename.startsWith("-") || args.length > 3 || !validPath(destination)) {
+      return yield* Effect.fail(
+        new UsageError({
+          message: "extract requires a database target and an optional schema path.",
+        }),
+      );
+    }
+    const executor = yield* loadDriver(selected.driver);
+    if (!executor.extract) {
+      return yield* Effect.fail(
+        new InputError({ message: "Driver does not support schema extraction." }),
+      );
+    }
+    const parts = yield* executor.extract(filename);
+    if (destination === "-") {
+      return parts.map((part) => part.sql).join("\n");
+    }
+    yield* Effect.tryPromise({
+      catch: (cause) => new InputError({ message: String(cause) }),
+      try: () => writeExtractedSchema(filename, destination, parts),
+    });
+    return parts.length
+      ? `Extracted schema to ${destination}.\nFor an untracked database, generate the first migration from this schema, then run adopt at migration 1. If migrations already exist, use adopt with the matching migration number.\n`
+      : `Extracted empty schema to ${destination}.\n`;
+  }
+  if (command === "adopt") {
+    const directory = args[3] ?? selected.migrations ?? "migrations";
+    if (
+      !args[1] ||
+      filename.startsWith("-") ||
+      !/^\d+$/.test(args[2] ?? "") ||
+      args.length > 4 ||
+      directory.startsWith("-")
+    ) {
+      return yield* Effect.fail(
+        new UsageError({
+          message:
+            "adopt requires a database target, a migration number and an optional migration directory.",
+        }),
+      );
+    }
+    const executor = yield* loadDriver(selected.driver);
+    const id = Number(args[2]);
+    yield* adoptGenerated(executor, filename, directory, id);
+    return `Initialized database history through migration ${id}.\n`;
+  }
   if (command === "compact") {
     const directory = args[2] ?? selected.migrations ?? "migrations";
     if (!/^\d+$/.test(filename) || args.length > 3 || directory.startsWith("-")) {

@@ -3,7 +3,7 @@ export {
   generateMigration,
   prepareGeneratedDecisions,
 } from "./generate.ts";
-export { applyGenerated, verifyGenerated } from "./apply.ts";
+export { adoptGenerated, applyGenerated, verifyGenerated } from "./apply.ts";
 export { hashMigration } from "./lock.ts";
 export { compareSchemas, renderMigration } from "./workflow.ts";
 export { defineConfig } from "./config.ts";

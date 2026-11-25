@@ -334,9 +334,22 @@ schema drift from the last applied snapshot. Before the last
 pending file commits, the CLI also verifies its schema against the generation lock.
 
 The first executor uses Node's SQLite support and accepts a persistent **main
-SQLite database file only**. It refuses to adopt an existing nonempty database
-without application history. Attached/temporary database migrations and baseline
-adoption are not yet supported. `__uncutsql_migrations` is reserved for application metadata.
+SQLite database file only**. To start tracking an existing database with a new migration directory:
+
+```sh
+pnpm demo:cli extract app.sqlite schema/
+pnpm demo:cli generate schema/ migrations
+pnpm demo:cli adopt app.sqlite 1 migrations
+```
+
+Extraction groups each table with its indexes and triggers. Use a file path for
+a single SQL document. If the project already has migrations, choose the matching
+number, e.g. `adopt app.sqlite 2 migrations`. Adoption replays the prefix in
+memory and checks the live schema before recording history. Subsequent `apply`
+runs start at the next migration. Data changes in the adopted prefix must already
+be reflected in the database.
+
+`__uncutsql_migrations` is reserved for application metadata.
 Migration scripts must use the generated BEGIN/COMMIT envelope; PRAGMAs outside
 it are limited to the emitted foreign-key settings. An initial failed attempt can
 leave an empty database file, which the runner does not delete automatically.

@@ -40,6 +40,31 @@ steps. Values already supplied by config or flags are displayed with their sourc
 For a missing migrations directory, the suggested path is `migrations`.
 Use `--migrations <directory>` to override a configured path.
 
+## Start tracking an existing SQLite database
+
+With the SQLite dialect and driver configured, start a fresh migration directory
+from a populated database with these commands.
+
+```sh
+uncutsql extract app.sqlite schema/
+uncutsql generate schema/ migrations
+uncutsql adopt app.sqlite 1 migrations
+```
+
+Each table gets a `*.uncut.sql` file containing its indexes and triggers.
+Views get their own files. To write one file, use a destination such as
+`schema.sql`. To print SQL, use `-`. Omitting the destination uses the configured
+schema path or stdout. Extraction reads schema declarations only.
+
+If you already have migrations and the database matches migration 2, run
+`uncutsql adopt app.sqlite 2 migrations` directly. Adoption checks the migration
+chain, replays the selected prefix in memory, and compares its schema with the
+live database. A match records the prefix in one transaction. A mismatch leaves
+the database untouched. Verification covers schema structure. For migrations
+with data changes, confirm separately that the existing rows reflect those changes.
+
+Run `uncutsql apply app.sqlite migrations` to apply later migrations.
+
 ## Review migration decisions
 
 Migration generation stops when columns or tables are removed until their intent

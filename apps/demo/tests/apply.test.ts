@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -405,6 +413,84 @@ test("compact confirms deletion, preserves checkpoints and supports later compac
     ok(["verify"]);
     ok(["up", "fresh2"]);
     ok(["up", "existing"]);
+  } finally {
+    rmSync(cwd, { recursive: true });
+  }
+});
+
+test("extract and adopt a populated schema at an intermediate migration", () => {
+  const cwd = directory();
+  try {
+    const db = join(cwd, "live.sqlite");
+    const first = "CREATE TABLE users (id INTEGER PRIMARY KEY);";
+    const ddl =
+      first +
+      `
+      CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT);
+      CREATE INDEX notes_body ON notes(body);
+      CREATE VIEW user_ids AS SELECT id FROM users;
+      CREATE TRIGGER new_user AFTER INSERT ON USERS BEGIN INSERT INTO notes VALUES (NEW.id, 'new'); END;
+    `;
+    exec(db, ddl + "INSERT INTO users VALUES (17)");
+    const cliOk = (args: string[], sql = "") => {
+      const result = run(cwd, args, sql);
+      assert.equal(result.status, 0, result.stderr);
+      return result.stdout;
+    };
+    cliOk(["extract", db, "schema"]);
+    assert.match(readFileSync(join(cwd, "schema", "users.uncut.sql"), "utf8"), /CREATE TRIGGER/);
+    assert.match(readFileSync(join(cwd, "schema", "notes.uncut.sql"), "utf8"), /CREATE INDEX/);
+    assert.match(readFileSync(join(cwd, "schema", "user_ids.uncut.sql"), "utf8"), /CREATE VIEW/);
+    cliOk(["generate", "-"], first);
+    cliOk(["generate", "schema"]);
+    cliOk(["generate", "-"], ddl + "CREATE TABLE later (id INTEGER);");
+    assert.match(run(cwd, ["adopt", db, "1"]).stderr, /schema differs/);
+    assert.deepEqual(
+      rows(db, "SELECT name FROM sqlite_schema WHERE name='__uncutsql_migrations'"),
+      [],
+    );
+    cliOk(["adopt", db, "2"]);
+    assert.deepEqual(rows(db, "SELECT id FROM __uncutsql_migrations ORDER BY id"), [
+      { id: 1 },
+      { id: 2 },
+    ]);
+    assert.match(run(cwd, ["adopt", db, "2"]).stderr, /already contains/);
+    assert.doesNotMatch(cliOk(["extract", db, "-"]), /__uncutsql_migrations/);
+    assert.match(cliOk(["apply", db]), /Applied 000003/);
+    assert.deepEqual(rows(db, "SELECT * FROM notes"), [{ body: "new", id: 17 }]);
+    assert.deepEqual(rows(db, "SELECT * FROM later"), []);
+    cliOk(["compact", "2", "--yes"]);
+    const legacy = join(cwd, "legacy.sqlite");
+    exec(legacy, ddl);
+    assert.match(run(cwd, ["adopt", legacy, "1"]).stderr, /available history/);
+    cliOk(["adopt", legacy, "2"]);
+    assert.match(cliOk(["apply", legacy]), /Applied 000003/);
+  } finally {
+    rmSync(cwd, { recursive: true });
+  }
+});
+
+test("extract respects existing files and contains quoted identifiers inside the schema directory", () => {
+  const cwd = directory();
+  try {
+    const target = join(cwd, "legacy.db");
+    exec(target, 'CREATE TABLE "../outside" (id INTEGER)');
+    const destination = join(cwd, "schema.sql");
+    writeFileSync(destination, "");
+    assert.equal(run(cwd, ["extract", target, destination]).status, 0);
+    const sql = readFileSync(destination, "utf8");
+    assert.match(sql, /CREATE TABLE "\.\.\/outside"/);
+    assert.match(run(cwd, ["extract", target, destination]).stderr, /overwrite/);
+    assert.equal(readFileSync(destination, "utf8"), sql);
+    mkdirSync(join(cwd, "parts"));
+    writeFileSync(join(cwd, "parts", "schema.uncut.sql"), "");
+    assert.equal(run(cwd, ["extract", target, "parts"]).status, 0);
+    assert.equal(readdirSync(join(cwd, "parts")).length, 1);
+    const [part] = readdirSync(join(cwd, "parts"));
+    assert.equal(readFileSync(join(cwd, "parts", part!), "utf8"), sql);
+    assert.equal(existsSync(join(cwd, "outside.uncut.sql")), false);
+    assert.equal(run(cwd, ["extract", "missing.sqlite"]).status, 1);
+    assert.equal(existsSync(join(cwd, "missing.sqlite")), false);
   } finally {
     rmSync(cwd, { recursive: true });
   }

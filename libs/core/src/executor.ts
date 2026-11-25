@@ -22,6 +22,13 @@ export interface ExecutionResult {
 
 /** Optional execution capability, selected and wired by the consumer separately from syntax. */
 export interface MigrationExecutor<E extends Error = Error, R = never> {
+  /** Verify a replayed prefix against an existing target, then initialize its history. */
+  readonly adopt?: <V extends Error, RV>(
+    target: string,
+    prefix: readonly MigrationSource[],
+    verifySchema: (actual: DatabaseSchema, expected: DatabaseSchema) => Effect.Effect<void, V, RV>,
+    desired?: DatabaseSchema,
+  ) => Effect.Effect<void, E | V, R | RV>;
   readonly apply: <V extends Error, RV>(
     target: string,
     migrations: readonly MigrationSource[],
@@ -39,6 +46,10 @@ export interface MigrationExecutor<E extends Error = Error, R = never> {
   /** Replay a verified prefix on an empty database and render its state as one SQL migration. */
   readonly compact?: (migrations: readonly MigrationSource[]) => Effect.Effect<string, E, R>;
   readonly dialect: string;
+  /** Schema-only SQL grouped by owning relation, in declaration order. */
+  readonly extract?: (
+    target: string,
+  ) => Effect.Effect<readonly { readonly name: string; readonly sql: string }[], E, R>;
   /** Undo only the most recently applied migration. */
   readonly rollback?: MigrationExecutor<E, R>["apply"];
 }

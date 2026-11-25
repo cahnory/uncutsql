@@ -3,7 +3,12 @@ import { join } from "node:path";
 import { Data, Effect } from "effect";
 
 import { diffDatabases } from "@uncutsql/core";
-import type { MigrationCheckpoint, MigrationExecutor, MigrationSource } from "@uncutsql/core";
+import type {
+  DatabaseSchema,
+  MigrationCheckpoint,
+  MigrationExecutor,
+  MigrationSource,
+} from "@uncutsql/core";
 
 import { checkMigrationFiles, readMigrationLock, withMigrationDirectoryLock } from "./generate.ts";
 import {
@@ -103,6 +108,29 @@ export const verifyGenerated = (directory: string) =>
     }),
   );
 
+const verifySchema = (actual: DatabaseSchema, expected: DatabaseSchema, label: string) =>
+  Effect.gen(function* () {
+    const diff = yield* diffDatabases(expected, actual);
+    if (diff.changes.length) {
+      const descriptions = diff.changes.map((change) => {
+        const identity =
+          "table" in change
+            ? change.table
+            : "view" in change
+              ? change.view.identity
+              : "trigger" in change
+                ? change.trigger.identity
+                : change.after.identity;
+        return `${change._tag} ${JSON.stringify(identity)}`;
+      });
+      return yield* Effect.fail(
+        new ApplicationError({
+          message: `Database schema differs from the ${label}: ${descriptions.join(", ")}`,
+        }),
+      );
+    }
+  });
+
 /** File loading and core verification belong to the consumer, not the execution driver. */
 export const applyGenerated = <E extends Error, R>(
   executor: MigrationExecutor<E, R>,
@@ -132,29 +160,45 @@ export const applyGenerated = <E extends Error, R>(
       loaded.migrations,
       loaded.database,
       (actual, expected, stage) =>
-        Effect.gen(function* () {
-          const diff = yield* diffDatabases(expected, actual);
-          if (diff.changes.length) {
-            const descriptions = diff.changes.map((change) => {
-              const identity =
-                "table" in change
-                  ? change.table
-                  : "view" in change
-                    ? change.view.identity
-                    : "trigger" in change
-                      ? change.trigger.identity
-                      : change.after.identity;
-              return `${change._tag} ${JSON.stringify(identity)}`;
-            });
-            return yield* Effect.fail(
-              new ApplicationError({
-                message: `Database schema differs from the ${stage === "applied" ? "last applied snapshot" : "generation lock"}: ${descriptions.join(", ")}`,
-              }),
-            );
-          }
-        }),
+        verifySchema(
+          actual,
+          expected,
+          stage === "applied" ? "last applied snapshot" : "generation lock",
+        ),
       loaded.checkpoint,
     );
     const first = loaded.migrations[0];
     return { ...result, ...(first?.baselineCheckpoint && { baselineId: first.id }) };
   });
+
+export const adoptGenerated = (
+  executor: MigrationExecutor,
+  target: string,
+  directory: string,
+  id: number,
+) =>
+  withMigrationDirectoryLock(
+    directory,
+    false,
+    Effect.gen(function* () {
+      if (!executor.adopt) {
+        return yield* Effect.fail(
+          new ApplicationError({ message: "Driver does not support adoption" }),
+        );
+      }
+      const lock = yield* readMigrationLock(directory, executor.dialect);
+      if (!Number.isSafeInteger(id) || id < (lock.baseline?.id ?? 1) || id > lock.lastMigrationId) {
+        return yield* Effect.fail(
+          new ApplicationError({ message: "Choose a migration number in the available history" }),
+        );
+      }
+      yield* checkMigrationFiles(directory, lock);
+      const files = yield* loadRange(directory, lock, { id: 0, sha256: null }, "up");
+      yield* executor.adopt(
+        target,
+        files.filter((file) => file.id <= id),
+        (actual, expected) => verifySchema(actual, expected, `schema at migration ${id}`),
+        id === lock.lastMigrationId ? lock.database : undefined,
+      );
+    }),
+  );

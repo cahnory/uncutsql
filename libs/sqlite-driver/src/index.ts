@@ -35,15 +35,18 @@ const native = <A>(label: string, operation: () => A) =>
   });
 const digest = (sql: string) => createHash("sha256").update(sql, "utf8").digest("hex");
 
+const schemaObjects = (database: DatabaseSync) =>
+  native("Inspect schema", () =>
+    database
+      .prepare(
+        "SELECT type, name, tbl_name, sql FROM main.sqlite_schema WHERE name NOT GLOB 'sqlite_*' AND NOT (type = 'table' AND name = ? COLLATE NOCASE) ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'view' THEN 1 WHEN 'index' THEN 2 ELSE 3 END, name",
+      )
+      .all(historyName),
+  );
+
 const inspectDatabase = (database: DatabaseSync) =>
   Effect.gen(function* () {
-    const objects = yield* native("Inspect schema", () =>
-      database
-        .prepare(
-          "SELECT type, name, sql FROM main.sqlite_schema WHERE name NOT GLOB 'sqlite_*' AND NOT (type = 'table' AND name = ? COLLATE NOCASE) ORDER BY name",
-        )
-        .all(historyName),
-    );
+    const objects = yield* schemaObjects(database);
     const unsupported = objects.find(
       (object) =>
         object.type !== "table" &&
@@ -193,6 +196,23 @@ const checkpoint: MigrationExecutor<SqliteExecutionError>["checkpoint"] = (targe
     );
   });
 
+const recordMigration = (
+  database: DatabaseSync,
+  migration: MigrationSource,
+  snapshot: DatabaseSchema,
+) => {
+  database
+    .prepare(
+      `INSERT INTO ${historyTable} (id, sha256, dialect, format_version, database_json, applied_at) VALUES (?, ?, 'sqlite', 1, ?, ?)`,
+    )
+    .run(
+      migration.id,
+      migration.baselineCheckpoint ?? migration.sha256,
+      JSON.stringify(snapshot),
+      new Date().toISOString(),
+    );
+};
+
 const runMigrations = <V extends Error, RV>(
   direction: "up" | "down",
   target: string,
@@ -301,7 +321,7 @@ const runMigrations = <V extends Error, RV>(
                     return yield* Effect.fail(
                       new SqliteExecutionError({
                         message:
-                          "Refusing to adopt a nonempty database without applied migration history",
+                          "Refusing to adopt a nonempty database without applied migration history. Use adopt <database> <migration-number> to verify and initialize its history.",
                       }),
                     );
                   }
@@ -355,16 +375,7 @@ const runMigrations = <V extends Error, RV>(
                     yield* verifySchema(updated, desired, "desired");
                   }
                   yield* native("Record applied migration", () => {
-                    database
-                      .prepare(
-                        `INSERT INTO ${historyTable} (id, sha256, dialect, format_version, database_json, applied_at) VALUES (?, ?, 'sqlite', 1, ?, ?)`,
-                      )
-                      .run(
-                        next.id,
-                        next.baselineCheckpoint ?? next.sha256,
-                        JSON.stringify(updated),
-                        new Date().toISOString(),
-                      );
+                    recordMigration(database, next, updated);
                     database.exec("COMMIT");
                   });
                   appliedIds.push(next.id);
@@ -407,11 +418,119 @@ export const applyMigrations: MigrationExecutor<SqliteExecutionError>["apply"] =
 export const rollbackMigration: MigrationExecutor<SqliteExecutionError>["apply"] = (...args) =>
   runMigrations("down", ...args);
 
+const extract: NonNullable<MigrationExecutor<SqliteExecutionError>["extract"]> = (target) =>
+  Effect.acquireUseRelease(
+    native("Open existing SQLite database", () => new DatabaseSync(target, { readOnly: true })),
+    (db) =>
+      Effect.gen(function* () {
+        yield* native("Begin schema inspection", () => db.exec("BEGIN"));
+        yield* readHistory(db, false, false);
+        yield* inspectDatabase(db);
+        const groups = new Map<string, { name: string; statements: string[] }>();
+        for (const object of yield* schemaObjects(db)) {
+          const owner = String(object.tbl_name);
+          const key = owner.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+          const group = groups.get(key) ?? { name: owner, statements: [] };
+          group.statements.push(String(object.sql) + ";\n");
+          groups.set(key, group);
+        }
+        return Array.from(groups.values(), ({ name, statements }) => ({
+          name,
+          sql: statements.join(""),
+        }));
+      }),
+    (db) => native("Close SQLite database", () => db.close()),
+  );
+
+const adopt: NonNullable<MigrationExecutor<SqliteExecutionError>["adopt"]> = (
+  target,
+  prefix,
+  verify,
+  desired,
+) =>
+  Effect.acquireUseRelease(
+    native("Open migration replay", () => new DatabaseSync(":memory:")),
+    (scratch) =>
+      Effect.gen(function* () {
+        const snapshots: { migration: MigrationSource; schema: DatabaseSchema }[] = [];
+        for (const migration of prefix) {
+          yield* native(`Replay migration ${migration.id}`, () => {
+            const previous = snapshots.at(-1);
+            const validPosition =
+              migration.baselineCheckpoint !== undefined
+                ? !previous &&
+                  Number.isSafeInteger(migration.id) &&
+                  migration.id >= 2 &&
+                  /^[a-f0-9]{64}$/.test(migration.baselineCheckpoint)
+                : migration.id === (previous?.migration.id ?? 0) + 1;
+            if (
+              !validPosition ||
+              migration.sql.includes("\0") ||
+              digest(migration.sql) !== migration.sha256
+            ) {
+              throw new Error("Invalid migration ID, SQL or checksum");
+            }
+            scratch.exec("PRAGMA foreign_keys=OFF; BEGIN");
+            executeScriptBody(scratch, migration.sql, historyName);
+            if (scratch.prepare("PRAGMA foreign_key_check").get()) {
+              throw new Error("Foreign-key violation in replayed migration");
+            }
+            scratch.exec("COMMIT");
+          });
+          snapshots.push({ migration, schema: yield* inspectDatabase(scratch) });
+        }
+        const tip = snapshots.at(-1);
+        if (!tip) {
+          return yield* Effect.fail(
+            new SqliteExecutionError({ message: "Expected a migration prefix" }),
+          );
+        }
+        if (desired) {
+          yield* verify(tip.schema, desired);
+        }
+        yield* Effect.acquireUseRelease(
+          native("Open existing SQLite database", () => {
+            if (!statSync(target).isFile()) {
+              throw new Error("Expected an existing database file");
+            }
+            return new DatabaseSync(target, { timeout: 5000 });
+          }),
+          (db) =>
+            Effect.gen(function* () {
+              yield* native("Begin adoption", () => {
+                db.exec("BEGIN IMMEDIATE");
+                if (
+                  db
+                    .prepare("SELECT 1 FROM main.sqlite_schema WHERE name = ? COLLATE NOCASE")
+                    .get(historyName)
+                ) {
+                  throw new Error(
+                    "Database already contains migration history or a reserved object",
+                  );
+                }
+              });
+              yield* verify(yield* inspectDatabase(db), tip.schema);
+              yield* native("Initialize migration history", () => {
+                db.exec(historyDdl);
+                for (const { migration, schema } of snapshots) {
+                  recordMigration(db, migration, schema);
+                }
+                db.exec("COMMIT");
+              });
+            }),
+          (db) => native("Close SQLite database", () => db.close()),
+        );
+      }),
+    (scratch) => native("Close migration replay", () => scratch.close()),
+  );
+
 export const executor: MigrationExecutor<SqliteExecutionError> = {
+  adopt,
   apply: applyMigrations,
   checkpoint,
   compact: (migrations) =>
     native("Compact SQLite migrations", () => compactSqlite(migrations, historyName)),
   dialect: "sqlite",
+  extract,
   rollback: rollbackMigration,
 };
