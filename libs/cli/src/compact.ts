@@ -2,6 +2,7 @@ import { mkdtemp, rename, rm, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 
+import { confirm } from "@clack/prompts";
 import { Effect } from "effect";
 
 import type { MigrationExecutor } from "@uncutsql/core";
@@ -16,14 +17,26 @@ import {
 } from "./generate.ts";
 import { baselineFilename, GenerationError, hashMigration, migrationFilename } from "./lock.ts";
 import type { SchemaLock } from "./lock.ts";
+import { interactiveTerminal, style } from "./terminal.ts";
 
-const confirm = async (directory: string, id: number) => {
+const confirmCompaction = async (directory: string, id: number, removed: readonly string[]) => {
+  for (const path of removed) {
+    process.stderr.write(`${style("red", "Delete")}  ${path}\n`);
+  }
+  process.stderr.write(`${style("green", "Create")}  ${join(directory, baselineFilename(id))}\n`);
+  process.stderr.write(`${style("cyan", "Update")}  ${join(directory, "uncutsql.lock.json")}\n`);
+  process.stderr.write(
+    `${style("yellow", "Warning")}: Existing databases below ${id} must upgrade first.\n`,
+  );
+  const message = `Compact migrations 1–${id}?`;
+  if (interactiveTerminal()) {
+    return (await confirm({ initialValue: false, message, output: process.stderr })) === true;
+  }
+
   const terminal = createInterface({ input: process.stdin, output: process.stderr });
   terminal.on("SIGINT", () => terminal.close());
   try {
-    process.stderr.write(
-      `Replace migrations 1–${id} in ${directory} with one baseline and delete the old files? Existing databases below ${id} must upgrade first. [y/N] `,
-    );
+    process.stderr.write(`${message} [y/N] `);
     const answer = await terminal[Symbol.asyncIterator]().next();
     return !answer.done && /^(y|yes)$/i.test(answer.value.trim());
   } finally {
@@ -38,7 +51,12 @@ const io = <A>(operation: () => Promise<A>) =>
     try: operation,
   });
 
-const publish = async (directory: string, old: SchemaLock, lock: SchemaLock, sql: string) => {
+const publish = async (
+  directory: string,
+  removed: readonly string[],
+  lock: SchemaLock,
+  sql: string,
+) => {
   const id = lock.baseline!.id;
   const path = join(directory, baselineFilename(id));
   const stage = await mkdtemp(join(directory, ".compact-"));
@@ -52,11 +70,8 @@ const publish = async (directory: string, old: SchemaLock, lock: SchemaLock, sql
     await rename(join(stage, "lock"), join(directory, "uncutsql.lock.json"));
     committed = true;
     await syncDirectory(directory);
-    for (let index = (old.baseline?.id ?? 0) + 1; index <= id; index++) {
-      await unlink(join(directory, migrationFilename(index)));
-    }
-    if (old.baseline) {
-      await unlink(join(directory, baselineFilename(old.baseline.id)));
+    for (const file of removed) {
+      await unlink(file);
     }
     await syncDirectory(directory);
   } catch (error) {
@@ -104,15 +119,23 @@ export const compactGenerated = (
       }
       yield* checkMigrationFiles(directory, lock);
       const sources = yield* loadRange(directory, lock, { id: 0, sha256: null }, "up");
-      if (!yes && !(yield* io(() => confirm(directory, id)))) {
+      const prefix = sources.filter((file) => file.id <= id);
+      const removed = prefix.map((file) =>
+        join(
+          directory,
+          file.id === lock.baseline?.id ? baselineFilename(file.id) : migrationFilename(file.id),
+        ),
+      );
+      if (!yes && !(yield* io(() => confirmCompaction(directory, id, removed)))) {
         return false;
       }
-      const prefix = sources.filter((file) => file.id <= id);
       const tip = prefix[prefix.length - 1]!;
       const rendered = yield* executor.compact(prefix);
       const sql = `-- uncutsql-chain v1 root ${tip.schemaHash}\n${rendered}`;
       const baseline = { checkpoint: tip.sha256, id, sha256: hashMigration(sql) };
-      yield* Effect.uninterruptible(io(() => publish(directory, lock, { ...lock, baseline }, sql)));
+      yield* Effect.uninterruptible(
+        io(() => publish(directory, removed, { ...lock, baseline }, sql)),
+      );
       return true;
     }),
   );

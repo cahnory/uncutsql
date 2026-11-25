@@ -37,6 +37,7 @@
     "check": "pnpm check:types && pnpm check:test"
   },
   "dependencies": {
+    "@clack/prompts": "^1.9.0",
     "@uncutsql/codec": "workspace:*",
     "@uncutsql/core": "workspace:*",
     "effect": "4.1.4",

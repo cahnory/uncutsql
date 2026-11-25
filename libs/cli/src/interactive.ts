@@ -1,15 +1,18 @@
 import { createInterface } from "node:readline";
 
+import { isCancel, select } from "@clack/prompts";
 import { Effect } from "effect";
 
 import { mergeMigrationDecisions, tableKey } from "@uncutsql/core";
 import type { MigrationDecision, MigrationDecisions } from "@uncutsql/core";
 
+import { interactiveTerminal, style } from "./terminal.ts";
+
 const chooseResolution = async (
   item: MigrationDecision,
   candidates: readonly string[],
   supportsDropGuards: boolean,
-  lines: AsyncIterator<string>,
+  lines: AsyncIterator<string> | undefined,
 ) => {
   const choices: { label: string; resolution: MigrationDecision["resolution"] }[] = [];
   if (supportsDropGuards) {
@@ -21,12 +24,32 @@ const chooseResolution = async (
       resolution: { action: "drop_if_empty" },
     });
   }
-  choices.push({ label: "Drop and discard any data", resolution: { action: "drop" } });
+  choices.push({
+    label: style("red", "Drop and discard any data"),
+    resolution: { action: "drop" },
+  });
   for (const target of candidates) {
     choices.push({
       label: `Rename to ${JSON.stringify(target)}`,
       resolution: { action: "rename", target },
     });
+  }
+
+  if (!lines) {
+    const cancel = -1;
+    const selected = await select({
+      initialValue: supportsDropGuards ? 0 : cancel,
+      message: item.question,
+      options: [
+        ...choices.map(({ label }, value) => ({ label, value })),
+        { label: "Cancel generation", value: cancel },
+      ],
+      output: process.stderr,
+    });
+    if (isCancel(selected) || selected === cancel) {
+      throw new Error("Generation cancelled.");
+    }
+    return choices[selected]!.resolution;
   }
 
   process.stderr.write(`\n${item.question}\n`);
@@ -53,9 +76,11 @@ export const promptDecisions = (fresh: MigrationDecisions, supportsDropGuards: b
       if (!fresh.decisions.length) {
         return fresh;
       }
-      const terminal = createInterface({ input: process.stdin, output: process.stderr });
-      const lines = terminal[Symbol.asyncIterator]();
-      terminal.on("SIGINT", () => terminal.close());
+      const terminal = interactiveTerminal()
+        ? undefined
+        : createInterface({ input: process.stdin, output: process.stderr });
+      const lines = terminal?.[Symbol.asyncIterator]();
+      terminal?.on("SIGINT", () => terminal.close());
       const claimed = new Set<string>();
       let review = fresh;
       try {
@@ -83,7 +108,7 @@ export const promptDecisions = (fresh: MigrationDecisions, supportsDropGuards: b
         }
         return review;
       } finally {
-        terminal.close();
+        terminal?.close();
       }
     },
   });

@@ -370,7 +370,12 @@ test("compact confirms deletion, preserves checkpoints and supports later compac
     ok(["generate", "-"], "CREATE TABLE t(a,b,c)");
     const suffix = readFileSync(join(migrations, "000003.sql"));
     for (const input of ["n\n", "\n", ""]) {
-      assert.match(ok(["compact", "2"], input).stdout, /cancelled/);
+      const preview = ok(["compact", "2"], input);
+      assert.match(preview.stdout, /cancelled/);
+      assert.match(preview.stderr, /Delete +migrations[/\\]000001.sql/);
+      assert.match(preview.stderr, /Delete +migrations[/\\]000002.sql/);
+      assert.match(preview.stderr, /Create +migrations[/\\]baseline-000002.sql/);
+      assert.doesNotMatch(preview.stderr, /000003.sql/);
       assert.ok(existsSync(join(migrations, "000001.sql")));
     }
     ok(["compact", "2"], "yes\n");
@@ -390,6 +395,9 @@ test("compact confirms deletion, preserves checkpoints and supports later compac
     ok(["down", "fresh"]);
     assert.match(run(cwd, ["down", "fresh"]).stderr, /compacted baseline/);
     ok(["up", "fresh"]);
+    const preview = ok(["compact", "3"], "n\n");
+    assert.match(preview.stderr, /Delete +migrations[/\\]baseline-000002.sql/);
+    assert.doesNotMatch(preview.stderr, /Delete +migrations[/\\]000002.sql/);
     ok(["compact", "3", "--yes"]);
     assert.ok(!existsSync(join(migrations, "baseline-000002.sql")));
     ok(["up", "fresh2"]);

@@ -20,6 +20,7 @@ import { promptDecisions } from "./interactive.ts";
 import { baselineFilename, migrationFilename } from "./lock.ts";
 import { loadDialect, loadDriver } from "./plugins.ts";
 import { schemaFiles } from "./schema-files.ts";
+import { style } from "./terminal.ts";
 import { compareSchemas, renderMigration } from "./workflow.ts";
 
 const help = `Usage: pnpm cli <check|format> [file|-]
@@ -93,7 +94,7 @@ const readFileWith = (dialect: Dialect<unknown, unknown>, filename: string) =>
         const line = source.split(/\r\n|\r|\n/)[error.line - 1] ?? "";
         const prefix = line.slice(0, error.column - 1).replace(/[^\t]/g, " ");
         return new InputError({
-          message: `${label}:${error.line}:${error.column}: ${error.message}\n${line}\n${prefix}^`,
+          message: `${style("bold", `${label}:${error.line}:${error.column}`)}: ${error.message}\n${line}\n${prefix}${style("red", "^")}`,
         });
       }),
     );
@@ -325,7 +326,7 @@ const program = Effect.gen(function* () {
       : decisions;
     const result = yield* generateMigration(dialect!, ast, directory, reviewed);
     return result.migrationPath
-      ? `Generated ${result.migrationPath}\nUpdated ${result.lockPath}\n`
+      ? `${style("green", "Generated", process.stdout)} ${result.migrationPath}\n${style("cyan", "Updated", process.stdout)} ${result.lockPath}\n`
       : "No schema changes.\n";
   }
   if (command === "diff" && args.length <= 2) {

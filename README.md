@@ -599,8 +599,8 @@ pnpm cli migration before.sql after.sql --decisions choices.json
 
 Run `uncutsql generate desired.sql migrations --interactive` to answer removal and
 rename questions in the terminal. A table rename can lead to further questions
-about its columns. Enter the number of your choice, or `q` to cancel before
-publishing the migration. This mode reads answers from stdin, so use a schema
+about its columns. Use the arrow keys and Enter to choose, or Ctrl+C to cancel.
+When piping answers, enter one choice number per line or `q` to cancel. This mode reads answers from stdin, so use a schema
 file or directory. It skips configured and default decision files.
 
 `generate desired.sql migrations` supports the same flags against its saved
