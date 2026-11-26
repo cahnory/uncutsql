@@ -235,3 +235,41 @@ test("project diff uses the lock, discovers config, and never generates output",
     rmSync(cwd, { force: true, recursive: true });
   }
 });
+
+test("shared flags accept inline or separate values before or after the command", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "uncutsql-flags-"));
+  try {
+    writeFileSync(join(cwd, "schema=v1.sql"), "create table t (a)");
+    for (const args of [
+      ["--schema=schema=v1.sql", "format"],
+      ["format", "--schema", "schema=v1.sql"],
+      ["format", "--", "schema=v1.sql"],
+    ]) {
+      const result = run(args, "", cwd);
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout, 'CREATE TABLE "t" ("a");\n');
+      assert.equal(result.stderr, "");
+    }
+    const literal = run(["format", "--", "--schema=schema=v1.sql"], "", cwd);
+    assert.equal(literal.status, 2);
+    assert.equal(literal.stdout, "");
+    assert.match(literal.stderr, /Usage:/);
+  } finally {
+    rmSync(cwd, { recursive: true });
+  }
+});
+
+test("duplicate flags and competing stdin consumers produce usage diagnostics", () => {
+  for (const [args, diagnostic] of [
+    [["--schema=a.sql", "format", "--schema", "b.sql"], /--schema was specified more than once/],
+    [["generate", "--write-decisions", "--write-decisions=b.json"], /Choose only one/],
+    [["generate", "--interactive", "--schema=-"], /reads answers from stdin/],
+    [["diff", "-", "-"], /at most one may be stdin/],
+  ] as const) {
+    const result = run([...args], "invalid SQL");
+    assert.equal(result.status, 2, result.stderr);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, diagnostic);
+    assert.match(result.stderr, /Usage:/);
+  }
+});

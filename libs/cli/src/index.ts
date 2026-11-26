@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
 
-import { Data, Effect, Result } from "effect";
+import { Effect, Result } from "effect";
 
-import { ParseError } from "@uncutsql/codec";
 import { MigrationDecisionError, prepareMigrationDecisions, SchemaDiffError } from "@uncutsql/core";
-import type { Dialect, MigrationDecisions } from "@uncutsql/core";
+import type { MigrationDecisions } from "@uncutsql/core";
 
 import { adoptGenerated, applyGenerated, verifyGenerated } from "./apply.ts";
 import { compactGenerated } from "./compact.ts";
@@ -21,7 +20,7 @@ import { initProject } from "./init.ts";
 import { promptDecisions } from "./interactive.ts";
 import { baselineFilename, migrationFilename } from "./lock.ts";
 import { loadDialect, loadDriver } from "./plugins.ts";
-import { schemaFiles } from "./schema-files.ts";
+import { InputError, readSchemaWith } from "./schema-input.ts";
 import { style } from "./terminal.ts";
 import { compareSchemas, renderMigration } from "./workflow.ts";
 
@@ -71,68 +70,6 @@ Decisions default to config.decisions or uncutsql.decisions.json beside the conf
 Statements require separating semicolons; the final semicolon is optional.
 Input SQL files are never modified. Unsupported syntax is an error.
 `;
-
-class InputError extends Data.TaggedError("InputError")<{ readonly message: string }> {}
-
-const readFileWith = (dialect: Dialect<unknown, unknown>, filename: string) =>
-  Effect.gen(function* () {
-    const label = filename === "-" ? "<stdin>" : filename;
-    const source = yield* Effect.tryPromise({
-      catch: (cause) =>
-        new InputError({
-          message: `${label}: ${cause instanceof Error ? cause.message : String(cause)}`,
-        }),
-      try: async () => {
-        if (filename !== "-") {
-          return await readFile(filename, "utf8");
-        }
-        process.stdin.setEncoding("utf8");
-        let input = "";
-        for await (const chunk of process.stdin) {
-          input += chunk;
-        }
-        return input;
-      },
-    });
-    return yield* dialect.parse(source).pipe(
-      Effect.mapError((error) => {
-        if (!(error instanceof ParseError)) {
-          return new InputError({ message: `${label}: ${error.message}` });
-        }
-        const line = source.split(/\r\n|\r|\n/)[error.line - 1] ?? "";
-        const prefix = line.slice(0, error.column - 1).replace(/[^\t]/g, " ");
-        return new InputError({
-          message: `${style("bold", `${label}:${error.line}:${error.column}`)}: ${error.message}\n${line}\n${prefix}${style("red", "^")}`,
-        });
-      }),
-    );
-  });
-
-const readSchemaWith = (dialect: Dialect<unknown, unknown>, path: string) =>
-  Effect.gen(function* () {
-    if (path === "-") {
-      return yield* readFileWith(dialect, path);
-    }
-    const files = yield* Effect.tryPromise({
-      catch: (cause) => new InputError({ message: `${path}: ${String(cause)}` }),
-      try: () => schemaFiles(path),
-    });
-    if (!files.length) {
-      return yield* Effect.fail(
-        new InputError({ message: `${path}: no *.uncut.sql schema files found` }),
-      );
-    }
-    if (files.length === 1) {
-      return yield* readFileWith(dialect, files[0]!);
-    }
-    if (!dialect.combineSchemas) {
-      return yield* Effect.fail(
-        new InputError({ message: `Dialect ${dialect.name} does not support multipart schemas` }),
-      );
-    }
-    const parts = yield* Effect.forEach(files, (file) => readFileWith(dialect, file));
-    return dialect.combineSchemas(parts);
-  });
 
 const validPath = (value: string) => !value.startsWith("-") || value === "-";
 const program = Effect.gen(function* () {
@@ -328,7 +265,7 @@ const program = Effect.gen(function* () {
   // Apply only needs the driver's dialect ID; it does not load a SQL parser.
   const executing = command === "apply" || command === "up" || command === "down";
   const dialect = executing ? undefined : yield* loadDialect(selected.dialect);
-  const readSchema = (path: string) => readSchemaWith(dialect!, path);
+  const readSchema = (path: string) => readSchemaWith(dialect!, path, process.stdin);
   if (executing) {
     const directory = args[2] ?? selected.migrations ?? "migrations";
     if (
