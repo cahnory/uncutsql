@@ -1,49 +1,31 @@
-import { Array, Console, Effect, Option } from "effect";
+import { Console, Effect } from "effect";
 import { Command, Flag } from "effect/cli";
 
 import { resolveConfig, UsageError } from "../config.ts";
-import type { DecisionWriterFlag } from "../config.ts";
 import { readDecisions, writeDecisions } from "../decision-file.ts";
 import { generateMigration, prepareGeneratedDecisions } from "../generate.ts";
 import { promptDecisions } from "../interactive.ts";
 import { loadDialect } from "../plugins.ts";
 import { readSchemaWith } from "../schema-input.ts";
 import { style } from "../terminal.ts";
+import { decisionFlags, selectWriter } from "./decision-flags.ts";
 import { outputDirectory, root, schemaPath } from "./shared.ts";
 
-const writer = (flag: DecisionWriterFlag, description: string) =>
-  Flag.String(flag.slice(2)).pipe(
-    Flag.withOptionalValue(""),
-    Flag.withDescription(description),
-    Flag.optional,
-    Flag.map(Option.map((path) => ({ flag, path: path || undefined }))),
-  );
-
 const inputs = {
-  decisions: Flag.String("decisions").pipe(
-    Flag.withDescription("Read reviewed decisions from this file."),
-    Flag.withDefault(undefined),
-  ),
+  ...decisionFlags,
   interactive: Flag.Boolean("interactive").pipe(
     Flag.withoutNegation,
     Flag.withDescription("Review migration choices interactively."),
     Flag.withDefault(false),
   ),
-  merge: writer("--merge-decisions", "Refresh the file and keep applicable decisions."),
-  rewrite: writer("--rewrite-decisions", "Reset current decisions to pending."),
   // Positionals are consumed in declaration order.
   schema: schemaPath,
   targetDirectory: outputDirectory,
-  write: writer("--write-decisions", "Create a new decision file."),
 };
 
 const resolveGenerate = (input: Command.Command.Config.Infer<typeof inputs>) =>
   Effect.gen(function* () {
-    const writers = Array.getSomes([input.write, input.rewrite, input.merge]);
-    const writer = writers[0];
-    if (writers.length > 1 || (writer && input.decisions !== undefined)) {
-      return yield* new UsageError({ message: "Choose only one decision-file option." });
-    }
+    const writer = yield* selectWriter(input);
     if (input.interactive && (input.decisions !== undefined || writer)) {
       return yield* new UsageError({
         message:

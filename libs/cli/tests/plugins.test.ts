@@ -144,7 +144,7 @@ test("configuration and invalid adapter failures are actionable typed errors", a
       ["--driver="],
       ["--merge-decisions="],
       ["--merge-decisions", "--write-decisions"],
-      ["--write-decisions", "--rewrite-decisions"],
+      ["generate", "--write-decisions", "--rewrite-decisions"],
       ["--rewrite-decisions", "--merge-decisions"],
       ["--config", "--dialect"],
       ["--dialect", "x", "--dialect", "y"],
@@ -402,13 +402,24 @@ test("registered commands show help before config discovery", () => {
   const f = fixture();
   try {
     f.put("uncutsql.config.mjs", "throw Error('config loaded')");
-    for (const command of ["check", "format", "verify", "generate"]) {
+    for (const command of [
+      "check",
+      "format",
+      "verify",
+      "generate",
+      "diff",
+      "decisions",
+      "migration",
+    ]) {
       const result = f.run([command, "--help"]);
       assert.equal(result.status, 0, result.stderr);
       assert.equal(result.stderr, "");
       assert.ok(result.stdout.includes(`uncutsql ${command} [flags]`));
       assert.match(result.stdout, /--migrations/);
-      assert.equal(result.stdout.includes("--write-decisions"), command === "generate");
+      assert.equal(
+        result.stdout.includes("--write-decisions"),
+        command === "generate" || command === "migration",
+      );
     }
     const invalid = f.run(["verify", "a", "b"]);
     assert.equal(invalid.status, 2, invalid.stderr);
@@ -419,14 +430,15 @@ test("registered commands show help before config discovery", () => {
   }
 });
 
-test("generate's command rejects competing review modes before opening config", async () => {
-  for (const flags of [
-    ["--decisions=a.json", "--merge-decisions"],
-    ["--write-decisions", "--rewrite-decisions"],
-    ["--interactive", "--decisions=a.json"],
+test("review commands reject competing modes before opening config", async () => {
+  for (const args of [
+    ["migration", "before.sql", "after.sql", "--decisions=a.json", "--merge-decisions"],
+    ["generate", "--decisions=a.json", "--merge-decisions"],
+    ["generate", "--write-decisions", "--rewrite-decisions"],
+    ["generate", "--interactive", "--decisions=a.json"],
   ]) {
     const result = await Effect.runPromise(
-      runCommands(["generate", "--config=missing.json", ...flags]).pipe(
+      runCommands([...args, "--config=missing.json"]).pipe(
         Effect.provide(NodeServices.layer),
         Effect.result,
       ),

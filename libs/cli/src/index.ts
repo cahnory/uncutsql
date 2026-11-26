@@ -2,20 +2,17 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Effect, Result } from "effect";
 
-import { MigrationDecisionError, prepareMigrationDecisions, SchemaDiffError } from "@uncutsql/core";
+import { MigrationDecisionError } from "@uncutsql/core";
 
 import { adoptGenerated, applyGenerated } from "./apply.ts";
 import { compactGenerated } from "./compact.ts";
 import { parseOptions, resolveConfig, UsageError } from "./config.ts";
-import { decisionDocument, readDecisions, writeDecisions } from "./decision-file.ts";
 import { writeExtractedSchema } from "./extract.ts";
-import { compareGeneratedSchema } from "./generate.ts";
 import { initProject } from "./init.ts";
 import { baselineFilename, migrationFilename } from "./lock.ts";
-import { loadDialect, loadDriver } from "./plugins.ts";
+import { loadDriver } from "./plugins.ts";
 import { isRegisteredCommand, runCommands } from "./router.ts";
-import { InputError, readSchemaWith } from "./schema-input.ts";
-import { compareSchemas, renderMigration } from "./workflow.ts";
+import { InputError } from "./schema-input.ts";
 
 const help = `Usage: pnpm cli init
        pnpm cli <check|format> [file|-]
@@ -70,24 +67,13 @@ const program = Effect.gen(function* () {
   if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) {
     return help;
   }
-  const [command = "diff", filename = "-"] = args;
-  if (isRegisteredCommand(command)) {
-    return yield* runCommands([command, ...commandArgs]).pipe(Effect.provide(NodeServices.layer));
+  const [command, filename = "-"] = args;
+  if (command === undefined || isRegisteredCommand(command)) {
+    return yield* runCommands(command === undefined ? commandArgs : [command, ...commandArgs]).pipe(
+      Effect.provide(NodeServices.layer),
+    );
   }
-  if (
-    ![
-      "init",
-      "diff",
-      "decisions",
-      "migration",
-      "extract",
-      "adopt",
-      "compact",
-      "apply",
-      "up",
-      "down",
-    ].includes(command ?? "")
-  ) {
+  if (!["init", "extract", "adopt", "compact", "apply", "up", "down"].includes(command)) {
     return yield* Effect.fail(
       new UsageError({
         message:
@@ -95,16 +81,9 @@ const program = Effect.gen(function* () {
       }),
     );
   }
-  if ((options.decisions || options.decisionWriter) && command !== "migration") {
+  if (options.decisions || options.decisionWriter) {
     return yield* Effect.fail(
       new UsageError({ message: "Decision-file options apply only to migration and generate." }),
-    );
-  }
-  if (options.decisions && options.decisionWriter) {
-    return yield* Effect.fail(
-      new UsageError({
-        message: `Choose only one of --decisions and ${options.decisionWriter.flag}.`,
-      }),
     );
   }
   if (options.interactive) {
@@ -129,8 +108,6 @@ const program = Effect.gen(function* () {
     return yield* initProject(options, process.cwd());
   }
   const selected = yield* resolveConfig(options, process.cwd());
-  const decisions =
-    command === "migration" && !options.decisionWriter ? yield* readDecisions(selected) : undefined;
   if (command === "extract") {
     const destination = args[2] ?? selected.schema ?? "-";
     if (!args[1] || filename.startsWith("-") || args.length > 3 || !validPath(destination)) {
@@ -199,108 +176,35 @@ const program = Effect.gen(function* () {
       ? `Compacted migrations 1 through ${Number(filename)}.\n`
       : "Compaction cancelled.\n";
   }
-  // Apply only needs the driver's dialect ID; it does not load a SQL parser.
-  const executing = command === "apply" || command === "up" || command === "down";
-  const dialect = executing ? undefined : yield* loadDialect(selected.dialect);
-  const readSchema = (path: string) => readSchemaWith(dialect!, path, process.stdin);
-  if (executing) {
-    const directory = args[2] ?? selected.migrations ?? "migrations";
-    if (
-      args.length < 2 ||
-      args.length > 3 ||
-      filename === "-" ||
-      !validPath(filename) ||
-      directory.startsWith("-")
-    ) {
-      return yield* Effect.fail(
-        new UsageError({
-          message: `${command} requires a database target and an optional migration directory.`,
-        }),
-      );
-    }
-    const executor = yield* loadDriver(selected.driver);
-    const result = yield* applyGenerated(
-      executor,
-      filename,
-      directory,
-      command === "down" ? "down" : "up",
-    );
-    if (command === "down") {
-      return result.rolledBackId === undefined
-        ? "No applied migrations.\n"
-        : `Rolled back ${migrationFilename(result.rolledBackId)}.\n`;
-    }
-    return result.appliedIds.length
-      ? `Applied ${result.appliedIds.map((id) => (id === result.baselineId ? baselineFilename(id) : migrationFilename(id))).join(", ")}.\n`
-      : "Database is up to date.\n";
-  }
-  if (command === "diff" && args.length <= 2) {
-    const path = args[1] ?? selected.schema;
-    if (!path || !validPath(path)) {
-      return yield* Effect.fail(
-        new UsageError({
-          message: "diff requires a schema path or config.schema (or --schema).",
-        }),
-      );
-    }
-    const comparison = yield* compareGeneratedSchema(
-      dialect!,
-      yield* readSchema(path),
-      selected.migrations ?? "migrations",
-    );
-    return `${JSON.stringify(comparison.diff, null, 2)}\n`;
-  }
-  const target = args[2];
+  const directory = args[2] ?? selected.migrations ?? "migrations";
   if (
-    args.length !== 3 ||
-    target === undefined ||
+    args.length < 2 ||
+    args.length > 3 ||
+    filename === "-" ||
     !validPath(filename) ||
-    !validPath(target) ||
-    (filename === "-" && target === "-")
+    directory.startsWith("-")
   ) {
     return yield* Effect.fail(
-      new UsageError({ message: `${command} requires two paths; at most one may be stdin (-).` }),
+      new UsageError({
+        message: `${command} requires a database target and an optional migration directory.`,
+      }),
     );
   }
-  const before = yield* readSchema(filename);
-  const after = yield* readSchema(target);
-  const comparison = yield* compareSchemas(dialect!, before, after).pipe(
-    Effect.mapError(
-      (error) =>
-        new InputError({
-          message:
-            error instanceof SchemaDiffError
-              ? error.diagnostics
-                  .map((item) => `${item.side === "before" ? filename : target}: ${item.message}`)
-                  .join("\n")
-              : error.message,
-        }),
-    ),
+  const executor = yield* loadDriver(selected.driver);
+  const result = yield* applyGenerated(
+    executor,
+    filename,
+    directory,
+    command === "down" ? "down" : "up",
   );
-  if (command === "decisions") {
-    return (
-      JSON.stringify(
-        yield* prepareMigrationDecisions(comparison.before, comparison.after).pipe(
-          Effect.flatMap((document) => Effect.promise(() => decisionDocument(document))),
-        ),
-        null,
-        2,
-      ) + "\n"
-    );
+  if (command === "down") {
+    return result.rolledBackId === undefined
+      ? "No applied migrations.\n"
+      : `Rolled back ${migrationFilename(result.rolledBackId)}.\n`;
   }
-  if (command === "migration") {
-    if (options.decisionWriter) {
-      return yield* writeDecisions(
-        yield* prepareMigrationDecisions(comparison.before, comparison.after),
-        options.decisionWriter.path ?? selected.decisions,
-        options.decisionWriter.flag,
-      );
-    }
-    const sql = yield* renderMigration(dialect!, comparison, decisions);
-    return sql.length ? `${sql}\n` : "";
-  }
-  const diff = comparison.diff;
-  return `${JSON.stringify(diff, null, 2)}\n`;
+  return result.appliedIds.length
+    ? `Applied ${result.appliedIds.map((id) => (id === result.baselineId ? baselineFilename(id) : migrationFilename(id))).join(", ")}.\n`
+    : "Database is up to date.\n";
 });
 
 // Run the selected command once and map failures to process exit codes.
