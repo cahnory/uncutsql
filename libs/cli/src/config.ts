@@ -20,7 +20,10 @@ export const defineConfig = <T extends UncutConfig>(config: T): T => config;
 export class ConfigurationError extends Data.TaggedError("ConfigurationError")<{
   readonly message: string;
 }> {}
-export class UsageError extends Data.TaggedError("UsageError")<{ readonly message: string }> {}
+export class UsageError extends Data.TaggedError("UsageError")<{
+  readonly message: string;
+  readonly usage?: string | undefined;
+}> {}
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const validate = (value: unknown): UncutConfig => {
@@ -39,110 +42,6 @@ const validate = (value: unknown): UncutConfig => {
 };
 
 export type DecisionWriterFlag = "--write-decisions" | "--rewrite-decisions" | "--merge-decisions";
-
-export const parseOptions = (args: readonly string[]) =>
-  Effect.try({
-    catch: (cause) =>
-      new UsageError({ message: cause instanceof Error ? cause.message : String(cause) }),
-    try: () => {
-      // Keep the legacy command lookup until every command is registered with Effect.
-      // Canonical flag tokens preserve separate decision-writer paths and leave operands after -- literal.
-      const flagTokens: string[] = [];
-      let trailing: readonly string[] = [];
-      const positional: string[] = [];
-      const options: {
-        config?: string;
-        decisions?: string;
-        decisionWriter?: { flag: DecisionWriterFlag; path: string | undefined };
-        dialect?: string;
-        driver?: string;
-        interactive?: boolean;
-        migrations?: string;
-        schema?: string;
-        yes?: boolean;
-      } = {};
-      for (let index = 0; index < args.length; index++) {
-        const arg = args[index]!;
-        if (arg === "--") {
-          trailing = args.slice(index + 1);
-          break;
-        }
-        const [name, ...inline] = arg.split("=");
-        if (name === "--yes") {
-          if (inline.length || options.yes) {
-            throw new Error("--yes takes no value and may appear only once");
-          }
-          flagTokens.push("--yes=true");
-          options.yes = true;
-          continue;
-        }
-        if (name === "--interactive") {
-          if (inline.length) {
-            throw new Error("--interactive takes no value");
-          }
-          if (options.interactive) {
-            throw new Error("--interactive was specified more than once");
-          }
-          flagTokens.push("--interactive=true");
-          options.interactive = true;
-          continue;
-        }
-        if (
-          name === "--write-decisions" ||
-          name === "--rewrite-decisions" ||
-          name === "--merge-decisions"
-        ) {
-          if (options.decisionWriter) {
-            throw new Error(
-              `Choose only one decision-file option. Received ${options.decisionWriter.flag} and ${name}.`,
-            );
-          }
-          const next = args[index + 1];
-          const path = inline.length
-            ? inline.join("=")
-            : next !== undefined && !next.startsWith("--")
-              ? args[++index]
-              : undefined;
-          if (path === "" || path?.startsWith("--")) {
-            throw new Error(`${name} requires a nonempty path when supplied`);
-          }
-          flagTokens.push(path === undefined ? name : `${name}=${path}`);
-          options.decisionWriter = { flag: name, path };
-          continue;
-        }
-        if (
-          name !== "--schema" &&
-          name !== "--migrations" &&
-          name !== "--config" &&
-          name !== "--dialect" &&
-          name !== "--driver" &&
-          name !== "--decisions"
-        ) {
-          positional.push(arg);
-          continue;
-        }
-        const value = inline.length ? inline.join("=") : args[++index];
-        if (!value || value.startsWith("--")) {
-          throw new Error(`${name} requires a value`);
-        }
-        const key = name.slice(2) as Exclude<
-          keyof typeof options,
-          "decisionWriter" | "interactive" | "yes"
-        >;
-        if (options[key] !== undefined) {
-          throw new Error(`${name} was specified more than once`);
-        }
-        flagTokens.push(`${name}=${value}`);
-        options[key] = value;
-      }
-      const operands = positional.length ? trailing : trailing.slice(1);
-      const commandArgs = [...flagTokens, ...positional.slice(1)];
-      if (operands.length) {
-        commandArgs.push("--", ...operands);
-      }
-      return { args: [...positional, ...trailing], commandArgs, options };
-    },
-  });
 
 export interface PluginSelection {
   readonly directory: string;

@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Effect, Result } from "effect";
 
-import { parseOptions, resolveConfig, UsageError } from "../src/config.ts";
+import { resolveConfig, UsageError } from "../src/config.ts";
 import { loadDialect, loadDriver, PluginError } from "../src/plugins.ts";
 import { runCommands } from "../src/router.ts";
 
@@ -149,7 +149,7 @@ test("configuration and invalid adapter failures are actionable typed errors", a
       ["--config", "--dialect"],
       ["--dialect", "x", "--dialect", "y"],
     ]) {
-      assert.ok(Result.isFailure(Effect.runSync(Effect.result(parseOptions(args)))));
+      assert.equal(f.run(args).status, 2, args.join(" "));
     }
   } finally {
     f.close();
@@ -403,6 +403,7 @@ test("registered commands show help before config discovery", () => {
   try {
     f.put("uncutsql.config.mjs", "throw Error('config loaded')");
     for (const command of [
+      "init",
       "check",
       "format",
       "verify",
@@ -427,6 +428,16 @@ test("registered commands show help before config discovery", () => {
         result.stdout.includes("--write-decisions"),
         command === "generate" || command === "migration",
       );
+    }
+    for (const args of [
+      ["init", "extra"],
+      ["init", "--schema=-"],
+      ["--yes", "init"],
+    ]) {
+      const result = f.run(args);
+      assert.equal(result.status, 2, result.stderr);
+      assert.equal(result.stdout, "");
+      assert.doesNotMatch(result.stderr, /config loaded|Config file\n/);
     }
     const invalid = f.run(["verify", "a", "b"]);
     assert.equal(invalid.status, 2, invalid.stderr);

@@ -40,69 +40,6 @@ export const decisionDocument = async (document: MigrationDecisions, output?: st
 const hasCode = (cause: unknown, code: string) =>
   cause instanceof Error && "code" in cause && cause.code === code;
 
-export const writeDecisionFile = async (
-  fresh: MigrationDecisions,
-  path: string,
-  flag: DecisionWriterFlag,
-) => {
-  // Writers share a staging path so a merge reads and publishes under the same lock.
-  const stage = join(dirname(path), `.${basename(path)}.tmp`);
-  const handle = await open(stage, "wx", 0o600);
-  let published = false;
-  try {
-    let document = fresh;
-    if (flag === "--merge-decisions") {
-      const previous = await readFile(path, "utf8").catch((cause: unknown) => {
-        if (hasCode(cause, "ENOENT")) {
-          return undefined;
-        }
-        throw cause;
-      });
-      if (previous !== undefined) {
-        document = await Effect.runPromise(mergeMigrationDecisions(fresh, JSON.parse(previous)));
-      }
-    }
-    const mode =
-      flag === "--write-decisions"
-        ? undefined
-        : await stat(path).catch((cause: unknown) => {
-            if (hasCode(cause, "ENOENT")) {
-              return undefined;
-            }
-            throw cause;
-          });
-    await handle.chmod(mode ? mode.mode & 0o777 : 0o666 & ~process.umask());
-    await handle.writeFile(JSON.stringify(await decisionDocument(document, path), null, 2) + "\n");
-    if (flag === "--write-decisions") {
-      try {
-        await link(stage, path);
-      } catch (cause) {
-        if (hasCode(cause, "EEXIST")) {
-          throw new Error(
-            "Decision file already exists. Replace --write-decisions with --merge-decisions to keep applicable choices or --rewrite-decisions to reset every choice.",
-          );
-        }
-        throw cause;
-      }
-    } else {
-      await rename(stage, path);
-      published = true;
-    }
-    const renameHint = document.decisions.some(
-      (item) => item.column === undefined && item.candidates.length,
-    )
-      ? " After choosing a table rename, run --merge-decisions with the same path to review its columns."
-      : "";
-    return `Wrote ${path}. Review pending resolutions.${renameHint} When all choices are complete, rerun without ${flag} (use --decisions with this path if it differs from the configured/default file).\n`;
-  } finally {
-    await handle.close();
-    // A successful rename transfers ownership of the staging path to the next writer.
-    if (!published) {
-      await unlink(stage);
-    }
-  }
-};
-
 export const readDecisions = (selected: { decisions: string; decisionsRequired: boolean }) =>
   Effect.tryPromise({
     catch: (cause) =>
@@ -124,14 +61,93 @@ export const readDecisions = (selected: { decisions: string; decisionsRequired: 
   });
 
 export const writeDecisions = (
-  document: MigrationDecisions,
+  fresh: MigrationDecisions,
   path: string,
   flag: DecisionWriterFlag,
-) =>
-  Effect.tryPromise({
-    catch: (cause) =>
-      new InputError({
-        message: `${path}: ${cause instanceof Error ? cause.message : String(cause)}`,
+) => {
+  const io = <A>(operation: () => Promise<A>) =>
+    Effect.tryPromise({
+      catch: (cause) =>
+        new InputError({
+          message: `${path}: ${cause instanceof Error ? cause.message : String(cause)}`,
+        }),
+      try: operation,
+    });
+  const stage = join(dirname(path), `.${basename(path)}.tmp`);
+  return Effect.acquireUseRelease(
+    io(async () => ({ handle: await open(stage, "wx", 0o600), published: false })),
+    (writer) =>
+      Effect.uninterruptible(
+        Effect.gen(function* () {
+          const { handle } = writer;
+          let document = fresh;
+          if (flag === "--merge-decisions") {
+            const previous = yield* io(async () => {
+              try {
+                return JSON.parse(await readFile(path, "utf8")) as unknown;
+              } catch (cause) {
+                if (hasCode(cause, "ENOENT")) {
+                  return undefined;
+                }
+                throw cause;
+              }
+            });
+            if (previous !== undefined) {
+              document = yield* mergeMigrationDecisions(fresh, previous).pipe(
+                Effect.mapError(
+                  (cause) => new InputError({ message: `${path}: ${cause.message}` }),
+                ),
+              );
+            }
+          }
+          yield* io(async () => {
+            const mode =
+              flag === "--write-decisions"
+                ? undefined
+                : await stat(path).catch((cause: unknown) => {
+                    if (hasCode(cause, "ENOENT")) {
+                      return undefined;
+                    }
+                    throw cause;
+                  });
+            await handle.chmod(mode ? mode.mode & 0o777 : 0o666 & ~process.umask());
+            await handle.writeFile(
+              JSON.stringify(await decisionDocument(document, path), null, 2) + "\n",
+            );
+            if (flag === "--write-decisions") {
+              try {
+                await link(stage, path);
+              } catch (cause) {
+                if (hasCode(cause, "EEXIST")) {
+                  throw new Error(
+                    "Decision file already exists. Replace --write-decisions with --merge-decisions to keep applicable choices or --rewrite-decisions to reset every choice.",
+                  );
+                }
+                throw cause;
+              }
+            } else {
+              await rename(stage, path);
+              writer.published = true;
+            }
+          });
+          const renameHint = document.decisions.some(
+            (item) => item.column === undefined && item.candidates.length,
+          )
+            ? " After choosing a table rename, run --merge-decisions with the same path to review its columns."
+            : "";
+          return `Wrote ${path}. Review pending resolutions.${renameHint} When all choices are complete, rerun without ${flag} (use --decisions with this path if it differs from the configured/default file).\n`;
+        }),
+      ),
+    ({ handle, published }) =>
+      io(async () => {
+        try {
+          await handle.close();
+        } finally {
+          // A successful rename releases the staging path for the next writer.
+          if (!published) {
+            await unlink(stage);
+          }
+        }
       }),
-    try: () => writeDecisionFile(document, path, flag),
-  });
+  );
+};

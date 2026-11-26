@@ -63,7 +63,8 @@ test("CLI reads paths relative to the caller and leaves files unchanged", () => 
 test("CLI handles help, usage errors, empty input and unsupported SQL", () => {
   const help = run(["--help"]);
   assert.equal(help.status, 0);
-  assert.match(help.stdout, /Usage:/);
+  assert.match(help.stdout, /USAGE/);
+  assert.match(help.stdout, /uncutsql <subcommand> \[flags\]/);
   for (const args of [[], ["unknown"], ["check", "a", "b"], ["format", "--write"]]) {
     const result = run(args);
     assert.equal(result.status, 2);

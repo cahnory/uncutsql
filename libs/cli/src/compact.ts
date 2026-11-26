@@ -1,8 +1,6 @@
 import { mkdtemp, rename, rm, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { createInterface } from "node:readline";
 
-import { confirm } from "@clack/prompts";
 import { Effect } from "effect";
 
 import type { MigrationExecutor } from "@uncutsql/core";
@@ -17,32 +15,13 @@ import {
 } from "./generate.ts";
 import { baselineFilename, GenerationError, hashMigration, migrationFilename } from "./lock.ts";
 import type { SchemaLock } from "./lock.ts";
-import { interactiveTerminal, style } from "./terminal.ts";
 
-const confirmCompaction = async (directory: string, id: number, removed: readonly string[]) => {
-  for (const path of removed) {
-    process.stderr.write(`${style("red", "Delete")}  ${path}\n`);
-  }
-  process.stderr.write(`${style("green", "Create")}  ${join(directory, baselineFilename(id))}\n`);
-  process.stderr.write(`${style("cyan", "Update")}  ${join(directory, "uncutsql.lock.json")}\n`);
-  process.stderr.write(
-    `${style("yellow", "Warning")}: Existing databases below ${id} must upgrade first.\n`,
-  );
-  const message = `Compact migrations 1–${id}?`;
-  if (interactiveTerminal()) {
-    return (await confirm({ initialValue: false, message, output: process.stderr })) === true;
-  }
-
-  const terminal = createInterface({ input: process.stdin, output: process.stderr });
-  terminal.on("SIGINT", () => terminal.close());
-  try {
-    process.stderr.write(`${message} [y/N] `);
-    const answer = await terminal[Symbol.asyncIterator]().next();
-    return !answer.done && /^(y|yes)$/i.test(answer.value.trim());
-  } finally {
-    terminal.close();
-  }
-};
+export interface CompactionPreview {
+  readonly baselinePath: string;
+  readonly id: number;
+  readonly lockPath: string;
+  readonly removed: readonly string[];
+}
 
 const io = <A>(operation: () => Promise<A>) =>
   Effect.tryPromise({
@@ -53,21 +32,19 @@ const io = <A>(operation: () => Promise<A>) =>
 
 const publish = async (
   directory: string,
-  removed: readonly string[],
+  { baselinePath, id, lockPath, removed }: CompactionPreview,
   lock: SchemaLock,
   sql: string,
 ) => {
-  const id = lock.baseline!.id;
-  const path = join(directory, baselineFilename(id));
   const stage = await mkdtemp(join(directory, ".compact-"));
   let published = false;
   let committed = false;
   try {
     await writeNew(join(stage, "lock"), JSON.stringify(lock, null, 2) + "\n");
-    await writeNew(path, sql);
+    await writeNew(baselinePath, sql);
     published = true;
     await syncDirectory(directory);
-    await rename(join(stage, "lock"), join(directory, "uncutsql.lock.json"));
+    await rename(join(stage, "lock"), lockPath);
     committed = true;
     await syncDirectory(directory);
     for (const file of removed) {
@@ -81,7 +58,7 @@ const publish = async (
       );
     }
     if (published) {
-      await unlink(path);
+      await unlink(baselinePath);
     }
     throw error;
   } finally {
@@ -93,7 +70,7 @@ export const compactGenerated = (
   executor: MigrationExecutor,
   directory: string,
   id: number,
-  yes: boolean,
+  confirm: (preview: CompactionPreview) => Effect.Effect<boolean, Error>,
 ) =>
   withMigrationDirectoryLock(
     directory,
@@ -126,7 +103,10 @@ export const compactGenerated = (
           file.id === lock.baseline?.id ? baselineFilename(file.id) : migrationFilename(file.id),
         ),
       );
-      if (!yes && !(yield* io(() => confirmCompaction(directory, id, removed)))) {
+      const baselinePath = join(directory, baselineFilename(id));
+      const lockPath = join(directory, "uncutsql.lock.json");
+      const preview = { baselinePath, id, lockPath, removed };
+      if (!(yield* confirm(preview))) {
         return false;
       }
       const tip = prefix[prefix.length - 1]!;
@@ -134,7 +114,7 @@ export const compactGenerated = (
       const sql = `-- uncutsql-chain v1 root ${tip.schemaHash}\n${rendered}`;
       const baseline = { checkpoint: tip.sha256, id, sha256: hashMigration(sql) };
       yield* Effect.uninterruptible(
-        io(() => publish(directory, removed, { ...lock, baseline }, sql)),
+        io(() => publish(directory, preview, { ...lock, baseline }, sql)),
       );
       return true;
     }),
