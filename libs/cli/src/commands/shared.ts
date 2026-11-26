@@ -17,3 +17,8 @@ export const outputDirectory = Argument.String("output-dir").pipe(
   Argument.withDescription("Override the configured migrations directory."),
   Argument.withDefault(undefined),
 );
+
+export const schemaPath = Argument.String("schema-path").pipe(
+  Argument.withDescription("Read SQL from a file, directory, or stdin (-)."),
+  Argument.withDefault(undefined),
+);

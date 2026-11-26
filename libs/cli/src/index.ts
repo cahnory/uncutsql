@@ -13,7 +13,7 @@ import { compareGeneratedSchema } from "./generate.ts";
 import { initProject } from "./init.ts";
 import { baselineFilename, migrationFilename } from "./lock.ts";
 import { loadDialect, loadDriver } from "./plugins.ts";
-import { runCommands } from "./router.ts";
+import { isRegisteredCommand, runCommands } from "./router.ts";
 import { InputError, readSchemaWith } from "./schema-input.ts";
 import { compareSchemas, renderMigration } from "./workflow.ts";
 
@@ -71,14 +71,12 @@ const program = Effect.gen(function* () {
     return help;
   }
   const [command = "diff", filename = "-"] = args;
-  if (command === "verify" || command === "generate") {
+  if (isRegisteredCommand(command)) {
     return yield* runCommands([command, ...commandArgs]).pipe(Effect.provide(NodeServices.layer));
   }
   if (
     ![
       "init",
-      "check",
-      "format",
       "diff",
       "decisions",
       "migration",
@@ -252,72 +250,57 @@ const program = Effect.gen(function* () {
     );
     return `${JSON.stringify(comparison.diff, null, 2)}\n`;
   }
-  if (command === "diff" || command === "migration" || command === "decisions") {
-    const target = args[2];
-    if (
-      args.length !== 3 ||
-      target === undefined ||
-      !validPath(filename) ||
-      !validPath(target) ||
-      (filename === "-" && target === "-")
-    ) {
-      return yield* Effect.fail(
-        new UsageError({ message: `${command} requires two paths; at most one may be stdin (-).` }),
-      );
-    }
-    const before = yield* readSchema(filename);
-    const after = yield* readSchema(target);
-    const comparison = yield* compareSchemas(dialect!, before, after).pipe(
-      Effect.mapError(
-        (error) =>
-          new InputError({
-            message:
-              error instanceof SchemaDiffError
-                ? error.diagnostics
-                    .map((item) => `${item.side === "before" ? filename : target}: ${item.message}`)
-                    .join("\n")
-                : error.message,
-          }),
-      ),
-    );
-    if (command === "decisions") {
-      return (
-        JSON.stringify(
-          yield* prepareMigrationDecisions(comparison.before, comparison.after).pipe(
-            Effect.flatMap((document) => Effect.promise(() => decisionDocument(document))),
-          ),
-          null,
-          2,
-        ) + "\n"
-      );
-    }
-    if (command === "migration") {
-      if (options.decisionWriter) {
-        return yield* writeDecisions(
-          yield* prepareMigrationDecisions(comparison.before, comparison.after),
-          options.decisionWriter.path ?? selected.decisions,
-          options.decisionWriter.flag,
-        );
-      }
-      const sql = yield* renderMigration(dialect!, comparison, decisions);
-      return sql.length ? `${sql}\n` : "";
-    }
-    const diff = comparison.diff;
-    return `${JSON.stringify(diff, null, 2)}\n`;
-  }
-  if ((command !== "check" && command !== "format") || args.length > 2 || !validPath(filename)) {
+  const target = args[2];
+  if (
+    args.length !== 3 ||
+    target === undefined ||
+    !validPath(filename) ||
+    !validPath(target) ||
+    (filename === "-" && target === "-")
+  ) {
     return yield* Effect.fail(
-      new UsageError({
-        message: "Expected check, format, diff, migration, generate or apply with input paths.",
-      }),
+      new UsageError({ message: `${command} requires two paths; at most one may be stdin (-).` }),
     );
   }
-  const statements = yield* readSchema(args[1] ?? selected.schema ?? "-");
-  if (command === "check") {
-    return "Valid supported SQL syntax.\n";
+  const before = yield* readSchema(filename);
+  const after = yield* readSchema(target);
+  const comparison = yield* compareSchemas(dialect!, before, after).pipe(
+    Effect.mapError(
+      (error) =>
+        new InputError({
+          message:
+            error instanceof SchemaDiffError
+              ? error.diagnostics
+                  .map((item) => `${item.side === "before" ? filename : target}: ${item.message}`)
+                  .join("\n")
+              : error.message,
+        }),
+    ),
+  );
+  if (command === "decisions") {
+    return (
+      JSON.stringify(
+        yield* prepareMigrationDecisions(comparison.before, comparison.after).pipe(
+          Effect.flatMap((document) => Effect.promise(() => decisionDocument(document))),
+        ),
+        null,
+        2,
+      ) + "\n"
+    );
   }
-  const sql = yield* dialect!.format(statements);
-  return sql.length === 0 ? "" : `${sql}\n`;
+  if (command === "migration") {
+    if (options.decisionWriter) {
+      return yield* writeDecisions(
+        yield* prepareMigrationDecisions(comparison.before, comparison.after),
+        options.decisionWriter.path ?? selected.decisions,
+        options.decisionWriter.flag,
+      );
+    }
+    const sql = yield* renderMigration(dialect!, comparison, decisions);
+    return sql.length ? `${sql}\n` : "";
+  }
+  const diff = comparison.diff;
+  return `${JSON.stringify(diff, null, 2)}\n`;
 });
 
 // Run the selected command once and map failures to process exit codes.

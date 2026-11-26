@@ -398,11 +398,11 @@ test("init lists available configs and displays all six steps for the selected f
   }
 });
 
-test("verify and generate show command help before config discovery", () => {
+test("registered commands show help before config discovery", () => {
   const f = fixture();
   try {
     f.put("uncutsql.config.mjs", "throw Error('config loaded')");
-    for (const command of ["verify", "generate"]) {
+    for (const command of ["check", "format", "verify", "generate"]) {
       const result = f.run([command, "--help"]);
       assert.equal(result.status, 0, result.stderr);
       assert.equal(result.stderr, "");

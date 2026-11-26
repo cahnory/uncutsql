@@ -3,11 +3,15 @@ import { CliConfig, CliError, CliOutput, Command, GlobalFlag } from "effect/cli"
 
 import manifest from "../package.json" with { type: "json" };
 import { generate } from "./commands/generate.ts";
+import { check, format } from "./commands/schema.ts";
 import { root } from "./commands/shared.ts";
 import { verify } from "./commands/verify.ts";
 import { UsageError } from "./config.ts";
 
-const commands = root.pipe(Command.withSubcommands([verify, generate]));
+const registered = [check, format, verify, generate] as const;
+export const isRegisteredCommand = (name: string) =>
+  registered.some((command) => command.name === name);
+const commands = root.pipe(Command.withSubcommands(registered));
 const run = Command.runWith(commands, { version: manifest.version });
 
 export const runCommands = (args: readonly string[]) =>

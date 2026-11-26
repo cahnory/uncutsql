@@ -1,5 +1,5 @@
 import { Array, Console, Effect, Option } from "effect";
-import { Argument, Command, Flag } from "effect/cli";
+import { Command, Flag } from "effect/cli";
 
 import { resolveConfig, UsageError } from "../config.ts";
 import type { DecisionWriterFlag } from "../config.ts";
@@ -9,7 +9,7 @@ import { promptDecisions } from "../interactive.ts";
 import { loadDialect } from "../plugins.ts";
 import { readSchemaWith } from "../schema-input.ts";
 import { style } from "../terminal.ts";
-import { outputDirectory, root } from "./shared.ts";
+import { outputDirectory, root, schemaPath } from "./shared.ts";
 
 const writer = (flag: DecisionWriterFlag, description: string) =>
   Flag.String(flag.slice(2)).pipe(
@@ -32,10 +32,7 @@ const inputs = {
   merge: writer("--merge-decisions", "Refresh the file and keep applicable decisions."),
   rewrite: writer("--rewrite-decisions", "Reset current decisions to pending."),
   // Positionals are consumed in declaration order.
-  schema: Argument.String("schema-path").pipe(
-    Argument.withDescription("Read SQL from a file, directory, or stdin (-)."),
-    Argument.withDefault(undefined),
-  ),
+  schema: schemaPath,
   targetDirectory: outputDirectory,
   write: writer("--write-decisions", "Create a new decision file."),
 };
