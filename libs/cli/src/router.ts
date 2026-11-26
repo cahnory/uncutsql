@@ -3,13 +3,28 @@ import { CliConfig, CliError, CliOutput, Command, GlobalFlag } from "effect/cli"
 
 import manifest from "../package.json" with { type: "json" };
 import { decisions, diff, diffAgainstLock, migration } from "./commands/comparison.ts";
+import { adopt, apply, compact, down, extract, up } from "./commands/database.ts";
 import { generate } from "./commands/generate.ts";
 import { check, format } from "./commands/schema.ts";
 import { root } from "./commands/shared.ts";
 import { verify } from "./commands/verify.ts";
 import { UsageError } from "./config.ts";
 
-const registered = [check, format, verify, generate, diff, decisions, migration] as const;
+const registered = [
+  check,
+  format,
+  verify,
+  generate,
+  diff,
+  decisions,
+  migration,
+  apply,
+  up,
+  down,
+  extract,
+  adopt,
+  compact,
+] as const;
 export const isRegisteredCommand = (name: string) =>
   registered.some((command) => command.name === name);
 const commands = root.pipe(

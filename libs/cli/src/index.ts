@@ -4,15 +4,9 @@ import { Effect, Result } from "effect";
 
 import { MigrationDecisionError } from "@uncutsql/core";
 
-import { adoptGenerated, applyGenerated } from "./apply.ts";
-import { compactGenerated } from "./compact.ts";
-import { parseOptions, resolveConfig, UsageError } from "./config.ts";
-import { writeExtractedSchema } from "./extract.ts";
+import { parseOptions, UsageError } from "./config.ts";
 import { initProject } from "./init.ts";
-import { baselineFilename, migrationFilename } from "./lock.ts";
-import { loadDriver } from "./plugins.ts";
 import { isRegisteredCommand, runCommands } from "./router.ts";
-import { InputError } from "./schema-input.ts";
 
 const help = `Usage: pnpm cli init
        pnpm cli <check|format> [file|-]
@@ -61,19 +55,18 @@ Statements require separating semicolons; the final semicolon is optional.
 Input SQL files are never modified. Unsupported syntax is an error.
 `;
 
-const validPath = (value: string) => !value.startsWith("-") || value === "-";
 const program = Effect.gen(function* () {
   const { args, commandArgs, options } = yield* parseOptions(process.argv.slice(2));
   if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) {
     return help;
   }
-  const [command, filename = "-"] = args;
+  const [command] = args;
   if (command === undefined || isRegisteredCommand(command)) {
     return yield* runCommands(command === undefined ? commandArgs : [command, ...commandArgs]).pipe(
       Effect.provide(NodeServices.layer),
     );
   }
-  if (!["init", "extract", "adopt", "compact", "apply", "up", "down"].includes(command)) {
+  if (command !== "init") {
     return yield* Effect.fail(
       new UsageError({
         message:
@@ -94,117 +87,17 @@ const program = Effect.gen(function* () {
       }),
     );
   }
-  if (options.yes && command !== "compact") {
+  if (options.yes) {
     return yield* Effect.fail(new UsageError({ message: "--yes requires compact." }));
   }
-  if (command === "init") {
-    if (args.length !== 1 || options.schema === "-") {
-      return yield* Effect.fail(
-        new UsageError({
-          message: "init accepts no positional arguments and requires a filesystem schema path.",
-        }),
-      );
-    }
-    return yield* initProject(options, process.cwd());
-  }
-  const selected = yield* resolveConfig(options, process.cwd());
-  if (command === "extract") {
-    const destination = args[2] ?? selected.schema ?? "-";
-    if (!args[1] || filename.startsWith("-") || args.length > 3 || !validPath(destination)) {
-      return yield* Effect.fail(
-        new UsageError({
-          message: "extract requires a database target and an optional schema path.",
-        }),
-      );
-    }
-    const executor = yield* loadDriver(selected.driver);
-    if (!executor.extract) {
-      return yield* Effect.fail(
-        new InputError({ message: "Driver does not support schema extraction." }),
-      );
-    }
-    const parts = yield* executor.extract(filename);
-    if (destination === "-") {
-      return parts.map((part) => part.sql).join("\n");
-    }
-    yield* Effect.tryPromise({
-      catch: (cause) => new InputError({ message: String(cause) }),
-      try: () => writeExtractedSchema(filename, destination, parts),
-    });
-    return parts.length
-      ? `Extracted schema to ${destination}.\nFor an untracked database, generate the first migration from this schema, then run adopt at migration 1. If migrations already exist, use adopt with the matching migration number.\n`
-      : `Extracted empty schema to ${destination}.\n`;
-  }
-  if (command === "adopt") {
-    const directory = args[3] ?? selected.migrations ?? "migrations";
-    if (
-      !args[1] ||
-      filename.startsWith("-") ||
-      !/^\d+$/.test(args[2] ?? "") ||
-      args.length > 4 ||
-      directory.startsWith("-")
-    ) {
-      return yield* Effect.fail(
-        new UsageError({
-          message:
-            "adopt requires a database target, a migration number and an optional migration directory.",
-        }),
-      );
-    }
-    const executor = yield* loadDriver(selected.driver);
-    const id = Number(args[2]);
-    yield* adoptGenerated(executor, filename, directory, id);
-    return `Initialized database history through migration ${id}.\n`;
-  }
-  if (command === "compact") {
-    const directory = args[2] ?? selected.migrations ?? "migrations";
-    if (!/^\d+$/.test(filename) || args.length > 3 || directory.startsWith("-")) {
-      return yield* Effect.fail(
-        new UsageError({
-          message: "compact requires a migration number and an optional migration directory.",
-        }),
-      );
-    }
-    const executor = yield* loadDriver(selected.driver);
-    const done = yield* compactGenerated(
-      executor,
-      directory,
-      Number(filename),
-      options.yes ?? false,
-    );
-    return done
-      ? `Compacted migrations 1 through ${Number(filename)}.\n`
-      : "Compaction cancelled.\n";
-  }
-  const directory = args[2] ?? selected.migrations ?? "migrations";
-  if (
-    args.length < 2 ||
-    args.length > 3 ||
-    filename === "-" ||
-    !validPath(filename) ||
-    directory.startsWith("-")
-  ) {
+  if (args.length !== 1 || options.schema === "-") {
     return yield* Effect.fail(
       new UsageError({
-        message: `${command} requires a database target and an optional migration directory.`,
+        message: "init accepts no positional arguments and requires a filesystem schema path.",
       }),
     );
   }
-  const executor = yield* loadDriver(selected.driver);
-  const result = yield* applyGenerated(
-    executor,
-    filename,
-    directory,
-    command === "down" ? "down" : "up",
-  );
-  if (command === "down") {
-    return result.rolledBackId === undefined
-      ? "No applied migrations.\n"
-      : `Rolled back ${migrationFilename(result.rolledBackId)}.\n`;
-  }
-  return result.appliedIds.length
-    ? `Applied ${result.appliedIds.map((id) => (id === result.baselineId ? baselineFilename(id) : migrationFilename(id))).join(", ")}.\n`
-    : "Database is up to date.\n";
+  return yield* initProject(options, process.cwd());
 });
 
 // Run the selected command once and map failures to process exit codes.

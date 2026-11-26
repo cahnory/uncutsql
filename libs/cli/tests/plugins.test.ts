@@ -410,12 +410,19 @@ test("registered commands show help before config discovery", () => {
       "diff",
       "decisions",
       "migration",
+      "apply",
+      "up",
+      "down",
+      "extract",
+      "adopt",
+      "compact",
     ]) {
       const result = f.run([command, "--help"]);
       assert.equal(result.status, 0, result.stderr);
       assert.equal(result.stderr, "");
       assert.ok(result.stdout.includes(`uncutsql ${command} [flags]`));
       assert.match(result.stdout, /--migrations/);
+      assert.equal(result.stdout.includes("--yes"), command === "compact");
       assert.equal(
         result.stdout.includes("--write-decisions"),
         command === "generate" || command === "migration",
@@ -446,5 +453,20 @@ test("review commands reject competing modes before opening config", async () =>
     assert.ok(Result.isFailure(result));
     assert.ok(result.failure instanceof UsageError);
     assert.match(result.failure.message, /decision-file/);
+  }
+});
+
+test("adopt and compact reject invalid migration numbers before config discovery", async () => {
+  for (const command of [["adopt", "database"], ["compact"]]) {
+    for (const number of ["1e2", "1.5", "9007199254740992"]) {
+      const result = await Effect.runPromise(
+        runCommands([...command, number, "--config=missing.json"]).pipe(
+          Effect.provide(NodeServices.layer),
+          Effect.result,
+        ),
+      );
+      assert.ok(Result.isFailure(result));
+      assert.ok(result.failure instanceof UsageError, result.failure.message);
+    }
   }
 });
