@@ -1,27 +1,20 @@
 #!/usr/bin/env node
-import { readFile } from "node:fs/promises";
-
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Effect, Result } from "effect";
 
 import { MigrationDecisionError, prepareMigrationDecisions, SchemaDiffError } from "@uncutsql/core";
-import type { MigrationDecisions } from "@uncutsql/core";
 
-import { adoptGenerated, applyGenerated, verifyGenerated } from "./apply.ts";
+import { adoptGenerated, applyGenerated } from "./apply.ts";
 import { compactGenerated } from "./compact.ts";
 import { parseOptions, resolveConfig, UsageError } from "./config.ts";
-import { decisionDocument, writeDecisionFile } from "./decision-file.ts";
+import { decisionDocument, readDecisions, writeDecisions } from "./decision-file.ts";
 import { writeExtractedSchema } from "./extract.ts";
-import {
-  compareGeneratedSchema,
-  generateMigration,
-  prepareGeneratedDecisions,
-} from "./generate.ts";
+import { compareGeneratedSchema } from "./generate.ts";
 import { initProject } from "./init.ts";
-import { promptDecisions } from "./interactive.ts";
 import { baselineFilename, migrationFilename } from "./lock.ts";
 import { loadDialect, loadDriver } from "./plugins.ts";
+import { runCommands } from "./router.ts";
 import { InputError, readSchemaWith } from "./schema-input.ts";
-import { style } from "./terminal.ts";
 import { compareSchemas, renderMigration } from "./workflow.ts";
 
 const help = `Usage: pnpm cli init
@@ -73,11 +66,14 @@ Input SQL files are never modified. Unsupported syntax is an error.
 
 const validPath = (value: string) => !value.startsWith("-") || value === "-";
 const program = Effect.gen(function* () {
-  const { args, options } = yield* parseOptions(process.argv.slice(2));
+  const { args, commandArgs, options } = yield* parseOptions(process.argv.slice(2));
   if (args.length === 1 && (args[0] === "--help" || args[0] === "-h")) {
     return help;
   }
   const [command = "diff", filename = "-"] = args;
+  if (command === "verify" || command === "generate") {
+    return yield* runCommands([command, ...commandArgs]).pipe(Effect.provide(NodeServices.layer));
+  }
   if (
     ![
       "init",
@@ -86,11 +82,9 @@ const program = Effect.gen(function* () {
       "diff",
       "decisions",
       "migration",
-      "generate",
       "extract",
       "adopt",
       "compact",
-      "verify",
       "apply",
       "up",
       "down",
@@ -103,11 +97,7 @@ const program = Effect.gen(function* () {
       }),
     );
   }
-  if (
-    (options.decisions || options.decisionWriter) &&
-    command !== "migration" &&
-    command !== "generate"
-  ) {
+  if ((options.decisions || options.decisionWriter) && command !== "migration") {
     return yield* Effect.fail(
       new UsageError({ message: "Decision-file options apply only to migration and generate." }),
     );
@@ -119,10 +109,7 @@ const program = Effect.gen(function* () {
       }),
     );
   }
-  if (
-    options.interactive &&
-    (command !== "generate" || options.decisions || options.decisionWriter)
-  ) {
+  if (options.interactive) {
     return yield* Effect.fail(
       new UsageError({
         message:
@@ -144,46 +131,8 @@ const program = Effect.gen(function* () {
     return yield* initProject(options, process.cwd());
   }
   const selected = yield* resolveConfig(options, process.cwd());
-  const decisions: unknown =
-    (command !== "generate" && command !== "migration") ||
-    options.decisionWriter ||
-    options.interactive
-      ? undefined
-      : yield* Effect.tryPromise({
-          catch: (cause) =>
-            new InputError({
-              message: `Cannot read decisions ${selected.decisions}: ${String(cause)}`,
-            }),
-          try: async () => {
-            let source: string;
-            try {
-              source = await readFile(selected.decisions, "utf8");
-            } catch (cause) {
-              if (
-                !selected.decisionsRequired &&
-                cause !== null &&
-                typeof cause === "object" &&
-                "code" in cause &&
-                cause.code === "ENOENT"
-              ) {
-                return undefined;
-              }
-              throw cause;
-            }
-            return JSON.parse(source);
-          },
-        });
-  const writeDecisions = (document: MigrationDecisions) => {
-    const writer = options.decisionWriter!;
-    const path = writer.path ?? selected.decisions;
-    return Effect.tryPromise({
-      catch: (cause) =>
-        new InputError({
-          message: `${path}: ${cause instanceof Error ? cause.message : String(cause)}`,
-        }),
-      try: () => writeDecisionFile(document, path, writer.flag),
-    });
-  };
+  const decisions =
+    command === "migration" && !options.decisionWriter ? yield* readDecisions(selected) : undefined;
   if (command === "extract") {
     const destination = args[2] ?? selected.schema ?? "-";
     if (!args[1] || filename.startsWith("-") || args.length > 3 || !validPath(destination)) {
@@ -252,16 +201,6 @@ const program = Effect.gen(function* () {
       ? `Compacted migrations 1 through ${Number(filename)}.\n`
       : "Compaction cancelled.\n";
   }
-  if (command === "verify") {
-    const directory = args[1] ?? selected.migrations ?? "migrations";
-    if (args.length > 2 || directory.startsWith("-")) {
-      return yield* Effect.fail(
-        new UsageError({ message: "verify accepts an optional migration directory." }),
-      );
-    }
-    const count = yield* verifyGenerated(directory);
-    return `Verified ${count} migration(s).\n`;
-  }
   // Apply only needs the driver's dialect ID; it does not load a SQL parser.
   const executing = command === "apply" || command === "up" || command === "down";
   const dialect = executing ? undefined : yield* loadDialect(selected.dialect);
@@ -296,44 +235,6 @@ const program = Effect.gen(function* () {
     return result.appliedIds.length
       ? `Applied ${result.appliedIds.map((id) => (id === result.baselineId ? baselineFilename(id) : migrationFilename(id))).join(", ")}.\n`
       : "Database is up to date.\n";
-  }
-  if (command === "generate") {
-    const directory = args[2] ?? selected.migrations ?? "migrations";
-    if (
-      (!args[1] && !selected.schema) ||
-      args.length > 3 ||
-      !validPath(filename) ||
-      directory.startsWith("-")
-    ) {
-      return yield* Effect.fail(
-        new UsageError({
-          message: "generate requires a schema path (or -) and an optional output directory.",
-        }),
-      );
-    }
-    const path = args[1] ?? selected.schema!;
-    if (options.interactive && path === "-") {
-      return yield* Effect.fail(
-        new UsageError({
-          message:
-            "--interactive reads answers from stdin. Supply the schema as a file or directory.",
-        }),
-      );
-    }
-    const ast = yield* readSchema(path);
-    if (options.decisionWriter) {
-      return yield* writeDecisions(yield* prepareGeneratedDecisions(dialect!, ast, directory));
-    }
-    const reviewed = options.interactive
-      ? yield* promptDecisions(
-          yield* prepareGeneratedDecisions(dialect!, ast, directory),
-          dialect!.supportsDropGuards === true,
-        )
-      : decisions;
-    const result = yield* generateMigration(dialect!, ast, directory, reviewed);
-    return result.migrationPath
-      ? `${style("green", "Generated", process.stdout)} ${result.migrationPath}\n${style("cyan", "Updated", process.stdout)} ${result.lockPath}\n`
-      : "No schema changes.\n";
   }
   if (command === "diff" && args.length <= 2) {
     const path = args[1] ?? selected.schema;
@@ -394,6 +295,8 @@ const program = Effect.gen(function* () {
       if (options.decisionWriter) {
         return yield* writeDecisions(
           yield* prepareMigrationDecisions(comparison.before, comparison.after),
+          options.decisionWriter.path ?? selected.decisions,
+          options.decisionWriter.flag,
         );
       }
       const sql = yield* renderMigration(dialect!, comparison, decisions);
@@ -417,10 +320,12 @@ const program = Effect.gen(function* () {
   return sql.length === 0 ? "" : `${sql}\n`;
 });
 
-// Only the executable boundary runs Effects and writes to process streams.
+// Run the selected command once and map failures to process exit codes.
 const result = await Effect.runPromise(Effect.result(program));
 if (Result.isSuccess(result)) {
-  process.stdout.write(result.success);
+  if (result.success) {
+    process.stdout.write(result.success);
+  }
 } else {
   const error = result.failure;
   process.stderr.write(`${error.message}\n${error instanceof UsageError ? `\n${help}` : ""}`);

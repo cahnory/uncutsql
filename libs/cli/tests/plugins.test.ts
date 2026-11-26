@@ -6,10 +6,12 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Effect, Result } from "effect";
 
-import { parseOptions, resolveConfig } from "../src/config.ts";
+import { parseOptions, resolveConfig, UsageError } from "../src/config.ts";
 import { loadDialect, loadDriver, PluginError } from "../src/plugins.ts";
+import { runCommands } from "../src/router.ts";
 
 const fixture = () => {
   const cwd = mkdtempSync(join(tmpdir(), "uncutsql-plugins-"));
@@ -393,5 +395,44 @@ test("init lists available configs and displays all six steps for the selected f
     );
   } finally {
     f.close();
+  }
+});
+
+test("verify and generate show command help before config discovery", () => {
+  const f = fixture();
+  try {
+    f.put("uncutsql.config.mjs", "throw Error('config loaded')");
+    for (const command of ["verify", "generate"]) {
+      const result = f.run([command, "--help"]);
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stderr, "");
+      assert.ok(result.stdout.includes(`uncutsql ${command} [flags]`));
+      assert.match(result.stdout, /--migrations/);
+      assert.equal(result.stdout.includes("--write-decisions"), command === "generate");
+    }
+    const invalid = f.run(["verify", "a", "b"]);
+    assert.equal(invalid.status, 2, invalid.stderr);
+    assert.equal(invalid.stdout, "");
+    assert.match(invalid.stderr, /Unexpected positional argument/);
+  } finally {
+    f.close();
+  }
+});
+
+test("generate's command rejects competing review modes before opening config", async () => {
+  for (const flags of [
+    ["--decisions=a.json", "--merge-decisions"],
+    ["--write-decisions", "--rewrite-decisions"],
+    ["--interactive", "--decisions=a.json"],
+  ]) {
+    const result = await Effect.runPromise(
+      runCommands(["generate", "--config=missing.json", ...flags]).pipe(
+        Effect.provide(NodeServices.layer),
+        Effect.result,
+      ),
+    );
+    assert.ok(Result.isFailure(result));
+    assert.ok(result.failure instanceof UsageError);
+    assert.match(result.failure.message, /decision-file/);
   }
 });

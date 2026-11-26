@@ -45,6 +45,10 @@ export const parseOptions = (args: readonly string[]) =>
     catch: (cause) =>
       new UsageError({ message: cause instanceof Error ? cause.message : String(cause) }),
     try: () => {
+      // Keep the legacy command lookup until every command is registered with Effect.
+      // Canonical flag tokens preserve separate decision-writer paths and leave operands after -- literal.
+      const flagTokens: string[] = [];
+      let trailing: readonly string[] = [];
       const positional: string[] = [];
       const options: {
         config?: string;
@@ -60,7 +64,7 @@ export const parseOptions = (args: readonly string[]) =>
       for (let index = 0; index < args.length; index++) {
         const arg = args[index]!;
         if (arg === "--") {
-          positional.push(...args.slice(index + 1));
+          trailing = args.slice(index + 1);
           break;
         }
         const [name, ...inline] = arg.split("=");
@@ -68,6 +72,7 @@ export const parseOptions = (args: readonly string[]) =>
           if (inline.length || options.yes) {
             throw new Error("--yes takes no value and may appear only once");
           }
+          flagTokens.push("--yes=true");
           options.yes = true;
           continue;
         }
@@ -78,6 +83,7 @@ export const parseOptions = (args: readonly string[]) =>
           if (options.interactive) {
             throw new Error("--interactive was specified more than once");
           }
+          flagTokens.push("--interactive=true");
           options.interactive = true;
           continue;
         }
@@ -100,6 +106,7 @@ export const parseOptions = (args: readonly string[]) =>
           if (path === "" || path?.startsWith("--")) {
             throw new Error(`${name} requires a nonempty path when supplied`);
           }
+          flagTokens.push(path === undefined ? name : `${name}=${path}`);
           options.decisionWriter = { flag: name, path };
           continue;
         }
@@ -125,9 +132,15 @@ export const parseOptions = (args: readonly string[]) =>
         if (options[key] !== undefined) {
           throw new Error(`${name} was specified more than once`);
         }
+        flagTokens.push(`${name}=${value}`);
         options[key] = value;
       }
-      return { args: positional, options };
+      const operands = positional.length ? trailing : trailing.slice(1);
+      const commandArgs = [...flagTokens, ...positional.slice(1)];
+      if (operands.length) {
+        commandArgs.push("--", ...operands);
+      }
+      return { args: [...positional, ...trailing], commandArgs, options };
     },
   });
 
@@ -184,12 +197,12 @@ export async function discoverInitConfigs(cwd: string) {
 
 export const resolveConfig = (
   options: {
-    config?: string;
-    decisions?: string;
-    dialect?: string;
-    driver?: string;
-    migrations?: string;
-    schema?: string;
+    config?: string | undefined;
+    decisions?: string | undefined;
+    dialect?: string | undefined;
+    driver?: string | undefined;
+    migrations?: string | undefined;
+    schema?: string | undefined;
   },
   cwd: string,
   allowNewConfig = false,

@@ -459,3 +459,25 @@ test("interactive generation reviews table and column choices in memory", () => 
     rmSync(cwd, { force: true, recursive: true });
   }
 });
+
+test("generate preserves writer paths before the command and operands after --", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "uncutsql-writer-args-"));
+  try {
+    writeFileSync(join(cwd, "schema.sql"), "CREATE TABLE t(id)");
+    for (const [args, path] of [
+      [["--write-decisions", "review=v1.json", "generate", "--", "schema.sql"], "review=v1.json"],
+      [["generate", "--write-decisions", "--", "schema.sql"], "uncutsql.decisions.json"],
+    ] as const) {
+      const result = run(cwd, [...args]);
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stderr, "");
+      assert.ok(Array.isArray(JSON.parse(readFileSync(join(cwd, path), "utf8")).decisions));
+    }
+    const literal = run(cwd, ["generate", "--", "--write-decisions=unexpected.json"]);
+    assert.equal(literal.status, 2);
+    assert.equal(literal.stdout, "");
+    assert.equal(existsSync(join(cwd, "unexpected.json")), false);
+  } finally {
+    rmSync(cwd, { recursive: true });
+  }
+});

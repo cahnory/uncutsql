@@ -7,6 +7,7 @@ import { mergeMigrationDecisions } from "@uncutsql/core";
 import type { MigrationDecisions } from "@uncutsql/core";
 
 import type { DecisionWriterFlag } from "./config.ts";
+import { InputError } from "./schema-input.ts";
 
 export const decisionDocument = async (document: MigrationDecisions, output?: string) => {
   const directory = await realpath(output === undefined ? process.cwd() : dirname(resolve(output)));
@@ -101,3 +102,36 @@ export const writeDecisionFile = async (
     }
   }
 };
+
+export const readDecisions = (selected: { decisions: string; decisionsRequired: boolean }) =>
+  Effect.tryPromise({
+    catch: (cause) =>
+      new InputError({
+        message: `Cannot read decisions ${selected.decisions}: ${String(cause)}`,
+      }),
+    try: async () => {
+      let source: string;
+      try {
+        source = await readFile(selected.decisions, "utf8");
+      } catch (cause) {
+        if (!selected.decisionsRequired && hasCode(cause, "ENOENT")) {
+          return undefined;
+        }
+        throw cause;
+      }
+      return JSON.parse(source);
+    },
+  });
+
+export const writeDecisions = (
+  document: MigrationDecisions,
+  path: string,
+  flag: DecisionWriterFlag,
+) =>
+  Effect.tryPromise({
+    catch: (cause) =>
+      new InputError({
+        message: `${path}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      }),
+    try: () => writeDecisionFile(document, path, flag),
+  });
