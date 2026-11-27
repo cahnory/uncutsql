@@ -3,7 +3,7 @@ import type { Codec } from "@uncutsql/codec";
 
 import { keywordChoice } from "../operators/keyword-choice.ts";
 import { keyword } from "../operators/keyword.ts";
-import { collationName, identifier } from "./identifier.ts";
+import { collationName, tableKeyColumnName } from "./identifier.ts";
 
 /** Table PRIMARY KEY/UNIQUE columns cannot be arbitrary index expressions. */
 export interface IndexedColumn {
@@ -15,7 +15,7 @@ export interface IndexedColumn {
 export const indexedColumn: Codec<IndexedColumn> = transform(
   struct(
     {
-      column: identifier,
+      column: tableKeyColumnName,
       collation: optional(prefixed(keyword("COLLATE"), collationName, " ")),
       order: optional(keywordChoice(["ASC", "DESC"])),
     },

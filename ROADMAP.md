@@ -58,6 +58,8 @@ Formatting now preserves the expression-text column names of unaliased likelihoo
 
 Expressions, column constraints and table PRIMARY KEY and UNIQUE terms now accept SQLite's contextual and single-quoted collation names. Native SQLite tests compare keyword acceptance in each position and verify that formatting preserves case-insensitive comparisons and key enforcement.
 
+Column names in table PRIMARY KEY and UNIQUE lists now accept contextual keywords and single-quoted names. Native SQLite tests compare every dialect keyword and verify that formatting preserves composite key column names, order and uniqueness enforcement, including a name with an embedded apostrophe.
+
 ## VS Code support
 
 The [VS Code extension](apps/vscode/README.md) reports parser errors, shows declarations and explicit columns in Outline, and resolves foreign key table and column definitions across the configured SQLite schema. The providers use an editor-independent language service.

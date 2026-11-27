@@ -8,6 +8,7 @@ import { EncodeError, ParseError } from "@uncutsql/codec";
 
 import { createTable } from "../src/index.ts";
 import type { CreateTable } from "../src/index.ts";
+import { keywords } from "../src/lexer/keywords.ts";
 
 const decode = (source: string) => Effect.runSync(createTable.decode(source));
 const encode = (value: CreateTable) => Effect.runSync(createTable.encode(value));
@@ -108,6 +109,72 @@ test("formatting retains a single-quoted collation on both table key types", () 
       assert.equal(term.desc, 1, sql);
       db.exec("INSERT INTO t VALUES ('A')");
       assert.throws(() => db.exec("INSERT INTO t VALUES ('a')"), /UNIQUE constraint failed/);
+    }
+  }
+});
+
+test("table key column names match native SQLite for every dialect keyword", () => {
+  using db = new DatabaseSync(":memory:");
+  for (const keyword of keywords) {
+    const name = keyword[0] + keyword.slice(1).toLowerCase();
+    for (const token of [name, `'${name}'`]) {
+      for (const key of ["PRIMARY KEY", "UNIQUE"]) {
+        const source = `CREATE TABLE t ("${name}" TEXT, x TEXT, ${key} (${token}, x))`;
+        const parsed = Effect.runSync(Effect.result(createTable.decode(source)));
+        try {
+          db.prepare(source);
+        } catch (error) {
+          assert.ok(error instanceof Error);
+          assert.match(
+            error.message,
+            /syntax error|non-deterministic functions|expressions prohibited/,
+            source,
+          );
+          assert.ok(Result.isFailure(parsed), source);
+          continue;
+        }
+        assert.ok(Result.isSuccess(parsed), source);
+        const keyConstraint = parsed.success.tableConstraints[0]!;
+        assert.ok(keyConstraint._tag === "PrimaryKey" || keyConstraint._tag === "Unique");
+        assert.deepEqual(keyConstraint.columns, [{ column: name }, { column: "x" }], source);
+        db.prepare(encode(parsed.success));
+      }
+    }
+  }
+});
+
+test("formatted composite table keys preserve column names, order and uniqueness", () => {
+  for (const [key, origin] of [
+    ["PRIMARY KEY", "pk"],
+    ["UNIQUE", "u"],
+  ] as const) {
+    const source = `CREATE TABLE t ('owner''s id' TEXT, "Abort" TEXT,
+      ${key} (Abort COLLATE NOCASE DESC, 'owner''s id' ASC))`;
+    for (const sql of versions(source)) {
+      using db = new DatabaseSync(":memory:");
+      db.exec(sql);
+      const terms = db
+        .prepare(
+          `SELECT term.name, term.desc
+           FROM pragma_index_list('t') AS idx JOIN pragma_index_xinfo(idx.name) AS term
+           WHERE idx.origin = ? AND term.key = 1
+           ORDER BY term.seqno`,
+        )
+        .all(origin);
+      assert.deepEqual(
+        terms.map(({ desc, name }) => [name, desc]),
+        [
+          ["Abort", 1],
+          ["owner's id", 0],
+        ],
+        sql,
+      );
+      db.exec("INSERT INTO t VALUES ('first', 'A'), ('second', 'A'), ('first', 'B')");
+      assert.throws(
+        () => db.exec("INSERT INTO t VALUES ('first', 'a')"),
+        /UNIQUE constraint failed/,
+        sql,
+      );
     }
   }
 });

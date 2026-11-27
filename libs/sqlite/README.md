@@ -111,7 +111,8 @@ context restrictions, including prohibiting subqueries.
 - [x] Table PRIMARY KEY, UNIQUE, CHECK and FOREIGN KEY, optionally named.
       Key columns support collation/order, and table keys support ON CONFLICT.
 - [x] Contextual and single-quoted names after COLLATE on columns and table PRIMARY KEY and UNIQUE terms.
-- [ ] Contextual and single-quoted names for the column itself in table PRIMARY KEY and UNIQUE terms.
+- [x] Contextual and single-quoted names for the column itself in table PRIMARY KEY and UNIQUE terms.
+      CAST, RAISE and the current date/time keywords require quotes in this position.
 - [x] Foreign-key target columns, ON DELETE/UPDATE, MATCH with contextual or quoted names, and deferrability.
       Reference options retain their original order.
 - [x] `[GENERATED ALWAYS] AS (expression) [VIRTUAL | STORED]`.
@@ -185,6 +186,7 @@ See the [workspace roadmap](../../ROADMAP.md) for the core and executor dependen
 
 ### Completed work
 
+- [x] Accept SQLite's contextual and single-quoted column names in table PRIMARY KEY and UNIQUE lists. Native SQLite tests verify the column names, order and uniqueness enforcement after formatting.
 - [x] Match SQLite's collation-name syntax in expressions, column constraints and table key terms. Bare join modifiers and INDEXED require quotes after COLLATE.
 - [x] Preserve SQLite's expression-text labels for unaliased likelihood calls in CTEs without declared column lists.
 - [x] Preserve SQLite's expression-text labels for unaliased likelihood calls in FROM subqueries while retaining inferred source column names in direct CREATE TABLE AS results.

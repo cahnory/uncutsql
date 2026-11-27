@@ -60,10 +60,12 @@ for (const word of ["CROSS", "FULL", "INDEXED", "INNER", "LEFT", "NATURAL", "OUT
 }
 export const collationName = nameWithKeywords(collationNameKeywords);
 
-// These tokens start special expressions even when followed by a dot or parenthesis.
+// These tokens start special expressions, including in the expression list SQLite
+// uses to read table keys before checking that each term names a column.
 const expressionNameKeywords = new Set(contextualNameKeywords);
 for (const word of ["CAST", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "RAISE"]) {
   expressionNameKeywords.delete(word);
 }
 export const functionName = identifierWithKeywords(expressionNameKeywords);
 export const qualifierName = nameWithKeywords(expressionNameKeywords);
+export const tableKeyColumnName = nameWithKeywords(expressionNameKeywords);
