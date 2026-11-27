@@ -13,11 +13,12 @@ import { windowDefinition } from "../over-clause.ts";
 import { windowName, windowNameAfterKeyword } from "../window-name.ts";
 import { fromClause } from "./from-clause.ts";
 import { resultColumn } from "./result-column.ts";
+import type { ResultColumnContext } from "./result-column.ts";
 import type { SelectCore } from "./types.ts";
 
 export const selectCore = (
   expression: Codec<Expression>,
-  schemaNames = false,
+  context: ResultColumnContext,
 ): Codec<SelectCore> => {
   const list = <A>(codec: Codec<A>) => repeat(codec, { min: 1, separator: punctuation(",", ", ") });
   const clause = <A>(words: readonly string[], codec: Codec<A>) =>
@@ -46,7 +47,7 @@ export const selectCore = (
         struct(
           {
             modifier: optional(keywordChoice(["DISTINCT", "ALL"])),
-            columns: list(resultColumn(expression, schemaNames)),
+            columns: list(resultColumn(expression, context)),
             from: clause(["FROM"], fromClause(expression)),
             where: clause(["WHERE"], expression),
             groupBy: clause(["GROUP", "BY"], list(expression)),

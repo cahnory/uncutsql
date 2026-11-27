@@ -52,6 +52,8 @@ Formatting now preserves trailing line and block comments in implicit computed r
 
 Formatting now preserves SQLite's derived-table column names for unaliased TRUE/FALSE expressions under COLLATE. Native SQLite tests cover mixed-case expressions that resolve to either source columns or literals, along with top-level labels and explicit aliases.
 
+Formatting now preserves the expression-text column names of unaliased likelihood calls in FROM subqueries. Native SQLite tests compare names and values, including mixed-case spelling and spacing, and verify that direct CREATE TABLE AS results still use the source column names.
+
 ## VS Code support
 
 The [VS Code extension](apps/vscode/README.md) reports parser errors, shows declarations and explicit columns in Outline, and resolves foreign key table and column definitions across the configured SQLite schema. The providers use an editor-independent language service.

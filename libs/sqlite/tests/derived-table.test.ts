@@ -35,6 +35,36 @@ test("derived tables compose with aliases, compounds and recursively nested quer
   }
 });
 
+test("derived tables retain SQLite's expression-text names for likelihood calls", () => {
+  using db = new DatabaseSync(":memory:");
+  db.exec("CREATE TABLE input(v INTEGER); INSERT INTO input VALUES (7)");
+  for (const { columns, labels } of [
+    {
+      columns: "LiKeLy ( v ), UnLiKeLy(  v ), LiKeLiHoOd (v,  0.5)",
+      labels: ["LiKeLy ( v )", "UnLiKeLy(  v )", "LiKeLiHoOd (v,  0.5)"],
+    },
+    {
+      columns: "LiKeLy ( v ) AS kept, v COLLATE binary, UnLiKeLy(v) COLLATE binary",
+      labels: ["kept", "v", "UnLiKeLy(v) COLLATE binary"],
+    },
+  ]) {
+    const source = `SELECT * FROM (SELECT ${columns} FROM input)`;
+    const ast = Effect.runSync(sqlQuery.decode(source));
+    const rendered = Effect.runSync(sqlQuery.encode(ast));
+    const original = db.prepare(source);
+    const formatted = db.prepare(rendered);
+    assert.deepEqual(
+      original.columns().map(({ name }) => name),
+      labels,
+      source,
+    );
+    assert.deepEqual(formatted.columns(), original.columns(), source);
+    assert.deepEqual(Object.values(original.get()!), [7, 7, 7], source);
+    assert.deepEqual(formatted.all(), original.all(), source);
+    assert.deepEqual(Effect.runSync(sqlQuery.decode(rendered)), ast, source);
+  }
+});
+
 test("derived tables reject incomplete queries and aliases", () => {
   for (const source of [
     "SELECT * FROM ()",

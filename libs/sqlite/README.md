@@ -178,12 +178,13 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 
 1. Trigger snapshots and migration lowering now cover table and view owners, including partial logical plans.
 2. Extend contextual keyword and legacy quoting compatibility. The lexical and query checklists track individual syntax features.
-   - Preserve the expression-text labels SQLite uses for likelihood calls on direct columns in FROM subqueries, such as `SELECT * FROM (SELECT likely(v) FROM (SELECT 7 AS v))`.
+   - Preserve the expression-text labels SQLite uses for likelihood calls on direct columns in CTE bodies without declared column lists.
 
 See the [workspace roadmap](../../ROADMAP.md) for the core and executor dependencies.
 
 ### Completed work
 
+- [x] Preserve SQLite's expression-text labels for unaliased likelihood calls in FROM subqueries while retaining inferred source column names in direct CREATE TABLE AS results.
 - [x] Preserve SQLite's derived-table column names for unaliased TRUE/FALSE expressions under COLLATE, for shadowed columns and literals.
 - [x] Preserve trailing line and block comments in implicit computed result labels, including SQLite's trimming of whitespace after the final comment.
 - [x] Preserve implicit TRUE/FALSE result labels for shadowing source columns and unshadowed literals.
@@ -256,5 +257,8 @@ trimmed. Unaliased TRUE/FALSE results keep their expression spelling when
 SQLite needs to resolve the name. FROM subqueries, CTEs, CREATE VIEW and
 CREATE TABLE AS also leave collated TRUE/FALSE expressions unaliased and
 retain their original spelling so SQLite can derive their names. These
-contexts also leave COLLATE and likelihood wrappers around direct column
-references unaliased.
+contexts also leave COLLATE on direct column references unaliased. FROM
+subqueries retain the expression-text labels of likelihood calls, including
+their original case and spacing. Direct CREATE VIEW and CREATE TABLE AS results
+leave likelihood wrappers around direct columns unaliased so SQLite can derive
+the source column names.

@@ -23,8 +23,8 @@ import type { FromClause, Query, TableSource } from "./types.ts";
 export const tableSource = (expression: Codec<Expression>): Codec<TableSource> => {
   // Defer recursive grammar construction until reading/writing a derived table.
   const nestedQuery = make<Query>({
-    decode: (cursor) => query(expression, true).decode(cursor),
-    encode: (value) => query(expression, true).encode(value),
+    decode: (cursor) => query(expression, "from-subquery").decode(cursor),
+    encode: (value) => query(expression, "from-subquery").encode(value),
   });
   const nestedSources = make<FromClause>({
     decode: (cursor) => fromClause(expression).decode(cursor),

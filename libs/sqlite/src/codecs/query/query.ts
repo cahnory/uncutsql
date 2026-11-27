@@ -20,19 +20,23 @@ import { punctuation } from "../../operators/punctuation.ts";
 import type { Expression } from "../expression/types.ts";
 import { orderingTerm } from "../ordering-term.ts";
 import { limitClause } from "./limit-clause.ts";
+import type { ResultColumnContext } from "./result-column.ts";
 import { selectCore } from "./select-query.ts";
 import type { Query } from "./types.ts";
 import { valuesQuery } from "./values-query.ts";
 import { withClause } from "./with-clause.ts";
 
-export const query = (expression: Codec<Expression>, schemaNames = false): Codec<Query> => {
+export const query = (
+  expression: Codec<Expression>,
+  context: ResultColumnContext = "result",
+): Codec<Query> => {
   const core = taggedUnion({
-    SelectQuery: selectCore(expression, schemaNames),
+    SelectQuery: selectCore(expression, context),
     ValuesQuery: valuesQuery(expression),
   });
   const nested = make<Query>({
-    decode: (cursor) => query(expression, true).decode(cursor),
-    encode: (value) => query(expression, true).encode(value),
+    decode: (cursor) => query(expression, "cte").decode(cursor),
+    encode: (value) => query(expression, "cte").encode(value),
   });
   const syntax = struct(
     {

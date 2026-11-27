@@ -21,9 +21,11 @@ import { qualifierName } from "../identifier.ts";
 import { resultAlias, resultAliasAfter } from "./alias.ts";
 import type { ResultColumn } from "./types.ts";
 
-const keepsBooleanSource = (expression: Expression, schemaNames: boolean): boolean => {
+export type ResultColumnContext = "result" | "from-subquery" | "cte" | "schema";
+
+const keepsBooleanSource = (expression: Expression, derivesNames: boolean): boolean => {
   let operand = expression;
-  while (schemaNames && operand._tag === "CollateExpression") {
+  while (derivesNames && operand._tag === "CollateExpression") {
     operand = operand.operand;
   }
   return (
@@ -43,29 +45,32 @@ const trimLabelEnd = (source: string, end: number): number => {
 const canFollowWithSql = (source: string, offset: number): boolean =>
   skipSqliteTrivia(`${source}\n;`, offset) === source.length + 1;
 
-// SQLite's derived-table column naming ignores COLLATE and likelihood wrappers
-// around a direct column. Top-level result labels instead use their source text.
-const derivesColumnName = (expression: Expression): boolean => {
+// COLLATE preserves direct column names in derived tables and schema definitions.
+// Schema definitions also look through likelihood calls.
+const derivesColumnName = (expression: Expression, unwrapLikelihood: boolean): boolean => {
   if (expression._tag === "ColumnReference") {
     return true;
   }
   if (expression._tag === "CollateExpression") {
-    return derivesColumnName(expression.operand);
+    return derivesColumnName(expression.operand, unwrapLikelihood);
   }
   if (
+    unwrapLikelihood &&
     expression._tag === "FunctionCall" &&
     /^(?:likely|unlikely|likelihood)$/i.test(expression.name) &&
     expression.arguments[0] !== undefined
   ) {
-    return derivesColumnName(expression.arguments[0]);
+    return derivesColumnName(expression.arguments[0], unwrapLikelihood);
   }
   return false;
 };
 
 export const resultColumn = (
   expression: Codec<Expression>,
-  schemaNames = false,
+  context: ResultColumnContext,
 ): Codec<ResultColumn> => {
+  const derivesNames = context !== "result";
+  const unwrapLikelihood = context === "schema" || context === "cte";
   const qualifiedStar = followedBy(qualifierName, prefixed(punctuation("."), punctuation("*")));
   // A failed qualified wildcard must leave ordinary column references available.
   const tableStar = make<string>({
@@ -88,8 +93,8 @@ export const resultColumn = (
           Effect.gen(function* () {
             const value = yield* expression.decode(cursor);
             const name = yield* optional(resultAliasAfter(value)).decode(value.next);
-            const usesColumnName = schemaNames
-              ? derivesColumnName(value.value)
+            const usesColumnName = derivesNames
+              ? derivesColumnName(value.value, unwrapLikelihood)
               : value.value._tag === "ColumnReference";
             let resultName = name.value;
             let implicitBooleanSource: string | undefined;
@@ -102,7 +107,7 @@ export const resultColumn = (
               // and the original spelling. An open block comment reaches EOF, where
               // this SELECT core cannot have a FROM clause and the keyword is a literal.
               if (
-                keepsBooleanSource(value.value, schemaNames) &&
+                keepsBooleanSource(value.value, derivesNames) &&
                 canFollowWithSql(source, value.next.offset - cursor.offset)
               ) {
                 if (value.value._tag !== "KeywordLiteral" || source !== value.value.value) {
@@ -135,7 +140,7 @@ export const resultColumn = (
             }
             const parsed = yield* Effect.result(expression.decode({ offset: 0, source }));
             if (
-              !keepsBooleanSource(value.expression, schemaNames) ||
+              !keepsBooleanSource(value.expression, derivesNames) ||
               Result.isFailure(parsed) ||
               trimLabelEnd(source, source.length) !== source.length ||
               !canFollowWithSql(source, parsed.success.next.offset) ||

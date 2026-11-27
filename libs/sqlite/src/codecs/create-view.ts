@@ -34,7 +34,7 @@ export const createViewBodyGrammar: Codec<CreateView> = transform(
       columns: optional(
         parenthesized(repeat(nameIdentifier, { min: 1, separator: punctuation(",", ", ") })),
       ),
-      query: prefixed(keyword("AS"), query(expression, true), " "),
+      query: prefixed(keyword("AS"), query(expression, "schema"), " "),
     },
     " ",
   ),

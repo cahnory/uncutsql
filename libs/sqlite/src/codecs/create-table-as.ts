@@ -12,7 +12,7 @@ export interface CreateTableAs extends CreateTableHeader {
 }
 
 export const createTableAsDefinition = transform(
-  prefixed(keyword("AS"), query(expression, true), " "),
+  prefixed(keyword("AS"), query(expression, "schema"), " "),
   {
     decode: (query) => ({ _tag: "CreateTableAs" as const, query }),
     encode: (value: Pick<CreateTableAs, "_tag" | "query">) => value.query,
