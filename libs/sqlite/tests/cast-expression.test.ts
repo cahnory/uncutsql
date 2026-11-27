@@ -10,6 +10,7 @@ import type { SourceNode } from "@uncutsql/codec";
 import { defaultColumnConstraint } from "../src/codecs/column-constraint/default-column-constraint.ts";
 import { createTable, encodeMigration, schema, sqlExpression } from "../src/index.ts";
 import type { Expression } from "../src/index.ts";
+import { keywords } from "../src/lexer/keywords.ts";
 import { planMigration } from "./workflow.ts";
 const decode = (sql: string) => Effect.runSync(sqlExpression.decode(sql));
 const encode = (ast: Expression) => Effect.runSync(sqlExpression.encode(ast));
@@ -33,6 +34,10 @@ test("CAST conversions retain native SQLite values and types", () => {
       "CAST(4.5 AS NUMERIC(10, 2))",
       'CAST(4.5 AS "DOUBLE" "PRECISION")',
       "CAST(4.5 AS DOUBLE PRECISION)",
+      "CAST(4.5 AS Generated Always)",
+      "CAST(4.5 AS 'double precision')",
+      "CAST(4.5 AS 'owner''s' 'TEXT'(+10, -2))",
+      "CAST(4.5 AS Replace 'INT' (1e2, 2))",
       "CAST(CAST('2' AS INTEGER) + 1 AS TEXT) || 'x'",
       "-CAST('3' AS INTEGER) * 2",
       "CAST('ADA' AS TEXT) COLLATE NOCASE = 'ada'",
@@ -50,6 +55,32 @@ test("CAST conversions retain native SQLite values and types", () => {
     }
   } finally {
     db.close();
+  }
+});
+
+test("bare keyword CAST type words match SQLite in the first and subsequent positions", () => {
+  using database = new DatabaseSync(":memory:");
+  const evaluate = (sql: string) =>
+    database.prepare(`SELECT ${sql} AS value, typeof(${sql}) AS storage`).get();
+  for (const word of keywords) {
+    const token = word[0] + word.slice(1).toLowerCase();
+    for (const typeName of [token, `TEXT ${token}`]) {
+      const source = `CAST(4.5 AS ${typeName})`;
+      const parsed = Effect.runSync(Effect.result(sqlExpression.decode(source)));
+      let before;
+      try {
+        before = evaluate(source);
+      } catch (error) {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /syntax error/, source);
+        assert.ok(Result.isFailure(parsed), source);
+        continue;
+      }
+      assert.ok(Result.isSuccess(parsed), source);
+      assert.equal(parsed.success._tag, "CastExpression");
+      assert.equal(parsed.success.typeName, typeName);
+      assert.deepEqual(evaluate(encode(parsed.success)), before, source);
+    }
   }
 });
 

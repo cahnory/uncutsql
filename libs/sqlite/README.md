@@ -38,6 +38,8 @@ SQLite conformance.** Update this checklist when adding a grammar feature.
 - [x] NULL, TRUE/FALSE and CURRENT_TIME/CURRENT_DATE/CURRENT_TIMESTAMP spellings.
 - [x] Custom, multiword and parameterized type declarations. One or two signed
       numeric dimensions are accepted; digit separators in dimensions are rejected.
+- [x] Contextual keywords and single-quoted words in column types and CAST targets.
+      Bare join modifiers and INDEXED require quotes in these positions.
 - [x] Bind parameters: `?`, `?NNN`, `:name`, `@name`, `$name` and extended names.
 - [x] Single-quoted result and table aliases, including doubled apostrophes. Formatting emits double-quoted aliases.
 - [x] Single-quoted schema and relation names in declarations and query table sources.
@@ -187,6 +189,7 @@ See the [workspace roadmap](../../ROADMAP.md) for the core and executor dependen
 
 ### Completed work
 
+- [x] Accept contextual and single-quoted type words in column declarations and CAST. Native SQLite tests compare keyword acceptance in both type-word positions, declared types and generated-column metadata, and CAST values and storage classes.
 - [x] Match SQLite's name syntax in trigger events and actions. Native tests verify that formatting preserves action effects and that UPDATE OF limits firing to updates of listed columns.
 - [x] Accept SQLite's contextual and single-quoted column names in table PRIMARY KEY and UNIQUE lists. Native SQLite tests verify the column names, order and uniqueness enforcement after formatting.
 - [x] Match SQLite's collation-name syntax in expressions, column constraints and table key terms. Bare join modifiers and INDEXED require quotes after COLLATE.
@@ -202,6 +205,12 @@ See the [workspace roadmap](../../ROADMAP.md) for the core and executor dependen
 - [x] Make index snapshot ordering reproducible across locales and declaration orders.
 - [x] Match SQLite tokenization of a trailing bare block-comment opener.
 - [x] Parse and format view declarations, with explicit diagnostics at the migration boundary.
+
+### Follow-up work
+
+- [ ] Match SQLite's declared-type trimming when bare GENERATED ALWAYS ends a type without AS or when comments immediately precede GENERATED or occur between GENERATED and ALWAYS.
+- [ ] Recognize single-quoted INTEGER in rowid alias detection when planning table rebuilds.
+- [ ] Match SQLite's acceptance of standalone NULL and DEFERRABLE column constraints.
 
 ```sh
 pnpm --filter @uncutsql/sqlite check

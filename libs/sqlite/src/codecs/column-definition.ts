@@ -6,7 +6,7 @@ import { constraintEntry } from "../operators/named-constraint.ts";
 import { columnConstraint } from "./column-constraint.ts";
 import type { ColumnConstraint } from "./column-constraint.ts";
 import { nameIdentifier } from "./identifier.ts";
-import { columnType } from "./type-name.ts";
+import { columnDeclarationType } from "./type-name.ts";
 
 const columnEntries = lexeme(
   located(
@@ -14,7 +14,7 @@ const columnEntries = lexeme(
     struct(
       {
         name: nameIdentifier,
-        typeName: optional(columnType),
+        typeName: optional(columnDeclarationType),
         constraints: repeat(constraintEntry(columnConstraint), { join: " " }),
       },
       " ",

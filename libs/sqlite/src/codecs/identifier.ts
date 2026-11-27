@@ -53,12 +53,13 @@ export const nameWithKeywords = (allowed: ReadonlySet<string>) =>
   alternatives(identifierWithKeywords(allowed), stringName);
 export const nameIdentifier = nameWithKeywords(contextualNameKeywords);
 
-// COLLATE accepts identifier fallbacks and strings, but excludes join modifiers and INDEXED.
-const collationNameKeywords = new Set(contextualNameKeywords);
+// COLLATE and type words accept strings and identifier fallbacks, excluding join modifiers and INDEXED.
+const typeAndCollationNameKeywords = new Set(contextualNameKeywords);
 for (const word of ["CROSS", "FULL", "INDEXED", "INNER", "LEFT", "NATURAL", "OUTER", "RIGHT"]) {
-  collationNameKeywords.delete(word);
+  typeAndCollationNameKeywords.delete(word);
 }
-export const collationName = nameWithKeywords(collationNameKeywords);
+export const typeWordName = nameWithKeywords(typeAndCollationNameKeywords);
+export const collationName = typeWordName;
 
 // These tokens start special expressions, including in the expression list SQLite
 // uses to read table keys before checking that each term names a column.

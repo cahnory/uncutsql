@@ -7,6 +7,7 @@ import { Effect, Result } from "effect";
 import { document, EncodeError, ParseError } from "@uncutsql/codec";
 
 import { columnType, createTable } from "../src/index.ts";
+import { keywords } from "../src/lexer/keywords.ts";
 
 const codec = document(columnType);
 const failure = <A, E>(effect: Effect.Effect<A, E>): E => {
@@ -32,6 +33,10 @@ for (const type of [
   '"my type"',
   '"DOUBLE" "PRECISION"',
   'DOUBLE "PRECISION"',
+  "'Select'",
+  "'double precision'",
+  "'owner''s' 'Select'(+10, -2)",
+  "Replace 'TEXT' (1e2, 2)",
   "MY /* INT */ TYPE",
   "CUSTOM(1 /* INT */)",
   "CUSTOM -- INT\n TYPE",
@@ -55,6 +60,71 @@ for (const type of [
     }
   });
 }
+
+test("bare keyword type words match SQLite in the first and subsequent positions", () => {
+  using database = new DatabaseSync(":memory:");
+  for (const word of keywords) {
+    const token = word[0] + word.slice(1).toLowerCase();
+    for (const type of [token, `CUSTOM ${token}`]) {
+      // Disambiguate keywords that would otherwise form complete constraints.
+      const declaration = ["DEFERRABLE", "NULL", "UNIQUE"].includes(word) ? `${type}(2)` : type;
+      const source = `CREATE TABLE t (a ${declaration})`;
+      const parsed = Effect.runSync(Effect.result(createTable.decode(source)));
+      try {
+        database.exec(source);
+      } catch (error) {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /syntax error/, source);
+        assert.ok(Result.isFailure(parsed), source);
+        continue;
+      }
+      assert.ok(Result.isSuccess(parsed), source);
+      assert.equal(parsed.success.columns[0]!.typeName, declaration);
+      const metadata = () => database.prepare("SELECT * FROM pragma_table_xinfo('t')").all();
+      const before = metadata();
+      database.exec("DROP TABLE t");
+      database.exec(Effect.runSync(createTable.encode(parsed.success)));
+      assert.deepEqual(metadata(), before, source);
+      database.exec("DROP TABLE t");
+    }
+  }
+});
+
+test("GENERATED ALWAYS AS ends a column type and preserves generated metadata", () => {
+  const source = `CREATE TABLE t (
+    seed INT,
+    a Replace Generated Always AS (seed + 1) STORED,
+    b Generated Always /* before AS */ AS (seed + 2),
+    c 'Select' 'TEXT'(+10, -2) GENERATED /* after dimensions */ ALWAYS AS (seed + 3) VIRTUAL,
+    d Generated AS (seed + 4),
+    e Custom Generated Always (2) AS (seed + 5)
+  )`;
+  const ast = Effect.runSync(createTable.decode(source));
+  assert.deepEqual(
+    ast.columns.map(({ typeName }) => typeName),
+    [
+      "INT",
+      "Replace",
+      undefined,
+      "'Select' 'TEXT'(+10, -2)",
+      "Generated",
+      "Custom Generated Always (2)",
+    ],
+  );
+  const formatted = Effect.runSync(createTable.encode(ast));
+  assert.deepEqual(Effect.runSync(createTable.decode(formatted)), ast);
+  using database = new DatabaseSync(":memory:");
+  const metadata = () => database.prepare("SELECT * FROM pragma_table_xinfo('t')").all();
+  database.exec(source);
+  const before = metadata();
+  assert.deepEqual(
+    before.map(({ hidden }) => hidden),
+    [0, 3, 2, 2, 2, 2],
+  );
+  database.exec("DROP TABLE t");
+  database.exec(formatted);
+  assert.deepEqual(metadata(), before);
+});
 
 test("comments inside type declarations can affect affinity and must survive encoding", () => {
   const type = "CUSTOM /* INT */ TYPE";
@@ -103,6 +173,7 @@ for (const source of [
   "TEXT(1_0)",
   "TEXT(1",
   '"unterminated',
+  "'unterminated",
 ]) {
   test(`reject invalid type declaration: ${source}`, () => {
     assert.ok(failure(codec.decode(source)) instanceof ParseError);
@@ -113,6 +184,8 @@ for (const source of [
 test("a constructed type cannot inject constraints, delimiters or additional statements", () => {
   for (const source of [
     "INT PRIMARY KEY",
+    "Replace GENERATED ALWAYS AS (1)",
+    "'TEXT' CHECK (1)",
     "INT) STRICT; DROP TABLE t; --",
     "INT, other TEXT",
     " INT",
