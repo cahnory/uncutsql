@@ -833,10 +833,11 @@ The dialect remains independent of any driver.
 Formatting query expressions can change their implicit result names, which would
 change CTAS schemas and references from outer queries. Result-column parsing
 normalizes computed names to explicit aliases based on their original expression
-spans. Column references retain native name resolution. Query factories distinguish
-result-label and derived-schema naming: SQLite ignores COLLATE and likelihood
-wrappers around direct column references when deriving table columns. FROM
-subqueries, CTE definitions and AS queries use that schema-naming context.
+spans. Column references retain native name resolution. SQLite looks through
+COLLATE around direct column references when naming columns in FROM subqueries,
+CTEs and CREATE TABLE AS queries. Direct CREATE TABLE AS results also look
+through likelihood calls around column references. FROM subqueries and CTEs
+without declared column lists use the original expression text for those calls.
 Tests compare native data, column names and type affinities, and cover nested
 contexts, source comments, duplicate names and the previous CTAS fixture.
 

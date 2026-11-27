@@ -80,6 +80,42 @@ test("CTE names and declared columns match SQLite keyword and quoting rules", ()
   }
 });
 
+test("CTEs retain SQLite's implicit, explicit and declared names for likelihood calls", () => {
+  using db = new DatabaseSync(":memory:");
+  db.exec("CREATE TABLE input(v INTEGER); INSERT INTO input VALUES (7)");
+  for (const { definition, labels } of [
+    {
+      definition:
+        "c AS (SELECT LiKeLy ( v ), UnLiKeLy(  v ), LiKeLiHoOd (v,  0.5), likely(v) AS kept FROM input)",
+      labels: ["LiKeLy ( v )", "UnLiKeLy(  v )", "LiKeLiHoOd (v,  0.5)", "kept"],
+    },
+    {
+      definition: "c(first, second) AS (SELECT LiKeLy ( v ), unlikely(v) AS overridden FROM input)",
+      labels: ["first", "second"],
+    },
+  ]) {
+    const references = labels.map((label) => `c."${label}"`).join(", ");
+    const source = `WITH ${definition} SELECT ${references} FROM c`;
+    const ast = decode(source);
+    const rendered = Effect.runSync(sqlQuery.encode(ast));
+    const original = db.prepare(source);
+    const formatted = db.prepare(rendered);
+    assert.deepEqual(
+      original.columns().map(({ name }) => name),
+      labels,
+      source,
+    );
+    assert.deepEqual(formatted.columns(), original.columns(), source);
+    assert.deepEqual(
+      Object.values(original.get()!),
+      labels.map(() => 7),
+      source,
+    );
+    assert.deepEqual(formatted.all(), original.all(), source);
+    assert.deepEqual(decode(rendered), ast, source);
+  }
+});
+
 test("WITH rejects incomplete definitions and empty constructed lists", () => {
   for (const source of [
     "WITH",

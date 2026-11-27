@@ -70,7 +70,7 @@ export const resultColumn = (
   context: ResultColumnContext,
 ): Codec<ResultColumn> => {
   const derivesNames = context !== "result";
-  const unwrapLikelihood = context === "schema" || context === "cte";
+  const unwrapLikelihood = context === "schema";
   const qualifiedStar = followedBy(qualifierName, prefixed(punctuation("."), punctuation("*")));
   // A failed qualified wildcard must leave ordinary column references available.
   const tableStar = make<string>({
