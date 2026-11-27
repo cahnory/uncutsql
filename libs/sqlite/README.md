@@ -67,7 +67,7 @@ recognizing a keyword does not imply support for the construct it introduces.
 - [x] Postfix ISNULL, NOTNULL and NOT NULL; logical AND and OR.
 - [x] BETWEEN / NOT BETWEEN, including nested bounds.
 - [x] IN / NOT IN with expression lists, including empty lists.
-- [x] Ordinary function calls with zero or more arguments and nested expressions.
+- [x] Ordinary function calls with zero or more arguments and nested expressions. Bare contextual function names such as `Replace` are accepted.
       Function existence and arity are checked by SQLite, not by this parser.
 - [x] Expression-level COLLATE, including repeated clauses and quoted names.
 - [x] JSON extraction `->` / `->>`, retaining their distinct result semantics.
@@ -178,7 +178,6 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 
 1. Trigger snapshots and migration lowering now cover table and view owners, including partial logical plans.
 2. Extend contextual keyword and legacy quoting compatibility. The lexical and query checklists track individual syntax features.
-   - Accept bare contextual function names such as `Replace(...)`.
    - Preserve implicit TRUE/FALSE result labels when SQLite resolves the token to a source column with different casing.
 
 See the [workspace roadmap](../../ROADMAP.md) for the core and executor dependencies.

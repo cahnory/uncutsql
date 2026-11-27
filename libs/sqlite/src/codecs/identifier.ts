@@ -53,10 +53,10 @@ export const nameWithKeywords = (allowed: ReadonlySet<string>) =>
   alternatives(identifierWithKeywords(allowed), stringName);
 export const nameIdentifier = nameWithKeywords(contextualNameKeywords);
 
-// At the start of a result expression, SQLite parses these as expressions before
-// considering whether the token can stand for a table name.
-const qualifierKeywords = new Set(contextualNameKeywords);
+// These tokens start special expressions even when followed by a dot or parenthesis.
+const expressionNameKeywords = new Set(contextualNameKeywords);
 for (const word of ["CAST", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "RAISE"]) {
-  qualifierKeywords.delete(word);
+  expressionNameKeywords.delete(word);
 }
-export const qualifierName = nameWithKeywords(qualifierKeywords);
+export const functionName = identifierWithKeywords(expressionNameKeywords);
+export const qualifierName = nameWithKeywords(expressionNameKeywords);

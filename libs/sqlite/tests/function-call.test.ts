@@ -5,8 +5,41 @@ import { test } from "node:test";
 import { Effect, Result } from "effect";
 
 import { defaultColumnConstraint } from "../src/codecs/column-constraint/default-column-constraint.ts";
-import { createTable } from "../src/index.ts";
+import { createTable, sqlExpression, sqlQuery } from "../src/index.ts";
 import type { Expression } from "../src/index.ts";
+import { keywords } from "../src/lexer/keywords.ts";
+
+test("bare function names match native SQLite for every dialect keyword", () => {
+  using db = new DatabaseSync(":memory:");
+  for (const keyword of keywords) {
+    const name = keyword[0] + keyword.slice(1).toLowerCase();
+    db.function(name, () => 7);
+    const source = `${name}()`;
+    const parsed = Effect.runSync(Effect.result(sqlExpression.decode(source)));
+    let native;
+    try {
+      native = db.prepare(`SELECT ${source}`);
+    } catch {
+      assert.ok(Result.isFailure(parsed), source);
+      continue;
+    }
+    assert.ok(Result.isSuccess(parsed), source);
+    assert.deepEqual(parsed.success, { _tag: "FunctionCall", arguments: [], name }, source);
+    assert.equal(native.get()?.[source], 7, source);
+  }
+});
+
+test("formatting preserves the Replace result label and value", () => {
+  using db = new DatabaseSync(":memory:");
+  const label = "Replace('abc', 'b', 'x')";
+  const source = `SELECT ${label}`;
+  const parsed = Effect.runSync(sqlQuery.decode(source));
+  const rendered = Effect.runSync(sqlQuery.encode(parsed));
+  assert.deepEqual(Effect.runSync(sqlQuery.decode(rendered)), parsed);
+  for (const sql of [source, rendered]) {
+    assert.deepEqual({ ...db.prepare(sql).get() }, { [label]: "axc" });
+  }
+});
 
 test("calls in defaults, checks and generated columns retain SQLite behavior", () => {
   const source = `CREATE TABLE t (

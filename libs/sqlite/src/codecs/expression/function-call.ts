@@ -20,7 +20,7 @@ import { keyword } from "../../operators/keyword.ts";
 import { parenthesized } from "../../operators/parenthesized.ts";
 import { punctuation } from "../../operators/punctuation.ts";
 import { windowKeyword } from "../../operators/window-keyword.ts";
-import { identifier } from "../identifier.ts";
+import { functionName } from "../identifier.ts";
 import { orderingTerm } from "../ordering-term.ts";
 import { overClause } from "../over-clause.ts";
 import type { Expression, FunctionCall } from "./types.ts";
@@ -52,7 +52,7 @@ export const functionCall = (expression: Codec<Expression>): Codec<FunctionCall>
   });
   const syntax = tuple(
     [
-      tuple([identifier, parenthesized(args)]),
+      tuple([functionName, parenthesized(args)]),
       optional(
         prefixed(
           windowKeyword("FILTER"),

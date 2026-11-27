@@ -44,7 +44,9 @@ Qualified column references now use the same leading-name rules as qualified sta
 
 Unqualified column references now accept contextual keywords. Native SQLite tests compare every bare dialect keyword in expression position, including `SELECT Abort FROM (SELECT 7 AS Abort)`. They verify formatting at SELECT clause boundaries, result labels and values, and literal handling for TRUE, FALSE and the current date/time keywords. Bare `CURRENT` and `UNBOUNDED` still start special bounds in window frames.
 
-Remaining expression compatibility includes bare contextual function names such as `Replace(...)` and implicit result labels for TRUE/FALSE when a source column with different casing shadows the literal.
+Function calls now accept bare contextual names. Native SQLite tests cover every dialect keyword in call position and verify that formatting `SELECT Replace('abc', 'b', 'x')` preserves its result label and value.
+
+Remaining expression compatibility includes implicit result labels for TRUE/FALSE when a source column with different casing shadows the literal.
 
 ## VS Code support
 
