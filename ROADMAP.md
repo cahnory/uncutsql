@@ -64,6 +64,8 @@ Trigger UPDATE OF columns, INSERT targets and column lists, UPDATE targets and S
 
 Column declarations and CAST targets now accept contextual keywords and single-quoted type words. Native SQLite tests compare declared types and generated-column metadata after formatting, along with CAST values and storage classes.
 
+SQLite rebuilds now recognize single-quoted `INTEGER` rowid aliases regardless of case. Native SQLite tests verify explicit rowid preservation for aliased keys and independent rowids for inline `PRIMARY KEY DESC`.
+
 ## VS Code support
 
 The [VS Code extension](apps/vscode/README.md) reports parser errors, shows declarations and explicit columns in Outline, and resolves foreign key table and column definitions across the configured SQLite schema. The providers use an editor-independent language service.

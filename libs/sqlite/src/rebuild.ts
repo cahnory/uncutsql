@@ -39,7 +39,7 @@ const rowidAlias = (table: CreateTable) =>
 // PRIMARY KEY DESC differently from DESC in a table-level primary key.
 const integerPrimaryKey = (table: CreateTable) =>
   table.columns.find((column) => {
-    if (!/^(?:integer|"integer"|`integer`|\[integer\])$/i.test(column.typeName ?? "")) {
+    if (!/^(?:integer|'integer'|"integer"|`integer`|\[integer\])$/i.test(column.typeName ?? "")) {
       return false;
     }
     return (

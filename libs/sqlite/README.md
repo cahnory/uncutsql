@@ -189,6 +189,7 @@ See the [workspace roadmap](../../ROADMAP.md) for the core and executor dependen
 
 ### Completed work
 
+- [x] Recognize single-quoted INTEGER rowid aliases during rebuilds. Native SQLite tests verify explicit rowid preservation and the distinction between inline and table-level descending primary keys.
 - [x] Accept contextual and single-quoted type words in column declarations and CAST. Native SQLite tests compare keyword acceptance in both type-word positions, declared types and generated-column metadata, and CAST values and storage classes.
 - [x] Match SQLite's name syntax in trigger events and actions. Native tests verify that formatting preserves action effects and that UPDATE OF limits firing to updates of listed columns.
 - [x] Accept SQLite's contextual and single-quoted column names in table PRIMARY KEY and UNIQUE lists. Native SQLite tests verify the column names, order and uniqueness enforcement after formatting.
@@ -209,7 +210,6 @@ See the [workspace roadmap](../../ROADMAP.md) for the core and executor dependen
 ### Follow-up work
 
 - [ ] Match SQLite's declared-type trimming when bare GENERATED ALWAYS ends a type without AS or when comments immediately precede GENERATED or occur between GENERATED and ALWAYS.
-- [ ] Recognize single-quoted INTEGER in rowid alias detection when planning table rebuilds.
 - [ ] Match SQLite's acceptance of standalone NULL and DEFERRABLE column constraints.
 
 ```sh

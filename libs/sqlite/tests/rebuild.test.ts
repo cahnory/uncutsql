@@ -233,18 +233,49 @@ test("rebuild preserves distinct rowids and rejects competing integer primary ke
   for (const after of [
     "CREATE TABLE t (id INTEGER PRIMARY KEY, value TEXT)",
     'CREATE TABLE t (id "integer", value TEXT, PRIMARY KEY (ID DESC))',
+    "CREATE TABLE t (id 'iNtEgEr', value TEXT, PRIMARY KEY (ID DESC))",
   ]) {
     assert.throws(() => migration(before, after), /Cannot preserve both the rowid and column/);
   }
 
-  const db = new DatabaseSync(":memory:");
-  try {
-    db.exec(before);
-    db.exec("INSERT INTO t(rowid, id, value) VALUES (42, 7, 'kept')");
-    db.exec(migration(before, "CREATE TABLE t (id INTEGER PRIMARY KEY DESC, value TEXT)"));
-    assert.deepEqual({ ...db.prepare("SELECT rowid, id FROM t").get() }, { id: 7, rowid: 42 });
-  } finally {
-    db.close();
+  for (const type of ["INTEGER", "'iNtEgEr'"]) {
+    const db = new DatabaseSync(":memory:");
+    try {
+      db.exec(before);
+      db.exec("INSERT INTO t(rowid, id, value) VALUES (42, 7, 'kept')");
+      db.exec(migration(before, `CREATE TABLE t (id ${type} PRIMARY KEY DESC, value TEXT)`));
+      assert.deepEqual({ ...db.prepare("SELECT rowid, id FROM t").get() }, { id: 7, rowid: 42 });
+    } finally {
+      db.close();
+    }
+  }
+});
+
+test("rebuild preserves explicit rowids for single-quoted INTEGER primary keys", () => {
+  for (const definition of [
+    "id 'iNtEgEr' PRIMARY KEY, value TEXT",
+    "id 'iNtEgEr', value TEXT, PRIMARY KEY (id DESC)",
+  ]) {
+    const before = `CREATE TABLE t (${definition})`;
+    const after = before.replace("'iNtEgEr'", "INTEGER").replace("value TEXT", "value TEXT UNIQUE");
+    const db = new DatabaseSync(":memory:");
+    try {
+      db.exec(before);
+      db.exec("INSERT INTO t (rowid, value) VALUES (-7, 'first'), (42, 'second')");
+      db.exec(migration(before, after));
+      assert.deepEqual(
+        db
+          .prepare("SELECT rowid AS row_id, id, value FROM t ORDER BY rowid")
+          .all()
+          .map((row) => ({ ...row })),
+        [
+          { id: -7, row_id: -7, value: "first" },
+          { id: 42, row_id: 42, value: "second" },
+        ],
+      );
+    } finally {
+      db.close();
+    }
   }
 });
 
