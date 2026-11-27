@@ -178,12 +178,14 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 
 1. Trigger snapshots and migration lowering now cover table and view owners, including partial logical plans.
 2. Extend contextual keyword and legacy quoting compatibility. The lexical and query checklists track individual syntax features.
-   - Preserve implicit TRUE/FALSE result labels when SQLite resolves the token to a source column with different casing.
+   - Preserve implicit computed result labels when SQLite includes trailing comments in the label.
+   - Match SQLite's derived-table naming for COLLATE around a contextual TRUE/FALSE expression.
 
 See the [workspace roadmap](../../ROADMAP.md) for the core and executor dependencies.
 
 ### Completed work
 
+- [x] Preserve implicit TRUE/FALSE result labels for shadowing source columns and unshadowed literals.
 - [x] Prevent rebuilds from mapping two independent values onto the same integer primary key.
 - [x] Accept SQLite single-quoted query aliases and verify the formatted result with SQLite.
 - [x] Verify rowid preservation when declared columns shadow all three hidden aliases and update the rebuild guides.
@@ -247,6 +249,8 @@ remain SQLite's responsibility. Contextual keywords and legacy quoting still
 have compatibility work listed in the lexical checklist.
 
 Query parsing normalizes implicit computed result-column names into explicit
-aliases so formatting does not rename columns. Derived-table contexts (FROM
-subqueries, CTEs and CREATE TABLE AS) retain SQLite's special column-name handling
-for COLLATE and likelihood wrappers around direct column references.
+aliases so formatting does not rename columns. Unaliased TRUE/FALSE results keep
+their expression spelling so SQLite can choose the label after resolving the
+name. Derived-table contexts (FROM subqueries, CTEs and CREATE TABLE AS) retain
+SQLite's special column-name handling for COLLATE and likelihood wrappers around
+direct column references.

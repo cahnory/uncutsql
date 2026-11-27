@@ -39,7 +39,12 @@ export interface CompoundQuery {
 export type ResultColumn =
   | { readonly _tag: "StarColumn" }
   | { readonly _tag: "TableStarColumn"; readonly table: string }
-  | { readonly _tag: "ExpressionColumn"; readonly alias?: string; readonly expression: Expression };
+  | {
+      readonly _tag: "ExpressionColumn";
+      readonly alias?: string;
+      readonly expression: Expression;
+      readonly implicitBooleanSource?: string;
+    };
 
 export type IndexHint =
   | { readonly _tag: "IndexedBy"; readonly name: string }

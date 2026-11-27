@@ -1,6 +1,7 @@
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 
 import {
+  EncodeError,
   followedBy,
   make,
   optional,
@@ -16,8 +17,15 @@ import { lexeme } from "../../operators/lexeme.ts";
 import { punctuation } from "../../operators/punctuation.ts";
 import type { Expression } from "../expression/types.ts";
 import { qualifierName } from "../identifier.ts";
+import type { KeywordLiteral } from "../keyword-literal.ts";
 import { resultAlias, resultAliasAfter } from "./alias.ts";
 import type { ResultColumn } from "./types.ts";
+
+const isBooleanLiteral = (
+  expression: Expression,
+): expression is KeywordLiteral & { readonly value: "TRUE" | "FALSE" } =>
+  expression._tag === "KeywordLiteral" &&
+  (expression.value === "TRUE" || expression.value === "FALSE");
 
 // SQLite's derived-table column naming ignores COLLATE and likelihood wrappers
 // around a direct column. Top-level result labels instead use their source text.
@@ -64,20 +72,26 @@ export const resultColumn = (
           Effect.gen(function* () {
             const value = yield* expression.decode(cursor);
             const name = yield* optional(resultAliasAfter(value)).decode(value.next);
+            const source = cursor.source.slice(cursor.offset, value.next.offset);
+            // SQLite chooses the declared column name if the keyword resolves to a
+            // column, and uses the expression spelling if it remains a literal.
+            const implicitBoolean = name.value === undefined && isBooleanLiteral(value.value);
+            const implicitBooleanSource =
+              implicitBoolean && source !== value.value.value ? source : undefined;
             const resultName =
               name.value ??
-              ((
-                schemaNames
-                  ? derivesColumnName(value.value)
-                  : value.value._tag === "ColumnReference"
-              )
+              (implicitBoolean ||
+              (schemaNames
+                ? derivesColumnName(value.value)
+                : value.value._tag === "ColumnReference")
                 ? undefined
-                : cursor.source.slice(cursor.offset, value.next.offset));
+                : source);
             return read(
               {
                 _tag: "ExpressionColumn",
                 expression: value.value,
                 ...(resultName === undefined ? {} : { alias: resultName }),
+                ...(implicitBooleanSource === undefined ? {} : { implicitBooleanSource }),
               },
               name.next,
               [...value.nodes, ...name.nodes],
@@ -86,9 +100,26 @@ export const resultColumn = (
         encode: (value) =>
           Effect.gen(function* () {
             const sql = yield* expression.encode(value.expression);
-            return value.alias === undefined
-              ? sql
-              : `${sql} ${yield* resultAlias.encode(value.alias)}`;
+            if (value.alias !== undefined) {
+              return `${sql} ${yield* resultAlias.encode(value.alias)}`;
+            }
+            const source = value.implicitBooleanSource;
+            if (source === undefined) {
+              return sql;
+            }
+            const parsed = yield* Effect.result(expression.decode({ offset: 0, source }));
+            if (
+              !isBooleanLiteral(value.expression) ||
+              Result.isFailure(parsed) ||
+              parsed.success.next.offset !== source.length ||
+              !isBooleanLiteral(parsed.success.value) ||
+              parsed.success.value.value !== value.expression.value
+            ) {
+              return yield* Effect.fail(
+                new EncodeError({ message: "Invalid boolean result spelling" }),
+              );
+            }
+            return source;
           }),
       }),
     ),

@@ -46,7 +46,7 @@ Unqualified column references now accept contextual keywords. Native SQLite test
 
 Function calls now accept bare contextual names. Native SQLite tests cover every dialect keyword in call position and verify that formatting `SELECT Replace('abc', 'b', 'x')` preserves its result label and value.
 
-Remaining expression compatibility includes implicit result labels for TRUE/FALSE when a source column with different casing shadows the literal.
+Unaliased TRUE/FALSE results now let SQLite choose the label. Native SQLite tests verify that formatting preserves the declared column name when it shadows the literal, the original expression spelling for unshadowed literals, and explicit aliases.
 
 ## VS Code support
 

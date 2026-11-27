@@ -158,6 +158,41 @@ test("unqualified contextual columns preserve SELECT clause boundaries and label
   assert.equal(db.prepare(Effect.runSync(sqlQuery.encode(decode(example)))).get()?.Abort, 7);
 });
 
+test("unaliased boolean results retain SQLite's labels for columns and literals", () => {
+  using db = new DatabaseSync(":memory:");
+  db.exec('CREATE TABLE flags("True", "False"); INSERT INTO flags VALUES (7, 8)');
+  const cases = [
+    { labels: ["True", "False"], source: "SELECT TRUE, FALSE FROM flags", values: [7, 8] },
+    { labels: ["True", "False"], source: "SELECT (TrUe), ((FaLsE)) FROM flags", values: [7, 8] },
+    {
+      labels: ["TrUe", "FaLsE"],
+      source: "SELECT TrUe, FaLsE FROM (SELECT 1 AS v)",
+      values: [1, 0],
+    },
+    { labels: ["(TrUe)", "((FaLsE))"], source: "SELECT (TrUe), ((FaLsE))", values: [1, 0] },
+    {
+      labels: ["yes", "no"],
+      source: "SELECT TRUE AS yes, FALSE AS no FROM flags",
+      values: [7, 8],
+    },
+  ];
+  for (const { labels, source, values } of cases) {
+    const parsed = decode(source);
+    const rendered = Effect.runSync(sqlQuery.encode(parsed));
+    const original = db.prepare(source);
+    const formatted = db.prepare(rendered);
+    assert.deepEqual(
+      original.columns().map(({ name }) => name),
+      labels,
+      source,
+    );
+    assert.deepEqual(Object.values(original.get()!), values, source);
+    assert.deepEqual(formatted.columns(), original.columns(), source);
+    assert.deepEqual(formatted.all(), original.all(), source);
+    assert.deepEqual(decode(rendered), parsed, source);
+  }
+});
+
 test("explicit result and source aliases match SQLite for every dialect keyword", () => {
   using db = new DatabaseSync(":memory:");
   for (const keyword of keywords) {
