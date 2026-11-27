@@ -18,15 +18,18 @@ import { punctuation } from "../../operators/punctuation.ts";
 import { skipSqliteTrivia } from "../../operators/trivia.ts";
 import type { Expression } from "../expression/types.ts";
 import { qualifierName } from "../identifier.ts";
-import type { KeywordLiteral } from "../keyword-literal.ts";
 import { resultAlias, resultAliasAfter } from "./alias.ts";
 import type { ResultColumn } from "./types.ts";
 
-const isBooleanLiteral = (
-  expression: Expression,
-): expression is KeywordLiteral & { readonly value: "TRUE" | "FALSE" } =>
-  expression._tag === "KeywordLiteral" &&
-  (expression.value === "TRUE" || expression.value === "FALSE");
+const keepsBooleanSource = (expression: Expression, schemaNames: boolean): boolean => {
+  let operand = expression;
+  while (schemaNames && operand._tag === "CollateExpression") {
+    operand = operand.operand;
+  }
+  return (
+    operand._tag === "KeywordLiteral" && (operand.value === "TRUE" || operand.value === "FALSE")
+  );
+};
 
 const trimLabelEnd = (source: string, end: number): number => {
   while (end > 0 && /[ \t\n\v\f\r]/.test(source[end - 1]!)) {
@@ -94,14 +97,15 @@ export const resultColumn = (
               // SQLite takes the span up to the next token and trims ASCII whitespace.
               const end = skipSqliteTrivia(cursor.source, value.next.offset);
               const source = cursor.source.slice(cursor.offset, trimLabelEnd(cursor.source, end));
-              // SQLite chooses the declared column name if the keyword resolves to a
-              // column. An open block comment reaches EOF, where this SELECT core
-              // cannot have a FROM clause and the keyword is necessarily a literal.
+              // SQLite chooses the name for a bare boolean or for a collated boolean in
+              // a derived table or schema definition. The name can depend on resolution
+              // and the original spelling. An open block comment reaches EOF, where
+              // this SELECT core cannot have a FROM clause and the keyword is a literal.
               if (
-                isBooleanLiteral(value.value) &&
+                keepsBooleanSource(value.value, schemaNames) &&
                 canFollowWithSql(source, value.next.offset - cursor.offset)
               ) {
-                if (source !== value.value.value) {
+                if (value.value._tag !== "KeywordLiteral" || source !== value.value.value) {
                   implicitBooleanSource = source;
                 }
               } else {
@@ -131,12 +135,11 @@ export const resultColumn = (
             }
             const parsed = yield* Effect.result(expression.decode({ offset: 0, source }));
             if (
-              !isBooleanLiteral(value.expression) ||
+              !keepsBooleanSource(value.expression, schemaNames) ||
               Result.isFailure(parsed) ||
-              !isBooleanLiteral(parsed.success.value) ||
-              parsed.success.value.value !== value.expression.value ||
               trimLabelEnd(source, source.length) !== source.length ||
-              !canFollowWithSql(source, parsed.success.next.offset)
+              !canFollowWithSql(source, parsed.success.next.offset) ||
+              (yield* expression.encode(parsed.success.value)) !== sql
             ) {
               return yield* Effect.fail(
                 new EncodeError({ message: "Invalid boolean result spelling" }),

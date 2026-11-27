@@ -193,6 +193,44 @@ test("unaliased boolean results retain SQLite's labels for columns and literals"
   }
 });
 
+test("collated boolean results retain SQLite's derived and top-level names", () => {
+  using db = new DatabaseSync(":memory:");
+  db.exec('CREATE TABLE flags("True", "False"); INSERT INTO flags VALUES (7, 8)');
+  const expressions = [
+    "TrUe cOlLaTe binary",
+    '((FaLsE) COLLATE "nocase" COLLATE binary) /* end */',
+  ];
+  for (const { from, values } of [
+    { from: " FROM flags", values: [7, 8] },
+    { from: " FROM (SELECT 1 AS v)", values: [1, 0] },
+  ]) {
+    const select = `SELECT ${expressions.join(", ")}${from}`;
+    for (const { labels, source } of [
+      { labels: ["column1", "column2"], source: `SELECT * FROM (${select})` },
+      { labels: ["column1", "column2"], source: `WITH q AS (${select}) SELECT * FROM q` },
+      { labels: expressions, source: select },
+      {
+        labels: ["yes", "no"],
+        source: `SELECT * FROM (SELECT ${expressions[0]} AS yes, ${expressions[1]} AS no${from})`,
+      },
+    ]) {
+      const parsed = decode(source);
+      const rendered = Effect.runSync(sqlQuery.encode(parsed));
+      const original = db.prepare(source);
+      const formatted = db.prepare(rendered);
+      assert.deepEqual(
+        original.columns().map(({ name }) => name),
+        labels,
+        source,
+      );
+      assert.deepEqual(Object.values(original.get()!), values, source);
+      assert.deepEqual(formatted.columns(), original.columns(), source);
+      assert.deepEqual(formatted.all(), original.all(), source);
+      assert.deepEqual(decode(rendered), parsed, source);
+    }
+  }
+});
+
 test("trailing comments preserve native computed result labels and values", () => {
   using db = new DatabaseSync(":memory:");
   db.exec('CREATE TABLE t(v, "True"); INSERT INTO t VALUES (7, 8)');

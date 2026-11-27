@@ -178,12 +178,13 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 
 1. Trigger snapshots and migration lowering now cover table and view owners, including partial logical plans.
 2. Extend contextual keyword and legacy quoting compatibility. The lexical and query checklists track individual syntax features.
-   - Match SQLite's derived-table naming for COLLATE around a contextual TRUE/FALSE expression.
+   - Preserve the expression-text labels SQLite uses for likelihood calls on direct columns in FROM subqueries, such as `SELECT * FROM (SELECT likely(v) FROM (SELECT 7 AS v))`.
 
 See the [workspace roadmap](../../ROADMAP.md) for the core and executor dependencies.
 
 ### Completed work
 
+- [x] Preserve SQLite's derived-table column names for unaliased TRUE/FALSE expressions under COLLATE, for shadowed columns and literals.
 - [x] Preserve trailing line and block comments in implicit computed result labels, including SQLite's trimming of whitespace after the final comment.
 - [x] Preserve implicit TRUE/FALSE result labels for shadowing source columns and unshadowed literals.
 - [x] Prevent rebuilds from mapping two independent values onto the same integer primary key.
@@ -252,7 +253,8 @@ Query parsing normalizes implicit computed result-column names into explicit
 aliases so formatting does not rename columns. Labels include trailing line
 and block comments up to the next SQL token, with trailing ASCII whitespace
 trimmed. Unaliased TRUE/FALSE results keep their expression spelling when
-SQLite needs to resolve the name. Derived-table contexts (FROM subqueries,
-CTEs and CREATE TABLE AS) retain
-SQLite's special column-name handling for COLLATE and likelihood wrappers around
-direct column references.
+SQLite needs to resolve the name. FROM subqueries, CTEs, CREATE VIEW and
+CREATE TABLE AS also leave collated TRUE/FALSE expressions unaliased and
+retain their original spelling so SQLite can derive their names. These
+contexts also leave COLLATE and likelihood wrappers around direct column
+references unaliased.
