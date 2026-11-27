@@ -7,7 +7,7 @@ import { keyword } from "../operators/keyword.ts";
 import { parenthesized } from "../operators/parenthesized.ts";
 import { punctuation } from "../operators/punctuation.ts";
 import { expression } from "./expression.ts";
-import { identifier } from "./identifier.ts";
+import { nameIdentifier } from "./identifier.ts";
 import { query } from "./query/query.ts";
 
 const list = <A>(codec: Codec<A>) => repeat(codec, { min: 1, separator: punctuation(",", ", ") });
@@ -19,8 +19,8 @@ const select = query(expression);
 const insert = struct(
   {
     conflict: onConflict,
-    table: prefixed(keyword("INTO"), identifier, " "),
-    columns: optional(parenthesized(list(identifier))),
+    table: prefixed(keyword("INTO"), nameIdentifier, " "),
+    columns: optional(parenthesized(list(nameIdentifier))),
     source: select,
   },
   " ",
@@ -28,17 +28,19 @@ const insert = struct(
 const update = struct(
   {
     conflict: onConflict,
-    table: identifier,
+    table: nameIdentifier,
     assignments: prefixed(
       keyword("SET"),
-      list(struct({ column: identifier, value: prefixed(punctuation("="), expression, " ") }, " ")),
+      list(
+        struct({ column: nameIdentifier, value: prefixed(punctuation("="), expression, " ") }, " "),
+      ),
       " ",
     ),
     where,
   },
   " ",
 );
-const remove = struct({ table: identifier, where }, " ");
+const remove = struct({ table: nameIdentifier, where }, " ");
 
 const action = <const Tag extends string, A>(tag: Tag, syntax: Codec<A>) =>
   transform(syntax, {

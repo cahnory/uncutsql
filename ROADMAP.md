@@ -60,6 +60,8 @@ Expressions, column constraints and table PRIMARY KEY and UNIQUE terms now accep
 
 Column names in table PRIMARY KEY and UNIQUE lists now accept contextual keywords and single-quoted names. Native SQLite tests compare every dialect keyword and verify that formatting preserves composite key column names, order and uniqueness enforcement, including a name with an embedded apostrophe.
 
+Trigger UPDATE OF columns, INSERT targets and column lists, UPDATE targets and SET columns, and DELETE targets now accept contextual keywords and single-quoted names. Native SQLite tests compare bare and single-quoted keyword forms and verify that formatted triggers preserve action effects and fire only when an UPDATE names a listed column.
+
 ## VS Code support
 
 The [VS Code extension](apps/vscode/README.md) reports parser errors, shows declarations and explicit columns in Outline, and resolves foreign key table and column definitions across the configured SQLite schema. The providers use an editor-independent language service.

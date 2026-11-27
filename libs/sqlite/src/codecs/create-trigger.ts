@@ -19,7 +19,7 @@ import { terminator } from "../operators/terminator.ts";
 import { trivia } from "../operators/trivia.ts";
 import { createRelationHeader } from "./create-table-header.ts";
 import { expression } from "./expression.ts";
-import { identifier } from "./identifier.ts";
+import { nameIdentifier } from "./identifier.ts";
 import { tableReference } from "./table-reference.ts";
 import { triggerAction } from "./trigger-action.ts";
 
@@ -37,7 +37,7 @@ const event = taggedUnion({
       optional(
         prefixed(
           keyword("OF"),
-          repeat(identifier, { min: 1, separator: punctuation(",", ", ") }),
+          repeat(nameIdentifier, { min: 1, separator: punctuation(",", ", ") }),
           " ",
         ),
       ),

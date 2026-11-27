@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 
 import type { SourceNode } from "@uncutsql/codec";
 import { diffDatabases, planDatabaseMigration } from "@uncutsql/core";
 
 import { encodeMigration, lowerMigration } from "../src/index.ts";
 import { createTrigger, fromDatabaseSchema, schema, toDatabaseSchema } from "../src/index.ts";
+import { keywords } from "../src/lexer/keywords.ts";
 
 test("multi-action triggers round trip and execute in source order", () => {
   const source = `CREATE TRIGGER audit AFTER UPDATE OF n ON items FOR EACH ROW WHEN NEW.n > OLD.n BEGIN
@@ -39,6 +40,72 @@ test("multi-action triggers round trip and execute in source order", () => {
     }
   }
 });
+
+test("trigger event and action names agree with SQLite and retain their effects", () => {
+  const names = [...keywords].map((word) => word[0] + word.slice(1).toLowerCase());
+  for (const name of [...names, "owner's name"]) {
+    using db = new DatabaseSync(":memory:");
+    db.exec(`
+      CREATE TABLE items ("${name}", also_watched, untouched);
+      INSERT INTO items VALUES (0, 0, 0);
+      CREATE TABLE "${name}" ("${name}", stage);
+    `);
+    const quoted = `'${name.replaceAll("'", "''")}'`;
+    const quotedNames = {
+      deleteTarget: quoted,
+      eventColumn: quoted,
+      insertColumn: quoted,
+      insertTarget: quoted,
+      setColumn: quoted,
+      updateTarget: quoted,
+    };
+
+    const effects = (sql: string) => {
+      db.exec("SAVEPOINT trigger_effects");
+      try {
+        db.exec(sql);
+        const rows = db.prepare(`SELECT "${name}", stage FROM "${name}" ORDER BY stage`);
+        db.exec("UPDATE items SET untouched = 1");
+        const afterUnlistedUpdate = rows.all().map((row) => [row[name], row.stage]);
+        db.exec(`UPDATE items SET "${name}" = 1`);
+        const afterListedUpdate = rows.all().map((row) => [row[name], row.stage]);
+        return [afterUnlistedUpdate, afterListedUpdate];
+      } finally {
+        db.exec("ROLLBACK TO trigger_effects; RELEASE trigger_effects");
+      }
+    };
+
+    const check = (names: typeof quotedNames) => {
+      const source = `CREATE TRIGGER audit AFTER UPDATE OF also_watched, ${names.eventColumn} ON items BEGIN
+        INSERT INTO ${names.insertTarget} (${names.insertColumn}, stage) VALUES (2, 1), (3, 2);
+        UPDATE ${names.updateTarget} SET ${names.setColumn} = 7 WHERE stage = 1;
+        DELETE FROM ${names.deleteTarget} WHERE stage = 2;
+      END;`;
+      const parsed = Effect.runSync(Effect.result(createTrigger.decode(source)));
+      try {
+        db.prepare(source);
+      } catch {
+        assert.ok(Result.isFailure(parsed), source);
+        return false;
+      }
+      assert.ok(Result.isSuccess(parsed), source);
+      const formatted = Effect.runSync(createTrigger.encode(parsed.success));
+      assert.deepEqual(Effect.runSync(schema.decode(formatted)), [parsed.success], source);
+      const originalEffects = effects(source);
+      assert.deepEqual(originalEffects, [[], [[7, 1]]], source);
+      assert.deepEqual(effects(formatted), originalEffects, source);
+      return true;
+    };
+
+    assert.ok(check(quotedNames), quoted);
+    if (name !== "owner's name") {
+      for (const position of Object.keys(quotedNames)) {
+        check({ ...quotedNames, [position]: name });
+      }
+    }
+  }
+});
+
 test("trigger and target identifiers have exact source ranges in a schema document", () => {
   const sql =
     'CREATE TEMP TRIGGER IF NOT EXISTS temp."tr one" INSTEAD OF DELETE ON main.[my view] BEGIN SELECT 1; END; CREATE TABLE t(n)';

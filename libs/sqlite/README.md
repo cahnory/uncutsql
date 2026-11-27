@@ -122,6 +122,7 @@ context restrictions, including prohibiting subqueries.
       Parsing/formatting supports these statements; declarative schema comparison rejects them
       because deriving columns and populating data requires query evaluation.
 - [x] CREATE TRIGGER with optional timing, UPDATE OF columns, FOR EACH ROW and WHEN. Use `createTrigger` for one declaration or `schema` for a file. Bodies support queries, INSERT from VALUES or a query, UPDATE assignments and DELETE with an optional WHERE. UPSERT and UPDATE FROM are outside the current body grammar.
+- [x] Contextual and single-quoted names for trigger UPDATE OF columns, INSERT targets and column lists, UPDATE targets and SET columns, and DELETE targets.
 - [x] CREATE VIEW, including TEMP, IF NOT EXISTS, schema qualification, optional column names and AS queries. Use `createView` for one declaration.
 - [ ] CREATE VIRTUAL TABLE and module-specific arguments.
 - [ ] Remaining SQLite grammar edge cases beyond this explicit subset; this is
@@ -186,6 +187,7 @@ See the [workspace roadmap](../../ROADMAP.md) for the core and executor dependen
 
 ### Completed work
 
+- [x] Match SQLite's name syntax in trigger events and actions. Native tests verify that formatting preserves action effects and that UPDATE OF limits firing to updates of listed columns.
 - [x] Accept SQLite's contextual and single-quoted column names in table PRIMARY KEY and UNIQUE lists. Native SQLite tests verify the column names, order and uniqueness enforcement after formatting.
 - [x] Match SQLite's collation-name syntax in expressions, column constraints and table key terms. Bare join modifiers and INDEXED require quotes after COLLATE.
 - [x] Preserve SQLite's expression-text labels for unaliased likelihood calls in CTEs without declared column lists.
