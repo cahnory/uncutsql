@@ -384,11 +384,14 @@ test("init lists available configs and displays all six steps for the selected f
     const result = f.run(["init"], "2\nreports/history\ny\n");
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stderr, /1\) uncutsql.config.mjs\n  2\) reporting.json/);
-    assert.deepEqual(
-      [...result.stderr.matchAll(/(\d+)\/6  ([^\n]+)/g)].map((match) => match[2]),
-      ["Config file", "Dialect", "Driver", "Schema", "Migrations", "Confirm setup"],
-    );
-    assert.match(result.stderr, /Dialect\nUsing .+already set in config/);
+    const steps = [...result.stderr.matchAll(/\d+\/6 [^\n]+/g)].map(([line]) => line);
+    assert.equal(steps.length, 6);
+    assert.equal(steps[0], "1/6 Choose a config file");
+    assert.equal(steps[1], "2/6 Use dialect ./dialect.mjs (already set in config)");
+    assert.equal(steps[2], "3/6 Use driver ./bad.mjs (already set in config)");
+    assert.match(steps[3]!, /^4\/6 Use schema .*report\.sql \(already set in config\)$/);
+    assert.match(steps[4]!, /^5\/6 Migrations directory \[migrations\]:/);
+    assert.match(steps[5]!, /^6\/6 Initialize project\?/);
     assert.equal(
       JSON.parse(readFileSync(join(f.cwd, "reporting.json"), "utf8")).migrations,
       "reports/history",

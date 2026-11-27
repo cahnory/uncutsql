@@ -11,6 +11,8 @@ import { promptIO, withConversation } from "./conversation.ts";
 export const initProject = (options: Parameters<typeof resolveConfig>[0], cwd: string) =>
   withConversation("Initialization cancelled.", (ui) =>
     Effect.gen(function* () {
+      let step = 0;
+      const numbered = (message: string) => `${++step}/6 ${message}`;
       const ask = async (label: string, fallback = "") => {
         if (ui.line) {
           return (
@@ -29,9 +31,9 @@ export const initProject = (options: Parameters<typeof resolveConfig>[0], cwd: s
         return answer.trim() || fallback;
       };
       const choose = async (label: string, values: string[], isConfig = false) => {
-        const question = isConfig
-          ? "Choose a config file"
-          : `Choose a ${label.toLowerCase()} module`;
+        const question = numbered(
+          isConfig ? "Choose a config file" : `Choose a ${label.toLowerCase()} module`,
+        );
         if (!ui.line) {
           const custom = { kind: "custom" } as const;
           const later = { kind: "later" } as const;
@@ -73,27 +75,25 @@ export const initProject = (options: Parameters<typeof resolveConfig>[0], cwd: s
           ui.output.write("Enter a listed number or a custom value.\n");
         }
       };
-      let step = 0;
-      const showStep = (label: string) => ui.output.write(`\n${++step}/6  ${label}\n`);
       const preset = (key: keyof typeof options, value?: string) => {
         if (value !== undefined) {
           const from = options[key] === undefined ? "config" : `--${key}`;
+          const message = numbered(`Use ${key} ${value} (already set in ${from})`);
           if (ui.line) {
-            ui.output.write(`Using ${value} (already set in ${from})\n`);
+            ui.output.write(message + "\n");
           } else {
-            log.step(`${value}\nAlready set in ${from}`, { output: ui.output });
+            log.step(message, { output: ui.output });
           }
         }
         return value;
       };
-      showStep("Config file");
       const filename =
         preset("config", options.config) ??
         (yield* promptIO(async () => {
           const configs = await discoverInitConfigs(cwd);
           return configs.length
             ? choose("Config", configs, true)
-            : ask("Config filename", "uncutsql.config.json");
+            : ask(numbered("Config filename"), "uncutsql.config.json");
         }));
       const selected = yield* resolveConfig({ ...options, config: filename }, cwd, true);
       const configPath = selected.source?.path ?? resolve(cwd, filename || "uncutsql.config.json");
@@ -113,7 +113,6 @@ export const initProject = (options: Parameters<typeof resolveConfig>[0], cwd: s
           schema: string;
         }>({
           dialect: async () => {
-            showStep("Dialect");
             return (
               preset("dialect", selected.dialect?.specifier) ??
               choose(
@@ -123,7 +122,6 @@ export const initProject = (options: Parameters<typeof resolveConfig>[0], cwd: s
             );
           },
           driver: async ({ results }) => {
-            showStep("Driver");
             return (
               preset("driver", selected.driver?.specifier) ??
               choose(
@@ -135,24 +133,22 @@ export const initProject = (options: Parameters<typeof resolveConfig>[0], cwd: s
             );
           },
           schema: async () => {
-            showStep("Schema");
             return (
               preset("schema", selected.schema) ??
-              ask("Schema file or directory", "schema.uncut.sql")
+              ask(numbered("Schema file or directory"), "schema.uncut.sql")
             );
           },
 
           // Clack asks in insertion order. Keep migrations after the schema.
           migrations: async () => {
-            showStep("Migrations");
             return (
-              preset("migrations", selected.migrations) ?? ask("Migrations directory", "migrations")
+              preset("migrations", selected.migrations) ??
+              ask(numbered("Migrations directory"), "migrations")
             );
           },
         }),
       );
       const plan = yield* promptIO(() => planSetup(selected, options, cwd, configPath, answers));
-      showStep("Confirm setup");
       const preview = [
         `${plan.source ? (plan.updated === undefined ? "Reuse" : "Update") : "Create"} ${plan.configPath}`,
         `${plan.starter ? "Create empty schema" : "Use existing schema"}: ${plan.starter ?? plan.schemaPath}`,
@@ -163,7 +159,7 @@ export const initProject = (options: Parameters<typeof resolveConfig>[0], cwd: s
       } else {
         note(preview, "Setup preview", { output: ui.output });
       }
-      if (!(yield* promptIO(() => ui.confirm("Initialize project?", false)))) {
+      if (!(yield* promptIO(() => ui.confirm(numbered("Initialize project?"), false)))) {
         return "Initialization cancelled.\n";
       }
       yield* promptIO(() => writeSetup(plan));

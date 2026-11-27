@@ -1,7 +1,7 @@
 import { createInterface } from "node:readline";
 
-import { confirm, isCancel } from "@clack/prompts";
-import { Effect } from "effect";
+import { confirm, intro, isCancel, outro } from "@clack/prompts";
+import { Console, Effect } from "effect";
 
 import { interactiveTerminal } from "../terminal.ts";
 
@@ -59,3 +59,13 @@ export const withConversation = <A, E, R>(
     use,
     (conversation) => Effect.sync(conversation.close),
   );
+
+export const reportCommand = <E, R>(title: string | undefined, run: Effect.Effect<string, E, R>) =>
+  Effect.gen(function* () {
+    if (!title || !interactiveTerminal() || !process.stdout.isTTY) {
+      return yield* Console.log((yield* run).trimEnd());
+    }
+    intro(title, { output: process.stderr });
+    const message = yield* run;
+    outro(message.trimEnd(), { output: process.stderr });
+  });

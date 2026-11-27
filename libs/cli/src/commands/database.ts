@@ -8,6 +8,7 @@ import { writeExtractedSchema } from "../extract.ts";
 import { baselineFilename, migrationFilename } from "../lock.ts";
 import { loadDriver } from "../plugins.ts";
 import { confirmCompaction } from "../prompts/compact.ts";
+import { reportCommand } from "../prompts/conversation.ts";
 import { InputError } from "../schema-input.ts";
 import { outputDirectory, root } from "./shared.ts";
 
@@ -102,14 +103,18 @@ export const compact = Command.make(
   ({ migrationNumber, outputDirectory, yes }) =>
     Effect.gen(function* () {
       const { directory, driver } = yield* migrationContext(outputDirectory);
-      const done = yield* compactGenerated(
-        driver,
-        directory,
-        migrationNumber,
-        yes ? () => Effect.succeed(true) : confirmCompaction,
-      );
-      yield* Console.log(
-        done ? `Compacted migrations 1 through ${migrationNumber}.` : "Compaction cancelled.",
+      yield* reportCommand(
+        yes ? undefined : "Compact migrations",
+        Effect.map(
+          compactGenerated(
+            driver,
+            directory,
+            migrationNumber,
+            yes ? () => Effect.succeed(true) : confirmCompaction,
+          ),
+          (done) =>
+            done ? `Compacted migrations 1 through ${migrationNumber}.` : "Compaction cancelled.",
+        ),
       );
     }),
 ).pipe(

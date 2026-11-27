@@ -5,6 +5,7 @@ import { resolveConfig, UsageError } from "../config.ts";
 import { readDecisions, writeDecisions } from "../decision-file.ts";
 import { generateMigration, prepareGeneratedDecisions } from "../generate.ts";
 import { loadDialect } from "../plugins.ts";
+import { reportCommand } from "../prompts/conversation.ts";
 import { promptDecisions } from "../prompts/generate.ts";
 import { readSchemaWith } from "../schema-input.ts";
 import { style } from "../terminal.ts";
@@ -72,18 +73,21 @@ export const generate = Command.make("generate", inputs, (input) =>
       const message = yield* writeDecisions(fresh, review.path, review.flag);
       return yield* Console.log(message.trimEnd());
     }
-    const reviewed =
-      review.mode === "interactive"
-        ? yield* promptDecisions(
-            yield* prepareGeneratedDecisions(dialect, ast, directory),
-            dialect.supportsDropGuards === true,
-          )
-        : yield* readDecisions(review);
-    const result = yield* generateMigration(dialect, ast, directory, reviewed);
-    yield* Console.log(
-      result.migrationPath
-        ? `${style("green", "Generated", process.stdout)} ${result.migrationPath}\n${style("cyan", "Updated", process.stdout)} ${result.lockPath}`
-        : "No schema changes.",
+    yield* reportCommand(
+      review.mode === "interactive" ? "Generate migration" : undefined,
+      Effect.gen(function* () {
+        const reviewed =
+          review.mode === "interactive"
+            ? yield* promptDecisions(
+                yield* prepareGeneratedDecisions(dialect, ast, directory),
+                dialect.supportsDropGuards === true,
+              )
+            : yield* readDecisions(review);
+        const result = yield* generateMigration(dialect, ast, directory, reviewed);
+        return result.migrationPath
+          ? `${style("green", "Generated", process.stdout)} ${result.migrationPath}\n${style("cyan", "Updated", process.stdout)} ${result.lockPath}`
+          : "No schema changes.";
+      }),
     );
   }),
 ).pipe(
