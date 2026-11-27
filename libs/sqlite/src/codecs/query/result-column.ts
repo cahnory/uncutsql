@@ -15,6 +15,7 @@ import type { Codec } from "@uncutsql/codec";
 
 import { lexeme } from "../../operators/lexeme.ts";
 import { punctuation } from "../../operators/punctuation.ts";
+import { skipSqliteTrivia } from "../../operators/trivia.ts";
 import type { Expression } from "../expression/types.ts";
 import { qualifierName } from "../identifier.ts";
 import type { KeywordLiteral } from "../keyword-literal.ts";
@@ -26,6 +27,18 @@ const isBooleanLiteral = (
 ): expression is KeywordLiteral & { readonly value: "TRUE" | "FALSE" } =>
   expression._tag === "KeywordLiteral" &&
   (expression.value === "TRUE" || expression.value === "FALSE");
+
+const trimLabelEnd = (source: string, end: number): number => {
+  while (end > 0 && /[ \t\n\v\f\r]/.test(source[end - 1]!)) {
+    end--;
+  }
+  return end;
+};
+
+// A line comment ends at the added newline. An open block comment consumes
+// the semicolon too, so that spelling cannot be followed by more SQL.
+const canFollowWithSql = (source: string, offset: number): boolean =>
+  skipSqliteTrivia(`${source}\n;`, offset) === source.length + 1;
 
 // SQLite's derived-table column naming ignores COLLATE and likelihood wrappers
 // around a direct column. Top-level result labels instead use their source text.
@@ -72,20 +85,29 @@ export const resultColumn = (
           Effect.gen(function* () {
             const value = yield* expression.decode(cursor);
             const name = yield* optional(resultAliasAfter(value)).decode(value.next);
-            const source = cursor.source.slice(cursor.offset, value.next.offset);
-            // SQLite chooses the declared column name if the keyword resolves to a
-            // column, and uses the expression spelling if it remains a literal.
-            const implicitBoolean = name.value === undefined && isBooleanLiteral(value.value);
-            const implicitBooleanSource =
-              implicitBoolean && source !== value.value.value ? source : undefined;
-            const resultName =
-              name.value ??
-              (implicitBoolean ||
-              (schemaNames
-                ? derivesColumnName(value.value)
-                : value.value._tag === "ColumnReference")
-                ? undefined
-                : source);
+            const usesColumnName = schemaNames
+              ? derivesColumnName(value.value)
+              : value.value._tag === "ColumnReference";
+            let resultName = name.value;
+            let implicitBooleanSource: string | undefined;
+            if (resultName === undefined && !usesColumnName) {
+              // SQLite takes the span up to the next token and trims ASCII whitespace.
+              const end = skipSqliteTrivia(cursor.source, value.next.offset);
+              const source = cursor.source.slice(cursor.offset, trimLabelEnd(cursor.source, end));
+              // SQLite chooses the declared column name if the keyword resolves to a
+              // column. An open block comment reaches EOF, where this SELECT core
+              // cannot have a FROM clause and the keyword is necessarily a literal.
+              if (
+                isBooleanLiteral(value.value) &&
+                canFollowWithSql(source, value.next.offset - cursor.offset)
+              ) {
+                if (source !== value.value.value) {
+                  implicitBooleanSource = source;
+                }
+              } else {
+                resultName = source;
+              }
+            }
             return read(
               {
                 _tag: "ExpressionColumn",
@@ -111,15 +133,19 @@ export const resultColumn = (
             if (
               !isBooleanLiteral(value.expression) ||
               Result.isFailure(parsed) ||
-              parsed.success.next.offset !== source.length ||
               !isBooleanLiteral(parsed.success.value) ||
-              parsed.success.value.value !== value.expression.value
+              parsed.success.value.value !== value.expression.value ||
+              trimLabelEnd(source, source.length) !== source.length ||
+              !canFollowWithSql(source, parsed.success.next.offset)
             ) {
               return yield* Effect.fail(
                 new EncodeError({ message: "Invalid boolean result spelling" }),
               );
             }
-            return source;
+            // Keep a following comma, clause or semicolon outside a line comment.
+            return skipSqliteTrivia(`${source};`, parsed.success.next.offset) === source.length
+              ? source
+              : `${source}\n`;
           }),
       }),
     ),

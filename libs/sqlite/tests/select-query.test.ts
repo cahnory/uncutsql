@@ -193,6 +193,91 @@ test("unaliased boolean results retain SQLite's labels for columns and literals"
   }
 });
 
+test("trailing comments preserve native computed result labels and values", () => {
+  using db = new DatabaseSync(":memory:");
+  db.exec('CREATE TABLE t(v, "True"); INSERT INTO t VALUES (7, 8)');
+  const cases = [
+    {
+      labels: ['1+2 /* "block" */', "4+5 -- line"],
+      source: 'SELECT 1+2 /* "block" */ \t, 4+5 -- line \t\r\n  ;',
+      values: [3, 9],
+    },
+    {
+      labels: ["v+2 /* first */ -- second \r\n /* last */"],
+      source: "SELECT v+2 /* first */ -- second \r\n /* last */  FROM t",
+      values: [9],
+    },
+    {
+      labels: ["1+2 -- EOF\u00a0"],
+      source: "SELECT 1+2 -- EOF\u00a0  ",
+      values: [3],
+    },
+    {
+      labels: ["1+2 /* open"],
+      source: "SELECT 1+2 /* open  ",
+      values: [3],
+    },
+    {
+      labels: ["1+2 -- derived"],
+      source: "SELECT * FROM (SELECT 1+2 -- derived\n )",
+      values: [3],
+    },
+    {
+      labels: ["v", "named", "implicit", "1+2", "flag"],
+      source:
+        "SELECT /* leading */ v /* direct */, v+2 /* explicit */ AS named /* after alias */, " +
+        "v+3 -- implicit\n implicit, 1+2 \t, True /* boolean */ AS flag FROM t; /* after ; */",
+      values: [7, 9, 10, 3, 8],
+    },
+    {
+      labels: ["v COLLATE binary /* top-level */"],
+      source: "SELECT v COLLATE binary /* top-level */ FROM t",
+      values: [7],
+    },
+    {
+      labels: ["v"],
+      source: "SELECT * FROM (SELECT v COLLATE binary /* derived direct */ FROM t)",
+      values: [7],
+    },
+    {
+      labels: ["(TrUe) -- literal", "FaLsE /* literal */"],
+      source: "SELECT (TrUe) -- literal\n , FaLsE /* literal */",
+      values: [1, 0],
+    },
+    {
+      labels: ["TrUe /* open"],
+      source: "SELECT TrUe /* open  ",
+      values: [1],
+    },
+    {
+      labels: ["FaLsE -- EOF"],
+      source: "SELECT FaLsE -- EOF",
+      values: [0],
+    },
+    {
+      labels: ["True", "FaLsE /* literal */"],
+      source: "SELECT TrUe -- shadowed\n , FaLsE /* literal */ FROM t",
+      values: [8, 0],
+    },
+  ];
+  for (const { labels, source, values } of cases) {
+    const original = db.prepare(source);
+    assert.deepEqual(
+      original.columns().map(({ name }) => name),
+      labels,
+      source,
+    );
+    assert.deepEqual(Object.values(original.get()!), values, source);
+
+    const parsed = decode(source);
+    const rendered = Effect.runSync(sqlQuery.encode(parsed));
+    const formatted = db.prepare(rendered);
+    assert.deepEqual(formatted.columns(), original.columns(), source);
+    assert.deepEqual(formatted.all(), original.all(), source);
+    assert.deepEqual(decode(rendered), parsed, source);
+  }
+});
+
 test("explicit result and source aliases match SQLite for every dialect keyword", () => {
   using db = new DatabaseSync(":memory:");
   for (const keyword of keywords) {

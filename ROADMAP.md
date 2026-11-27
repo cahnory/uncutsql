@@ -48,6 +48,8 @@ Function calls now accept bare contextual names. Native SQLite tests cover every
 
 Unaliased TRUE/FALSE results now let SQLite choose the label. Native SQLite tests verify that formatting preserves the declared column name when it shadows the literal, the original expression spelling for unshadowed literals, and explicit aliases.
 
+Formatting now preserves trailing line and block comments in implicit computed result labels. Native SQLite tests compare labels and values before and after formatting, including comments excluded from labels and comments beside explicit aliases.
+
 ## VS Code support
 
 The [VS Code extension](apps/vscode/README.md) reports parser errors, shows declarations and explicit columns in Outline, and resolves foreign key table and column definitions across the configured SQLite schema. The providers use an editor-independent language service.
