@@ -42,7 +42,9 @@ Qualified stars now accept contextual and single-quoted table names. Native SQLi
 
 Qualified column references now use the same leading-name rules as qualified stars. Names following a dot accept all contextual name keywords, including CAST, RAISE and the current date/time keywords. Native SQLite tests cover bare and single-quoted keywords in two- and three-part references and compare result labels and values after formatting. Standalone strings and contextual literals retain their existing behavior.
 
-Next, cover unqualified contextual column names in `libs/sqlite/src/codecs/expression/column-reference.ts`. Native SQLite returns 7 for `SELECT Abort FROM (SELECT 7 AS Abort)`, which the codec rejects. Compare each bare dialect keyword against SQLite in expression position. Preserve literal handling for TRUE, FALSE and the current date/time keywords, and check for ambiguity at SELECT clause boundaries.
+Unqualified column references now accept contextual keywords. Native SQLite tests compare every bare dialect keyword in expression position, including `SELECT Abort FROM (SELECT 7 AS Abort)`. They verify formatting at SELECT clause boundaries, result labels and values, and literal handling for TRUE, FALSE and the current date/time keywords. Bare `CURRENT` and `UNBOUNDED` still start special bounds in window frames.
+
+Remaining expression compatibility includes bare contextual function names such as `Replace(...)` and implicit result labels for TRUE/FALSE when a source column with different casing shadows the literal.
 
 ## VS Code support
 

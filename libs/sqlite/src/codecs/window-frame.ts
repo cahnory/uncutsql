@@ -1,11 +1,32 @@
-import { optional, prefixed, struct, taggedUnion, transform } from "@uncutsql/codec";
+import { Effect } from "effect";
+
+import {
+  make,
+  optional,
+  parseError,
+  prefixed,
+  struct,
+  taggedUnion,
+  transform,
+} from "@uncutsql/codec";
 import type { Codec } from "@uncutsql/codec";
 
 import { keywordChoice } from "../operators/keyword-choice.ts";
 import { keyword } from "../operators/keyword.ts";
 import type { Expression, FrameBoundary, WindowFrame } from "./expression/types.ts";
 
+const specialBoundaryPrefix = optional(keywordChoice(["UNBOUNDED", "CURRENT"]));
+
 export const windowFrame = (expression: Codec<Expression>): Codec<WindowFrame> => {
+  const offsetExpression = make<Expression>({
+    decode: (cursor) =>
+      Effect.flatMap(specialBoundaryPrefix.decode(cursor), (prefix) =>
+        prefix.value === undefined
+          ? expression.decode(cursor)
+          : Effect.fail(parseError(cursor, "frame offset expression")),
+      ),
+    encode: expression.encode,
+  });
   const boundary = (start: boolean): Codec<FrameBoundary> =>
     taggedUnion({
       SpecialBoundary: transform(
@@ -18,7 +39,10 @@ export const windowFrame = (expression: Codec<Expression>): Codec<WindowFrame> =
         },
       ),
       OffsetBoundary: transform(
-        struct({ value: expression, direction: keywordChoice(["PRECEDING", "FOLLOWING"]) }, " "),
+        struct(
+          { value: offsetExpression, direction: keywordChoice(["PRECEDING", "FOLLOWING"]) },
+          " ",
+        ),
         {
           decode: (value) => ({ _tag: "OffsetBoundary" as const, ...value }),
           encode: (value) => value,

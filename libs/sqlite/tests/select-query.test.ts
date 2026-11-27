@@ -101,6 +101,63 @@ test("qualified column names match SQLite at each position", () => {
   }
 });
 
+test("unqualified keyword expressions match SQLite for every dialect keyword", () => {
+  using db = new DatabaseSync(":memory:");
+  for (const keyword of keywords) {
+    const name = keyword[0] + keyword.slice(1).toLowerCase();
+    const source = `SELECT ${name} FROM (SELECT 7 AS "${keyword}")`;
+    const parsed = Effect.runSync(Effect.result(sqlQuery.decode(source)));
+    let native;
+    try {
+      native = db.prepare(source);
+    } catch {
+      assert.ok(Result.isFailure(parsed), source);
+      continue;
+    }
+    assert.ok(Result.isSuccess(parsed), source);
+    const rendered = Effect.runSync(sqlQuery.encode(parsed.success));
+    assert.deepEqual(decode(rendered), parsed.success, source);
+    assert.deepEqual(
+      db
+        .prepare(rendered)
+        .columns()
+        .map(({ name }) => name),
+      native.columns().map(({ name }) => name),
+      source,
+    );
+    // Evaluate both forms in one SQLite statement so date/time literals share a clock.
+    const row = db
+      .prepare(`SELECT (${source}) AS original, (${rendered.slice(0, -1)}) AS formatted`)
+      .get()!;
+    assert.equal(row.formatted, row.original, source);
+    if (keyword.startsWith("CURRENT_")) {
+      assert.equal(typeof row.original, "string", source);
+    } else {
+      assert.equal(row.original, keyword === "NULL" ? null : 7, source);
+    }
+  }
+});
+
+test("unqualified contextual columns preserve SELECT clause boundaries and labels", () => {
+  using db = new DatabaseSync(":memory:");
+  db.exec('CREATE TABLE flags("TRUE", "FALSE"); INSERT INTO flags VALUES (7, 8)');
+  const example = "SELECT Abort FROM (SELECT 7 AS Abort)";
+  for (const source of [
+    example,
+    "SELECT Abort Offset, Sum(Abort) OVER Window AS Total FROM (SELECT 7 AS Abort) WHERE Abort > 0 GROUP BY Abort HAVING Abort > 1 WINDOW Window AS () ORDER BY Offset DESC LIMIT 1 OFFSET 0",
+    "SELECT Like LIKE 'a%' AS Matches, Indexed, Filter, Over, Window FROM (SELECT 'abc' AS Like, 2 AS Indexed, 3 AS Filter, 4 AS Over, 5 AS Window)",
+    "SELECT (SELECT Window) FROM (SELECT 7 AS Window)",
+    "SELECT TrUe, FaLsE",
+    'SELECT TRUE, FALSE, "TRUE" AS true_column, "FALSE" AS false_column FROM flags',
+  ]) {
+    const parsed = decode(source);
+    const rendered = Effect.runSync(sqlQuery.encode(parsed));
+    assert.deepEqual(decode(rendered), parsed, source);
+    assert.deepEqual(db.prepare(rendered).all(), db.prepare(source).all(), source);
+  }
+  assert.equal(db.prepare(Effect.runSync(sqlQuery.encode(decode(example)))).get()?.Abort, 7);
+});
+
 test("explicit result and source aliases match SQLite for every dialect keyword", () => {
   using db = new DatabaseSync(":memory:");
   for (const keyword of keywords) {
@@ -202,6 +259,9 @@ test("SELECT rejects incomplete clauses ", () => {
     "SELECT 1 GROUP BY",
     "SELECT 1 ORDER BY",
     "SELECT 1 WINDOW w AS",
+    "SELECT Abort FROM",
+    "SELECT Abort FROM (SELECT 7 AS Abort) ORDER BY",
+    "SELECT Abort FROM (SELECT 7 AS Abort) LIMIT 1 OFFSET",
   ]) {
     assert.ok(Result.isFailure(Effect.runSync(Effect.result(sqlQuery.decode(source)))), source);
   }

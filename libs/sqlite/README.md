@@ -49,6 +49,7 @@ SQLite conformance.** Update this checklist when adding a grammar feature.
 - [x] Contextual schema and relation names in table declarations and query sources, including joins.
 - [x] Contextual table and view column names, foreign key columns and target tables, and CREATE INDEX target tables.
 - [x] Contextual and single-quoted names for column and table constraints. Consecutive labels use the last name, and formatting preserves the effective names of adjacent constraints, including across the final column and first table constraint.
+- [x] Unqualified contextual column references, checked against native SQLite for every bare dialect keyword. TRUE/FALSE and the current date/time keywords retain their literal parsing.
 - [ ] General contextual keyword fallbacks and SQLite's legacy quote reinterpretation.
       TRUE/FALSE retain their contextual expression semantics.
 
@@ -177,6 +178,8 @@ Coverage is evidence for the implemented subset, not an exhaustive conformance s
 
 1. Trigger snapshots and migration lowering now cover table and view owners, including partial logical plans.
 2. Extend contextual keyword and legacy quoting compatibility. The lexical and query checklists track individual syntax features.
+   - Accept bare contextual function names such as `Replace(...)`.
+   - Preserve implicit TRUE/FALSE result labels when SQLite resolves the token to a source column with different casing.
 
 See the [workspace roadmap](../../ROADMAP.md) for the core and executor dependencies.
 

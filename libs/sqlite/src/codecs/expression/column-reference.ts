@@ -3,8 +3,6 @@ import { Effect } from "effect";
 import { EncodeError, located, make, optional, parseError, prefixed, read } from "@uncutsql/codec";
 import type { Codec } from "@uncutsql/codec";
 
-import { uppercaseAscii } from "../../lexer/characters.ts";
-import { keywords } from "../../lexer/keywords.ts";
 import { lexeme } from "../../operators/lexeme.ts";
 import { punctuation } from "../../operators/punctuation.ts";
 import { identifier, nameIdentifier, qualifierName } from "../identifier.ts";
@@ -25,13 +23,10 @@ export const columnReference: Codec<ColumnReference> = lexeme(
           const first = yield* qualifierName.decode(cursor);
           const second = yield* nextPart.decode(first.next);
           if (second.value === undefined) {
-            // The broader qualifier grammar only applies before a dot.
+            // Single-quoted tokens and bare TRUE/FALSE are expressions on their own.
+            // qualifierName already excludes the current date/time literals.
             const token = cursor.source.slice(cursor.offset, first.next.offset);
-            if (
-              token.startsWith("'") ||
-              keywords.has(uppercaseAscii(token)) ||
-              /^(?:TRUE|FALSE)$/i.test(token)
-            ) {
+            if (token.startsWith("'") || /^(?:TRUE|FALSE)$/i.test(token)) {
               return yield* Effect.fail(parseError(cursor, "quoted or qualified column reference"));
             }
             return read({ _tag: "ColumnReference", parts: [first.value] }, first.next, first.nodes);

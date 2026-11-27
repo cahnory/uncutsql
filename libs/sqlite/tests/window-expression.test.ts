@@ -69,6 +69,26 @@ test("malformed windows and impossible boundary directions fail", () => {
   assert.ok(Result.isFailure(Effect.runSync(Effect.result(sqlExpression.encode(value)))));
 });
 
+test("bare CURRENT and UNBOUNDED start special window frame bounds", () => {
+  using db = new DatabaseSync(":memory:");
+  for (const source of [
+    "sum(1) OVER (ROWS CURRENT PRECEDING)",
+    "sum(1) OVER (ROWS UNBOUNDED + 1 PRECEDING)",
+    "sum(1) OVER (ROWS UNBOUNDED /* direction */ FOLLOWING)",
+    "sum(1) OVER (ROWS BETWEEN CURRENT ROW AND UNBOUNDED PRECEDING)",
+  ]) {
+    assert.throws(() => db.prepare(`SELECT ${source}`), /syntax error/, source);
+    assert.ok(
+      Result.isFailure(Effect.runSync(Effect.result(sqlExpression.decode(source)))),
+      source,
+    );
+  }
+  assert.equal(
+    encode('sum(1) OVER (ROWS "UNBOUNDED" PRECEDING)'),
+    '"sum"(1) OVER (ROWS "UNBOUNDED" PRECEDING)',
+  );
+});
+
 test("window functions cannot be defaults", () => {
   for (const source of ["sum(1) OVER ()", "sum(1) OVER w"]) {
     assert.ok(
