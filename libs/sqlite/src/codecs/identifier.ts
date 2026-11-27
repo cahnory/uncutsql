@@ -53,6 +53,13 @@ export const nameWithKeywords = (allowed: ReadonlySet<string>) =>
   alternatives(identifierWithKeywords(allowed), stringName);
 export const nameIdentifier = nameWithKeywords(contextualNameKeywords);
 
+// COLLATE accepts identifier fallbacks and strings, but excludes join modifiers and INDEXED.
+const collationNameKeywords = new Set(contextualNameKeywords);
+for (const word of ["CROSS", "FULL", "INDEXED", "INNER", "LEFT", "NATURAL", "OUTER", "RIGHT"]) {
+  collationNameKeywords.delete(word);
+}
+export const collationName = nameWithKeywords(collationNameKeywords);
+
 // These tokens start special expressions even when followed by a dot or parenthesis.
 const expressionNameKeywords = new Set(contextualNameKeywords);
 for (const word of ["CAST", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "RAISE"]) {

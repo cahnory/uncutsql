@@ -9,8 +9,9 @@ import { EncodeError, ParseError } from "@uncutsql/codec";
 import type { SourceNode } from "@uncutsql/codec";
 
 import { defaultColumnConstraint } from "../src/codecs/column-constraint/default-column-constraint.ts";
-import { createTable, encodeMigration, schema, sqlExpression } from "../src/index.ts";
+import { createTable, encodeMigration, schema, sqlExpression, sqlQuery } from "../src/index.ts";
 import type { Expression } from "../src/index.ts";
+import { keywords } from "../src/lexer/keywords.ts";
 import { planMigration } from "./workflow.ts";
 const decode = (sql: string) => Effect.runSync(sqlExpression.decode(sql));
 const encode = (ast: Expression) => Effect.runSync(sqlExpression.encode(ast));
@@ -79,6 +80,65 @@ test("COLLATE preserves native comparison results, nesting and operand precedenc
   }
 });
 
+test("COLLATE accepts the same names as SQLite in expressions, columns and both table keys", () => {
+  using db = new DatabaseSync(":memory:");
+  const names = [...keywords].flatMap((word) => {
+    const name = word[0] + word.slice(1).toLowerCase();
+    return [
+      [name, name],
+      [`'${name}'`, name],
+    ] as const;
+  });
+  for (const [token, name] of [...names, ["'owner''s order'", "owner's order"]]) {
+    const acceptsCollation = (sql: string) => {
+      try {
+        db.prepare(sql);
+        return true;
+      } catch (error) {
+        assert.ok(error instanceof Error);
+        // An unregistered collation can fail lookup only after SQLite accepts its name.
+        if (error.message === `no such collation sequence: ${name}`) {
+          return true;
+        }
+        assert.match(error.message, /syntax error/, sql);
+        return false;
+      }
+    };
+    for (const source of [
+      `CREATE TABLE t AS SELECT 'A' COLLATE ${token} = 'a' AS comparison`,
+      `CREATE TABLE t (a TEXT COLLATE ${token} NOT NULL)`,
+      `CREATE TABLE t (a TEXT, PRIMARY KEY (a COLLATE ${token} DESC))`,
+      `CREATE TABLE t (a TEXT, UNIQUE (a COLLATE ${token} DESC))`,
+    ]) {
+      const parsed = Effect.runSync(Effect.result(schema.decode(source)));
+      if (!acceptsCollation(source)) {
+        assert.ok(Result.isFailure(parsed), source);
+        continue;
+      }
+      assert.ok(Result.isSuccess(parsed), source);
+      const formatted = Effect.runSync(schema.encode(parsed.success));
+      assert.ok(formatted.includes(`COLLATE "${name}"`), formatted);
+      assert.ok(acceptsCollation(formatted), formatted);
+      assert.deepEqual(Effect.runSync(schema.decode(formatted)), parsed.success, source);
+    }
+  }
+});
+
+test("formatting preserves the comparison effect of a single-quoted COLLATE name", () => {
+  using db = new DatabaseSync(":memory:");
+  const source = "SELECT 'A' COLLATE 'nocase' = 'a', 'A' = 'a'";
+  const formatted = Effect.runSync(Effect.flatMap(sqlQuery.decode(source), sqlQuery.encode));
+  for (const sql of [source, formatted]) {
+    const statement = db.prepare(sql);
+    assert.deepEqual(Object.values(statement.get()!), [1, 0], sql);
+    assert.deepEqual(
+      statement.columns().map((column) => column.name),
+      ["'A' COLLATE 'nocase' = 'a'", "'A' = 'a'"],
+      sql,
+    );
+  }
+});
+
 test("collation names quote safely and malformed suffixes commit parse failures", () => {
   for (const collation of ["select", "custom name", 'a"b', "NOCASE"]) {
     const ast: Expression = { _tag: "CollateExpression", collation, operand: ref };
@@ -88,6 +148,7 @@ test("collation names quote safely and malformed suffixes commit parse failures"
     "a COLLATE",
     "a COLLATE SELECT",
     'a COLLATE "unfinished',
+    "a COLLATE 'unfinished",
     "a COLLATE NOCASE COLLATE",
   ]) {
     const result = Effect.runSync(Effect.result(sqlExpression.decode(source)));

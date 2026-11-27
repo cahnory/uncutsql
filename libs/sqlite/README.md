@@ -69,7 +69,7 @@ recognizing a keyword does not imply support for the construct it introduces.
 - [x] IN / NOT IN with expression lists, including empty lists.
 - [x] Ordinary function calls with zero or more arguments and nested expressions. Bare contextual function names such as `Replace` are accepted.
       Function existence and arity are checked by SQLite, not by this parser.
-- [x] Expression-level COLLATE, including repeated clauses and quoted names.
+- [x] Expression-level COLLATE, including repeated clauses and contextual or single-quoted names.
 - [x] JSON extraction `->` / `->>`, retaining their distinct result semantics.
       Path evaluation, JSON validity and function/extension availability belong to SQLite.
 - [x] LIKE / NOT LIKE with ESCAPE.
@@ -110,6 +110,8 @@ context restrictions, including prohibiting subqueries.
       PRIMARY KEY, NOT NULL and UNIQUE.
 - [x] Table PRIMARY KEY, UNIQUE, CHECK and FOREIGN KEY, optionally named.
       Key columns support collation/order, and table keys support ON CONFLICT.
+- [x] Contextual and single-quoted names after COLLATE on columns and table PRIMARY KEY and UNIQUE terms.
+- [ ] Contextual and single-quoted names for the column itself in table PRIMARY KEY and UNIQUE terms.
 - [x] Foreign-key target columns, ON DELETE/UPDATE, MATCH with contextual or quoted names, and deferrability.
       Reference options retain their original order.
 - [x] `[GENERATED ALWAYS] AS (expression) [VIRTUAL | STORED]`.
@@ -183,6 +185,7 @@ See the [workspace roadmap](../../ROADMAP.md) for the core and executor dependen
 
 ### Completed work
 
+- [x] Match SQLite's collation-name syntax in expressions, column constraints and table key terms. Bare join modifiers and INDEXED require quotes after COLLATE.
 - [x] Preserve SQLite's expression-text labels for unaliased likelihood calls in CTEs without declared column lists.
 - [x] Preserve SQLite's expression-text labels for unaliased likelihood calls in FROM subqueries while retaining inferred source column names in direct CREATE TABLE AS results.
 - [x] Preserve SQLite's derived-table column names for unaliased TRUE/FALSE expressions under COLLATE, for shadowed columns and literals.

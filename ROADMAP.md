@@ -56,6 +56,8 @@ Formatting now preserves the expression-text column names of unaliased likelihoo
 
 Formatting now preserves the expression-text column names of unaliased likelihood calls in CTEs without declared column lists. Native SQLite tests reference those names from the outer query and verify that explicit aliases and declared CTE column names still take precedence.
 
+Expressions, column constraints and table PRIMARY KEY and UNIQUE terms now accept SQLite's contextual and single-quoted collation names. Native SQLite tests compare keyword acceptance in each position and verify that formatting preserves case-insensitive comparisons and key enforcement.
+
 ## VS Code support
 
 The [VS Code extension](apps/vscode/README.md) reports parser errors, shows declarations and explicit columns in Outline, and resolves foreign key table and column definitions across the configured SQLite schema. The providers use an editor-independent language service.

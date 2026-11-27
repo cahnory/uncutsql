@@ -88,6 +88,30 @@ test("table keys retain collation, sort order and conflict action", () => {
   }
 });
 
+test("formatting retains a single-quoted collation on both table key types", () => {
+  for (const [key, origin] of [
+    ["PRIMARY KEY", "pk"],
+    ["UNIQUE", "u"],
+  ] as const) {
+    for (const sql of versions(`CREATE TABLE t (a TEXT, ${key} (a COLLATE 'nocase' DESC))`)) {
+      using db = new DatabaseSync(":memory:");
+      db.exec(sql);
+      const term = db
+        .prepare(
+          `SELECT term.coll, term.desc
+           FROM pragma_index_list('t') AS idx JOIN pragma_index_xinfo(idx.name) AS term
+           WHERE idx.origin = ? AND term.key = 1`,
+        )
+        .get(origin);
+      assert.ok(term, sql);
+      assert.equal(term.coll, "nocase", sql);
+      assert.equal(term.desc, 1, sql);
+      db.exec("INSERT INTO t VALUES ('A')");
+      assert.throws(() => db.exec("INSERT INTO t VALUES ('a')"), /UNIQUE constraint failed/);
+    }
+  }
+});
+
 test("composite foreign keys preserve ON clause order and cascade updates/deletes", () => {
   const source = `CREATE TABLE child (
     x INTEGER, y INTEGER,
